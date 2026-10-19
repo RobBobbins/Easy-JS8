@@ -12,9 +12,9 @@ transmit, audio, rig control) is kept, its screens are replaced.
 - App name **Easy JS8**, app ID `com.easyjs8.app` (installs next to JS8Android).
   Code package is still `com.js8call.example`; new screens are in `js8ui/`.
 - Test phone: Samsung Galaxy S22 (about 360 dp wide upright). Not yet run on the real phone or a radio.
-- Git: committed locally on branch **`easy-js8`** (2026-10-19). Not pushed: the only remote
-  (`origin`) is upstream JS8Call-improved/Android-port. Rob creates his own fork on github.com;
-  then add it as a remote and push `easy-js8` there.
+- Git: branch **`easy-js8`**, pushed to Rob's fork **https://github.com/RobBobbins/Easy-JS8**
+  (remote `fork`, public). `origin` is upstream JS8Call-improved/Android-port — never push there.
+  Commit and push to `fork` only when Rob says so.
 
 ## Decided with Rob
 
