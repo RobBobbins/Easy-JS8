@@ -1,0 +1,293 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Swipe layout (phone sideways, setting "Swipe"): five screens, swipe or tap a tab.
+    1 Header, 2 Activity, 3 Waterfall, 4 Inbox, 5 Settings. Ids match fragment_js8_main.xml.
+-->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/js8_frame_bg"
+    android:orientation="vertical">
+
+    <com.js8call.example.js8ui.Js8PagerLayout
+        android:id="@+id/js8_pager"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1">
+
+        <!-- 1. Header, scaled to fill the screen -->
+        <com.js8call.example.js8ui.Js8ZoomLayout
+            android:id="@+id/js8_header_page"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="@color/js8_header_bg">
+
+            <FrameLayout
+                android:layout_width="620dp"
+                android:layout_height="196dp"
+                android:background="@color/js8_header_bg">
+
+                <include
+                    layout="@layout/js8_freq_block"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="10dp"
+                    android:layout_marginTop="16dp" />
+
+                <include
+                    layout="@layout/js8_call_clock_block"
+                    android:layout_width="268dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="312dp"
+                    android:layout_marginTop="16dp" />
+
+                <TextView
+                    android:id="@+id/js8_menu_button"
+                    style="@style/Js8Text"
+                    android:layout_width="30dp"
+                    android:layout_height="47dp"
+                    android:layout_marginStart="586dp"
+                    android:layout_marginTop="12dp"
+                    android:background="?attr/selectableItemBackgroundBorderless"
+                    android:contentDescription="Menu"
+                    android:gravity="center"
+                    android:text="⋮"
+                    android:textSize="26dp"
+                    android:textStyle="bold" />
+
+                <include
+                    layout="@layout/js8_header_buttons"
+                    android:layout_width="600dp"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="10dp"
+                    android:layout_marginTop="112dp" />
+            </FrameLayout>
+        </com.js8call.example.js8ui.Js8ZoomLayout>
+
+        <!-- 2. Activity: Band | Message Window over Typing Box | Call, Buttons, Status Bar -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:orientation="vertical"
+            android:padding="6dp">
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:baselineAligned="false"
+                android:orientation="horizontal">
+
+                <com.js8call.example.js8ui.Js8TableView
+                    android:id="@+id/js8_band_activity"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="426" />
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_marginStart="7dp"
+                    android:layout_weight="304"
+                    android:orientation="vertical">
+
+                    <include
+                        layout="@layout/js8_message_window"
+                        android:layout_width="match_parent"
+                        android:layout_height="0dp"
+                        android:layout_weight="137" />
+
+                    <include
+                        layout="@layout/js8_typing_box"
+                        android:layout_width="match_parent"
+                        android:layout_height="0dp"
+                        android:layout_marginTop="7dp"
+                        android:layout_weight="67" />
+                </LinearLayout>
+
+                <com.js8call.example.js8ui.Js8TableView
+                    android:id="@+id/js8_call_activity"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_marginStart="7dp"
+                    android:layout_weight="303" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:baselineAligned="false"
+                android:orientation="horizontal">
+
+                <androidx.appcompat.widget.AppCompatButton android:id="@+id/js8_btn_cq"
+                    style="@style/Js8Button" android:layout_width="0dp" android:layout_weight="1"
+                    android:text="CQ" />
+                <androidx.appcompat.widget.AppCompatButton android:id="@+id/js8_btn_reply"
+                    style="@style/Js8Button" android:layout_width="0dp" android:layout_weight="1"
+                    android:layout_marginStart="5dp" android:enabled="false" android:text="REPLY" />
+                <androidx.appcompat.widget.AppCompatButton android:id="@+id/js8_btn_snr"
+                    style="@style/Js8Button" android:layout_width="0dp" android:layout_weight="1"
+                    android:layout_marginStart="5dp" android:enabled="false" android:text="SNR" />
+                <androidx.appcompat.widget.AppCompatButton android:id="@+id/js8_btn_info"
+                    style="@style/Js8Button" android:layout_width="0dp" android:layout_weight="1"
+                    android:layout_marginStart="5dp" android:enabled="false" android:text="INFO" />
+                <androidx.appcompat.widget.AppCompatButton android:id="@+id/js8_btn_status"
+                    style="@style/Js8Button" android:layout_width="0dp" android:layout_weight="1"
+                    android:layout_marginStart="5dp" android:text="STATUS" />
+                <androidx.appcompat.widget.AppCompatButton android:id="@+id/js8_btn_saved"
+                    style="@style/Js8Button" android:layout_width="0dp" android:layout_weight="1"
+                    android:layout_marginStart="12dp" android:text="Saved" />
+                <androidx.appcompat.widget.AppCompatButton android:id="@+id/js8_btn_directed"
+                    style="@style/Js8Button" android:layout_width="0dp" android:layout_weight="1"
+                    android:layout_marginStart="5dp" android:enabled="false" android:text="Directed" />
+                <androidx.appcompat.widget.AppCompatButton android:id="@+id/js8_btn_deselect"
+                    style="@style/Js8Button" android:layout_width="0dp" android:layout_weight="1"
+                    android:layout_marginStart="5dp" android:enabled="false" android:text="Deselect" />
+                <androidx.appcompat.widget.AppCompatButton android:id="@+id/js8_btn_send"
+                    style="@style/Js8Button" android:layout_width="0dp" android:layout_weight="1"
+                    android:layout_marginStart="12dp" android:enabled="false" android:text="Send" />
+                <androidx.appcompat.widget.AppCompatButton android:id="@+id/js8_btn_halt"
+                    style="@style/Js8Button" android:layout_width="0dp" android:layout_weight="1"
+                    android:layout_marginStart="5dp" android:text="Halt" />
+            </LinearLayout>
+
+            <include
+                layout="@layout/js8_status_bar"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp" />
+        </LinearLayout>
+
+        <!-- 3. Waterfall: CAT + level | ruler + waterfall | Waterfall Controls | gain -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:baselineAligned="false"
+            android:orientation="horizontal"
+            android:padding="6dp">
+
+            <include
+                layout="@layout/js8_waterfall_block"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1" />
+
+            <ScrollView
+                android:layout_width="210dp"
+                android:layout_height="match_parent"
+                android:layout_marginStart="8dp">
+
+                <include
+                    layout="@layout/js8_waterfall_controls"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content" />
+            </ScrollView>
+
+            <com.js8call.example.js8ui.Js8GainSliderView
+                android:id="@+id/js8_gain_slider"
+                android:layout_width="53dp"
+                android:layout_height="match_parent"
+                android:layout_marginStart="6dp" />
+        </LinearLayout>
+
+        <!-- 4. Inbox: table | message + reply -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:orientation="vertical"
+            android:padding="6dp">
+
+            <TextView
+                style="@style/Js8FrameText"
+                android:layout_width="wrap_content"
+                android:layout_height="24dp"
+                android:gravity="center_vertical"
+                android:text="Message Inbox" />
+
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:baselineAligned="false"
+                android:orientation="horizontal">
+
+                <com.js8call.example.js8ui.Js8TableView
+                    android:id="@+id/js8_inbox_table"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="3" />
+
+                <LinearLayout
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_marginStart="8dp"
+                    android:layout_weight="2"
+                    android:orientation="vertical">
+
+                    <TextView
+                        android:id="@+id/js8_inbox_message"
+                        style="@style/Js8Text"
+                        android:layout_width="match_parent"
+                        android:layout_height="0dp"
+                        android:layout_weight="1"
+                        android:background="@drawable/js8_panel_list"
+                        android:gravity="top|start"
+                        android:padding="5dp" />
+
+                    <EditText
+                        android:id="@+id/js8_inbox_reply_text"
+                        style="@style/Js8Text"
+                        android:layout_width="match_parent"
+                        android:layout_height="0dp"
+                        android:layout_marginTop="6dp"
+                        android:layout_weight="1"
+                        android:background="@drawable/js8_panel_list"
+                        android:gravity="top|start"
+                        android:importantForAutofill="no"
+                        android:inputType="textMultiLine|textCapCharacters|textNoSuggestions"
+                        android:padding="5dp" />
+
+                    <androidx.appcompat.widget.AppCompatButton
+                        android:id="@+id/js8_inbox_reply"
+                        style="@style/Js8Button"
+                        android:layout_width="81dp"
+                        android:layout_gravity="end"
+                        android:layout_marginTop="6dp"
+                        android:text="Reply" />
+                </LinearLayout>
+            </LinearLayout>
+        </LinearLayout>
+
+        <!-- 5. Settings: the PC Settings window -->
+        <androidx.fragment.app.FragmentContainerView
+            android:id="@+id/js8_settings_container"
+            android:name="com.js8call.example.js8ui.Js8SettingsFragment"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent" />
+    </com.js8call.example.js8ui.Js8PagerLayout>
+
+    <!-- Tab bar -->
+    <LinearLayout
+        android:id="@+id/js8_tabs"
+        android:layout_width="match_parent"
+        android:layout_height="34dp"
+        android:orientation="horizontal">
+
+        <TextView android:id="@+id/js8_tab_0" style="@style/Js8FrameText" android:layout_width="0dp"
+            android:layout_height="match_parent" android:layout_weight="1" android:gravity="center"
+            android:text="Header" />
+        <TextView android:id="@+id/js8_tab_1" style="@style/Js8FrameText" android:layout_width="0dp"
+            android:layout_height="match_parent" android:layout_weight="1" android:gravity="center"
+            android:text="Activity" />
+        <TextView android:id="@+id/js8_tab_2" style="@style/Js8FrameText" android:layout_width="0dp"
+            android:layout_height="match_parent" android:layout_weight="1" android:gravity="center"
+            android:text="Waterfall" />
+        <TextView android:id="@+id/js8_tab_3" style="@style/Js8FrameText" android:layout_width="0dp"
+            android:layout_height="match_parent" android:layout_weight="1" android:gravity="center"
+            android:text="Inbox" />
+        <TextView android:id="@+id/js8_tab_4" style="@style/Js8FrameText" android:layout_width="0dp"
+            android:layout_height="match_parent" android:layout_weight="1" android:gravity="center"
+            android:text="Settings" />
+    </LinearLayout>
+</LinearLayout>

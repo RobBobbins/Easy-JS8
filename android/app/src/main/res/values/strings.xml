@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="app_name">JS8Call</string>
+    <string name="app_name">Easy JS8</string>
 
     <!-- Bottom navigation -->
     <string name="nav_monitor">Monitor</string>
@@ -143,7 +143,7 @@
     <string name="settings_qmx_serial">QRP Labs QMX (USB)</string>
     <string name="settings_btech_uvpro">BTECH UV-Pro (Bluetooth)</string>
     <string name="settings_btech_uvpro_squelch_hint">Set squelch to 0 on the UV-Pro, or the waterfall stays dark between signals.</string>
-    <string name="permission_bluetooth_denied">The UV-Pro needs the Nearby devices permission. Allow it for JS8Call in Android Settings.</string>
+    <string name="permission_bluetooth_denied">The UV-Pro needs the Nearby devices permission. Allow it for Easy JS8 in Android Settings.</string>
     <string name="settings_qmx_category">QRP Labs QMX</string>
     <string name="settings_qmx_band_profile">Installed QMX Band Profile</string>
     <string name="settings_qmx_band_profile_summary">Limits JS8 frequencies to bands fitted in the radio</string>
@@ -187,7 +187,7 @@
 
     <!-- Permissions -->
     <string name="permission_audio_title">Microphone Permission</string>
-    <string name="permission_audio_message">JS8Call needs microphone access to receive signals</string>
+    <string name="permission_audio_message">Easy JS8 needs microphone access to receive signals</string>
     <string name="permission_audio_denied">Microphone permission denied. Enable in Settings.</string>
     <string name="permission_location_title">Location Permission</string>
     <string name="permission_location_message">Used to automatically determine grid square</string>
@@ -204,9 +204,9 @@
     <string name="error_location_update_failed">Unable to update grid from location.</string>
 
     <!-- Notifications -->
-    <string name="notification_channel_name">JS8Call Service</string>
+    <string name="notification_channel_name">Easy JS8 Service</string>
     <string name="notification_channel_desc">Background monitoring and decoding</string>
-    <string name="notification_title">JS8Call Running</string>
+    <string name="notification_title">Easy JS8 Running</string>
     <string name="notification_text">Monitoring for signals…</string>
     <string name="notification_action_stop">Stop</string>
 

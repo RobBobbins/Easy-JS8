@@ -2,6 +2,21 @@
 <PreferenceScreen xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto">
 
+    <!-- Easy JS8 screen layout -->
+    <PreferenceCategory
+        app:title="Easy JS8 Layout"
+        app:iconSpaceReserved="false">
+
+        <ListPreference
+            app:key="landscape_layout"
+            app:title="Sideways layout"
+            app:entries="@array/js8_landscape_layout_entries"
+            app:entryValues="@array/js8_landscape_layout_values"
+            app:defaultValue="pc"
+            app:useSimpleSummaryProvider="true"
+            app:iconSpaceReserved="false" />
+    </PreferenceCategory>
+
     <!-- Station Info Category -->
     <PreferenceCategory
         app:title="@string/settings_category_general"

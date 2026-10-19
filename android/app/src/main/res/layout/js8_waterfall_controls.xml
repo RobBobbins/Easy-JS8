@@ -1,0 +1,85 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Waterfall Controls: Control / Display tabs (JS8_UI/WideGraph.ui). -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical">
+
+    <LinearLayout
+        android:layout_width="wrap_content"
+        android:layout_height="27dp"
+        android:orientation="horizontal">
+
+        <TextView
+            android:id="@+id/js8_wf_tab_control"
+            style="@style/Js8FrameText"
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:background="@drawable/js8_tab_selected"
+            android:gravity="center"
+            android:paddingStart="12dp"
+            android:paddingEnd="12dp"
+            android:text="Control" />
+
+        <TextView
+            android:id="@+id/js8_wf_tab_display"
+            style="@style/Js8FrameText"
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:gravity="center"
+            android:paddingStart="12dp"
+            android:paddingEnd="12dp"
+            android:singleLine="true"
+            android:text="Display" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/js8_wf_control_page"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@drawable/js8_groupbox"
+        android:orientation="vertical"
+        android:padding="8dp">
+
+        <!-- Offset group: hidden upright, where Offset lives in the Settings window -->
+        <TextView android:id="@+id/js8_wf_offset_title" style="@style/Js8GroupTitle" android:layout_width="wrap_content"
+            android:layout_height="wrap_content" android:text="Offset" />
+        <LinearLayout android:id="@+id/js8_wf_offset_box" android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:background="@drawable/js8_groupbox" android:padding="8dp">
+            <TextView android:id="@+id/js8_wf_offset" style="@style/Js8FrameText"
+                android:layout_width="match_parent" android:layout_height="30dp"
+                android:background="@drawable/js8_spin_field" android:singleLine="true" android:ellipsize="none" android:gravity="center_vertical"
+                android:paddingStart="10dp" android:text="Offset: 1500 Hz" />
+        </LinearLayout>
+
+        <TextView style="@style/Js8GroupTitle" android:layout_width="wrap_content"
+            android:layout_height="wrap_content" android:layout_marginTop="8dp" android:text="QSY" />
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:background="@drawable/js8_groupbox" android:orientation="vertical" android:padding="8dp">
+            <androidx.appcompat.widget.AppCompatButton android:id="@+id/js8_wf_qsy"
+                style="@style/Js8Button" android:layout_width="match_parent" android:text="QSY" />
+            <TextView android:id="@+id/js8_wf_center" style="@style/Js8FrameText"
+                android:layout_width="match_parent" android:layout_height="30dp"
+                android:layout_marginTop="8dp" android:background="@drawable/js8_spin_field" android:singleLine="true" android:ellipsize="none"
+                android:gravity="center_vertical" android:paddingStart="10dp" android:text="Center: 1500 Hz" />
+        </LinearLayout>
+
+        <TextView style="@style/Js8GroupTitle" android:layout_width="wrap_content"
+            android:layout_height="wrap_content" android:layout_marginTop="8dp" android:text="Filter" />
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:background="@drawable/js8_groupbox" android:orientation="vertical" android:padding="8dp">
+            <CheckBox android:id="@+id/js8_wf_filter_enable" style="@style/Js8FrameText"
+                android:layout_width="wrap_content" android:layout_height="30dp" android:singleLine="true" android:text="Enable Filter" />
+            <androidx.appcompat.widget.AppCompatButton android:id="@+id/js8_wf_filter_sync"
+                style="@style/Js8Button" android:layout_width="match_parent" android:text="Sync" />
+            <TextView android:id="@+id/js8_wf_filter_center" style="@style/Js8FrameText"
+                android:layout_width="match_parent" android:layout_height="30dp"
+                android:layout_marginTop="8dp" android:background="@drawable/js8_spin_field" android:singleLine="true" android:ellipsize="none"
+                android:gravity="center_vertical" android:paddingStart="10dp" android:text="Center: 1500 Hz" />
+            <TextView android:id="@+id/js8_wf_filter_width" style="@style/Js8FrameText"
+                android:layout_width="match_parent" android:layout_height="30dp"
+                android:layout_marginTop="8dp" android:background="@drawable/js8_spin_field" android:singleLine="true" android:ellipsize="none"
+                android:gravity="center_vertical" android:paddingStart="10dp" android:text="Width: 500 Hz" />
+        </LinearLayout>
+    </LinearLayout>
+</LinearLayout>

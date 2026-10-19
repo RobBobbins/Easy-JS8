@@ -1,0 +1,209 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Vertical mode (phone upright). Order agreed with Rob, see LAYOUT.md:
+    Header, Band Activity | Call Activity, Message Window, Typing Box, Buttons (2 rows),
+    Status Bar, Waterfall, Waterfall Controls, Inbox.
+-->
+<androidx.core.widget.NestedScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/js8_scroll"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/js8_frame_bg"
+    android:fillViewport="true">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:orientation="vertical"
+        android:paddingStart="6dp"
+        android:paddingTop="6dp"
+        android:paddingEnd="6dp"
+        android:paddingBottom="12dp">
+
+        <!-- 1. Header -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:background="@color/js8_header_bg"
+            android:orientation="vertical"
+            android:padding="6dp">
+
+            <!-- Frequency and Offset moved to the Settings window, and the ⋮ menu's items
+                 too (Rob, 2026-10-19): callsign over clock -->
+            <include
+                layout="@layout/js8_call_clock_block"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_horizontal"
+                android:layout_marginTop="2dp" />
+
+            <include
+                layout="@layout/js8_header_buttons"
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="10dp" />
+        </LinearLayout>
+
+        <!-- 2. Band Activity | Call Activity -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="211dp"
+            android:layout_marginTop="8dp"
+            android:orientation="horizontal">
+
+            <com.js8call.example.js8ui.Js8TableView
+                android:id="@+id/js8_band_activity"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1" />
+
+            <com.js8call.example.js8ui.Js8TableView
+                android:id="@+id/js8_call_activity"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_marginStart="6dp"
+                android:layout_weight="1" />
+        </LinearLayout>
+
+        <!-- 3. Message Window -->
+        <include
+            layout="@layout/js8_message_window"
+            android:layout_width="match_parent"
+            android:layout_height="137dp"
+            android:layout_marginTop="8dp" />
+
+        <!-- 4. Typing Box -->
+        <include
+            layout="@layout/js8_typing_box"
+            android:layout_width="match_parent"
+            android:layout_height="67dp"
+            android:layout_marginTop="7dp" />
+
+        <!-- 5. Buttons, two rows of five -->
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp"
+            android:orientation="horizontal">
+
+            <androidx.appcompat.widget.AppCompatButton
+                android:id="@+id/js8_btn_cq"
+                style="@style/Js8Button"
+                android:layout_width="0dp"
+                android:layout_weight="1"
+                android:text="CQ" />
+
+            <androidx.appcompat.widget.AppCompatButton
+                android:id="@+id/js8_btn_reply"
+                style="@style/Js8Button"
+                android:layout_width="0dp"
+                android:layout_marginStart="6dp"
+                android:layout_weight="1"
+                android:enabled="false"
+                android:text="REPLY" />
+
+            <androidx.appcompat.widget.AppCompatButton
+                android:id="@+id/js8_btn_snr"
+                style="@style/Js8Button"
+                android:layout_width="0dp"
+                android:layout_marginStart="6dp"
+                android:layout_weight="1"
+                android:enabled="false"
+                android:text="SNR" />
+
+            <androidx.appcompat.widget.AppCompatButton
+                android:id="@+id/js8_btn_info"
+                style="@style/Js8Button"
+                android:layout_width="0dp"
+                android:layout_marginStart="6dp"
+                android:layout_weight="1"
+                android:enabled="false"
+                android:text="INFO" />
+
+            <androidx.appcompat.widget.AppCompatButton
+                android:id="@+id/js8_btn_status"
+                style="@style/Js8Button"
+                android:layout_width="0dp"
+                android:layout_marginStart="6dp"
+                android:layout_weight="1"
+                android:text="STATUS" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:orientation="horizontal">
+
+            <androidx.appcompat.widget.AppCompatButton
+                android:id="@+id/js8_btn_saved"
+                style="@style/Js8Button"
+                android:layout_width="0dp"
+                android:layout_weight="1"
+                android:text="Saved" />
+
+            <androidx.appcompat.widget.AppCompatButton
+                android:id="@+id/js8_btn_directed"
+                style="@style/Js8Button"
+                android:layout_width="0dp"
+                android:layout_marginStart="6dp"
+                android:layout_weight="1"
+                android:enabled="false"
+                android:text="Directed" />
+
+            <androidx.appcompat.widget.AppCompatButton
+                android:id="@+id/js8_btn_deselect"
+                style="@style/Js8Button"
+                android:layout_width="0dp"
+                android:layout_marginStart="6dp"
+                android:layout_weight="1"
+                android:enabled="false"
+                android:text="Deselect" />
+
+            <androidx.appcompat.widget.AppCompatButton
+                android:id="@+id/js8_btn_send"
+                style="@style/Js8Button"
+                android:layout_width="0dp"
+                android:layout_marginStart="6dp"
+                android:layout_weight="1"
+                android:enabled="false"
+                android:text="Send" />
+
+            <androidx.appcompat.widget.AppCompatButton
+                android:id="@+id/js8_btn_halt"
+                style="@style/Js8Button"
+                android:layout_width="0dp"
+                android:layout_marginStart="6dp"
+                android:layout_weight="1"
+                android:text="Halt" />
+        </LinearLayout>
+
+        <!-- 6. Status Bar -->
+        <include
+            layout="@layout/js8_status_bar"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="10dp" />
+
+        <!-- 7. Waterfall -->
+        <include
+            layout="@layout/js8_waterfall_block"
+            android:layout_width="match_parent"
+            android:layout_height="277dp"
+            android:layout_marginTop="8dp" />
+
+        <!-- 8. Waterfall Controls -->
+        <include
+            layout="@layout/js8_waterfall_controls"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp" />
+
+        <!-- 9. Inbox -->
+        <include
+            layout="@layout/js8_inbox"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp" />
+    </LinearLayout>
+</androidx.core.widget.NestedScrollView>

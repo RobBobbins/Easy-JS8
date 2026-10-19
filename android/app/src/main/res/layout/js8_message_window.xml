@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<TextView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/js8_message_window"
+    style="@style/Js8Text"
+    android:layout_width="match_parent"
+    android:layout_height="137dp"
+    android:background="@color/js8_message_window"
+    android:gravity="top|start"
+    android:hint="INCOMING AND OUTGOING MESSAGES WILL APPEAR HERE."
+    android:padding="5dp"
+    android:scrollbars="vertical"
+    android:textColorHint="@color/js8_message_hint"
+    android:textIsSelectable="true" />

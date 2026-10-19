@@ -272,8 +272,11 @@ class JS8EngineService : Service() {
     private var currentGrid: String = ""
 
     private val preferenceChangeListener = SharedPreferences.OnSharedPreferenceChangeListener { _, key ->
-        if (key == PREF_HEARTBEAT_INTERVAL) {
+        if (key == PREF_HEARTBEAT_INTERVAL || key == PREF_HB) {
             scheduleHeartbeat(true)
+        }
+        if (key == PREF_MULTI || key == PREF_TX_SUBMODE) {
+            engine?.setSubmodes(configuredRxSubmodes())
         }
         if (key == PREF_PSK_REPORTER || key == "callsign" || key == "grid") {
             updatePskReporterState()
@@ -361,6 +364,18 @@ class JS8EngineService : Service() {
             }
             ACTION_DEBUG_INJECT_DECODE -> {
                 if (BuildConfig.DEBUG) injectDecode(intent)
+            }
+            // Easy JS8 Halt button: stop the transmission now. The TX monitor sees the
+            // session end, releases PTT and reports TX_STATE_FINISHED as usual.
+            ACTION_HALT_TX -> {
+                Log.i(TAG, "Halt requested")
+                txHandler.post { engine?.stopTransmit() }
+            }
+            // Easy JS8 TUNE button: steady tone at the TX offset until TUNE is pressed again.
+            ACTION_TUNE -> {
+                val on = intent.getBooleanExtra(EXTRA_TUNE_ON, false)
+                val freq = intent.getDoubleExtra(EXTRA_TX_FREQ_HZ, currentTxOffsetHz.toDouble())
+                txHandler.post { handleTune(on, freq) }
             }
         }
         return START_STICKY
@@ -649,14 +664,16 @@ class JS8EngineService : Service() {
                 }
             }
 
-            // Create engine
+            // Create engine. Its decode timetable covers only the speeds it starts with, and
+            // setSubmodes can only narrow that, so start with all four and narrow to MULTI.
             engine = JS8Engine.create(
                 sampleRateHz = 12000,
-                submodes = configuredRxSubmodes(),
+                submodes = RX_BITS_ALL,
                 callbackHandler = callbackHandler,
                 enableTxAudioTap = rigControlMode == "trusdx_serial" || rigControlMode == "btech_uvpro",
                 useQmxUsbAudio = rigControlMode == "qmx_serial"
             )
+            engine?.setSubmodes(configuredRxSubmodes())
 
             if (rigControlMode == "qmx_serial") {
                 selectedOutputDeviceId = findOutputDeviceId(selectedAudioDeviceId)
@@ -1048,8 +1065,21 @@ class JS8EngineService : Service() {
         Log.i(TAG, "TX boost: ${if (txBoostEnabled) "enabled (+10 dB)" else "disabled"}${if (rigControlMode == "qmx_serial") " for QMX clean USB audio" else ""}")
     }
 
+    /**
+     * Speeds the decoder listens for. The engine wants bits 1 << SubmodeId (A Normal, B Fast,
+     * C JS8 40, E Slow), not the varicode speed numbers: the old "NORMAL or FAST or SLOW or TURBO"
+     * gave 7 = Normal, Fast, JS8 40 and never Slow.
+     * Settings > MULTI (PC SubModeMultiDecode, default on): all four; off: only the TX speed.
+     */
     private fun configuredRxSubmodes(): Int {
-        return RX_SUBMODES_BASE or SUBMODE_TURBO
+        val prefs = PreferenceManager.getDefaultSharedPreferences(this)
+        if (prefs.getBoolean(PREF_MULTI, true)) return RX_BITS_ALL
+        return when (getPreferredTxSubmode()) {
+            SUBMODE_FAST -> RX_BIT_FAST
+            SUBMODE_TURBO -> RX_BIT_TURBO
+            SUBMODE_SLOW -> RX_BIT_SLOW
+            else -> RX_BIT_NORMAL
+        }
     }
 
     private fun initializeNetworkRigControl() {
@@ -2555,7 +2585,8 @@ class JS8EngineService : Service() {
     private fun scheduleHeartbeat(first: Boolean) {
         val prefs = PreferenceManager.getDefaultSharedPreferences(this)
         val intervalStr = prefs.getString(PREF_HEARTBEAT_INTERVAL, "0") ?: "0"
-        val intervalMinutes = intervalStr.toIntOrNull() ?: 0
+        // Settings > HB (PC SubModeHB, default off): no heartbeats unless it is checked
+        val intervalMinutes = if (prefs.getBoolean(PREF_HB, false)) intervalStr.toIntOrNull() ?: 0 else 0
 
         if (intervalMinutes <= 0) {
             heartbeatHandler.removeCallbacks(heartbeatRunnable)
@@ -2652,6 +2683,7 @@ class JS8EngineService : Service() {
         }
 
         val prefs = PreferenceManager.getDefaultSharedPreferences(this)
+        if (isListenOnly()) return
         val callsign = getConfiguredCallsign() ?: return
         val grid = prefs.getString("grid", "")?.trim().orEmpty().uppercase()
 
@@ -2695,7 +2727,7 @@ class JS8EngineService : Service() {
              val ok = activeEngine.transmitMessage(
                 text = payload,
                 myCall = callsign,
-                myGrid = grid,
+                myGrid = grid.take(4), // PC: my_grid().left(4) before buildMessageFrames
                 selectedCall = "", // Broadcast-ish
                 submode = submode,
                 audioFrequencyHz = freq.toDouble(),
@@ -2741,6 +2773,7 @@ class JS8EngineService : Service() {
             broadcastError("Empty TX message")
             return
         }
+        if (isListenOnly()) return
 
         val prefs = PreferenceManager.getDefaultSharedPreferences(this)
         val callsign = getConfiguredCallsign()
@@ -2786,7 +2819,7 @@ class JS8EngineService : Service() {
         val ok = activeEngine.transmitMessage(
             text = payloadText,
             myCall = callsign,
-            myGrid = grid,
+            myGrid = grid.take(4), // PC: my_grid().left(4) before buildMessageFrames
             selectedCall = directed,
             submode = submode,
             audioFrequencyHz = audioFrequencyHz,
@@ -2804,6 +2837,32 @@ class JS8EngineService : Service() {
             Log.e(TAG, "TX request rejected")
             broadcastError("Failed to start transmit")
             broadcastTxState(TX_STATE_FAILED)
+        }
+    }
+
+    private fun handleTune(on: Boolean, audioFrequencyHz: Double) {
+        val activeEngine = engine
+        if (!on) {
+            activeEngine?.stopTransmit()
+            return
+        }
+        if (isListenOnly()) return
+        if (activeEngine == null) {
+            broadcastError("Start receiving (RX) before tuning")
+            return
+        }
+        if (isTransmitActive()) {
+            broadcastError("Already transmitting")
+            return
+        }
+        setTransmitMode()
+        prepareEngineForTransmit(activeEngine)
+        if (activeEngine.startTune(audioFrequencyHz, getPreferredTxSubmode())) {
+            Log.i(TAG, "Tune started at $audioFrequencyHz Hz")
+            broadcastTxState(TX_STATE_QUEUED)
+            startTxMonitor()
+        } else {
+            broadcastError("Failed to start tune")
         }
     }
 
@@ -3292,6 +3351,8 @@ class JS8EngineService : Service() {
 
         val heartbeat = parseHeartbeat(text)
         if (heartbeat != null) {
+            // PC presentlyWantHBReplies: AUTO (checked above) + HB + ACK, both off by default
+            if (!prefs.getBoolean(PREF_HB, false) || !prefs.getBoolean(PREF_HB_ACK, false)) return
             if (isSelfCallsign(callsign, heartbeat.from)) return
             val snrText = formatSNR(snr)
             if (snrText.isEmpty()) return
@@ -3313,13 +3374,13 @@ class JS8EngineService : Service() {
                 broadcastQueueTx("$callsign: ${directed.from} SNR $snrText", null, priority = 1)
             }
             cmdUpper == "INFO?" -> {
-                val info = prefs.getString(PREF_MY_INFO, "")?.trim().orEmpty()
+                val info = com.js8call.example.js8ui.Js8Macros.expand(prefs.getString(PREF_MY_INFO, "").orEmpty(), prefs)
                 if (info.isBlank()) return
                 Log.i(TAG, "Auto INFO reply: from=${directed.from}")
                 broadcastQueueTx("$callsign: ${directed.from} INFO $info", null, priority = 1)
             }
             cmdUpper == "STATUS?" -> {
-                val status = prefs.getString(PREF_MY_STATUS, "")?.trim().orEmpty()
+                val status = com.js8call.example.js8ui.Js8Macros.expand(prefs.getString(PREF_MY_STATUS, "").orEmpty(), prefs)
                 if (status.isBlank()) return
                 Log.i(TAG, "Auto STATUS reply: from=${directed.from}")
                 broadcastQueueTx("$callsign: ${directed.from} STATUS $status", null, priority = 1)
@@ -3529,6 +3590,10 @@ class JS8EngineService : Service() {
         callsignWarningShown = false
         return callsign
     }
+
+    /** Station > SWL (Listening only): nothing is transmitted (Easy JS8 only). */
+    private fun isListenOnly(): Boolean =
+        PreferenceManager.getDefaultSharedPreferences(this).getBoolean(PREF_SWL, false)
 
     private fun warnMissingCallsign() {
         if (callsignWarningShown) return
@@ -3798,12 +3863,12 @@ class JS8EngineService : Service() {
                 sendRelayMessage("$relayPath SNR $snrText", submode)
             }
             "INFO?" -> {
-                val info = prefs.getString(PREF_MY_INFO, "")?.trim().orEmpty()
+                val info = com.js8call.example.js8ui.Js8Macros.expand(prefs.getString(PREF_MY_INFO, "").orEmpty(), prefs)
                 if (info.isBlank()) return false
                 sendRelayMessage("$relayPath INFO $info", submode)
             }
             "STATUS?" -> {
-                val status = prefs.getString(PREF_MY_STATUS, "")?.trim().orEmpty()
+                val status = com.js8call.example.js8ui.Js8Macros.expand(prefs.getString(PREF_MY_STATUS, "").orEmpty(), prefs)
                 if (status.isBlank()) return false
                 sendRelayMessage("$relayPath STATUS $status", submode)
             }
@@ -3899,6 +3964,7 @@ class JS8EngineService : Service() {
 
     private fun sendRelayMessage(text: String, submode: Int): Boolean {
         val activeEngine = engine ?: return false
+        if (isListenOnly()) return false
         val prefs = PreferenceManager.getDefaultSharedPreferences(this)
         val callsign = getConfiguredCallsign() ?: return false
         val grid = prefs.getString("grid", "")?.trim().orEmpty().uppercase()
@@ -3911,7 +3977,7 @@ class JS8EngineService : Service() {
         val ok = activeEngine.transmitMessage(
             text = payload,
             myCall = callsign,
-            myGrid = grid,
+            myGrid = grid.take(4), // PC: my_grid().left(4) before buildMessageFrames
             selectedCall = "",
             submode = submode,
             audioFrequencyHz = currentTxOffsetHz.toDouble(),
@@ -3936,6 +4002,7 @@ class JS8EngineService : Service() {
         forceData: Boolean = false
     ) {
         val activeEngine = engine ?: return
+        if (isListenOnly()) return
         val prefs = PreferenceManager.getDefaultSharedPreferences(this)
         val callsign = getConfiguredCallsign()
         if (callsign == null) {
@@ -3952,7 +4019,7 @@ class JS8EngineService : Service() {
         val ok = activeEngine.transmitMessage(
             text = payloadText,
             myCall = callsign,
-            myGrid = grid,
+            myGrid = grid.take(4), // PC: my_grid().left(4) before buildMessageFrames
             selectedCall = directedCall,
             submode = submode,
             audioFrequencyHz = currentTxOffsetHz.toDouble(),
@@ -4179,7 +4246,12 @@ class JS8EngineService : Service() {
         private const val SUBMODE_FAST = 1
         private const val SUBMODE_TURBO = 2
         private const val SUBMODE_SLOW = 4
-        private const val RX_SUBMODES_BASE = SUBMODE_NORMAL or SUBMODE_FAST or SUBMODE_SLOW
+        // Decoder bits: 1 << SubmodeId (core/include/js8core/protocol/submode.hpp)
+        private const val RX_BIT_NORMAL = 1
+        private const val RX_BIT_FAST = 2
+        private const val RX_BIT_TURBO = 4
+        private const val RX_BIT_SLOW = 8
+        private const val RX_BITS_ALL = RX_BIT_NORMAL or RX_BIT_FAST or RX_BIT_TURBO or RX_BIT_SLOW
 
         // Heartbeat sub-band, matching the desktop app
         private const val HB_SUBBAND_LOW_HZ = 500
@@ -4215,6 +4287,9 @@ class JS8EngineService : Service() {
         const val ACTION_TIME_DRIFT = "com.js8call.example.ACTION_TIME_DRIFT"
         const val ACTION_RIG_STATUS = "com.js8call.example.ACTION_RIG_STATUS"
         const val ACTION_DEBUG_INJECT_DECODE = "com.js8call.example.ACTION_DEBUG_INJECT_DECODE"
+        const val ACTION_HALT_TX = "com.js8call.example.ACTION_HALT_TX"
+        const val ACTION_TUNE = "com.js8call.example.ACTION_TUNE"
+        const val EXTRA_TUNE_ON = "tune_on"
 
         // Engine states
         const val STATE_STOPPED = "stopped"
@@ -4269,6 +4344,12 @@ class JS8EngineService : Service() {
         const val PREF_TIME_SYNC_AUTO = "time_sync_auto"
         const val PREF_TIME_DRIFT_MS = "time_drift_ms"
         const val PREF_LOG_MESSAGES = "log_messages_to_file"
+        /** Station > SWL (Listening only). */
+        const val PREF_SWL = "js8cfg_swl"
+        /** Settings > Operation: MULTI (default on), HB and ACK (default off), as the PC Mode menu. */
+        const val PREF_MULTI = "js8cfg_multi"
+        const val PREF_HB = "js8cfg_hb"
+        const val PREF_HB_ACK = "js8cfg_hb_ack"
         const val RIG_MODE_USB = "USB"
         const val RIG_MODE_PKTUSB = "PKTUSB"
 

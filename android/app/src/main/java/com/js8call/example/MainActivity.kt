@@ -36,6 +36,7 @@ class MainActivity : AppCompatActivity() {
     private var spectrumBroadcastCount: Long = 0
     private lateinit var messagesViewModel: MessagesViewModel
     private lateinit var transmitViewModel: TransmitViewModel
+    private lateinit var js8ActivityViewModel: com.js8call.example.js8ui.Js8ActivityViewModel
 
     private val decodeReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
@@ -51,6 +52,10 @@ class MainActivity : AppCompatActivity() {
                     val mode = intent.getIntExtra(JS8EngineService.EXTRA_MODE, 0)
                     val driftMs = intent.getIntExtra(JS8EngineService.EXTRA_DRIFT_MS, 0)
                     decodeViewModel.addDecode(utc, snr, dt, freq, text, type, quality, mode, driftMs)
+                    // Easy JS8: desktop Band / Call Activity and Message Window
+                    js8ActivityViewModel.myOffset = monitorViewModel.getTxOffset().toInt()
+                    js8ActivityViewModel.onFrame(com.js8call.example.model.DecodedMessage(
+                        utc, snr, dt, freq, text, type, quality, mode, driftMs))
                     monitorViewModel.updateSnr(snr)
                 }
                 JS8EngineService.ACTION_QUEUE_TX -> {
@@ -180,6 +185,11 @@ class MainActivity : AppCompatActivity() {
 
         bottomNav.setupWithNavController(navController)
         navController.addOnDestinationChangedListener { _, destination, _ ->
+            // Easy JS8 desktop-copy screens have no bottom tab bar
+            bottomNav.visibility = if (destination.id == R.id.navigation_js8_main ||
+                destination.id == R.id.navigation_js8_menu ||
+                destination.id == R.id.navigation_js8_settings ||
+                destination.id == R.id.navigation_js8_station) android.view.View.GONE else android.view.View.VISIBLE
             onMonitorTab = destination.id == R.id.navigation_monitor
             if (destination.id == R.id.navigation_conversation) {
                 bottomNav.menu.findItem(R.id.navigation_messages).isChecked = true
@@ -190,6 +200,7 @@ class MainActivity : AppCompatActivity() {
         monitorViewModel = ViewModelProvider(this)[MonitorViewModel::class.java]
         messagesViewModel = ViewModelProvider(this)[MessagesViewModel::class.java]
         transmitViewModel = ViewModelProvider(this)[TransmitViewModel::class.java]
+        js8ActivityViewModel = ViewModelProvider(this)[com.js8call.example.js8ui.Js8ActivityViewModel::class.java]
         decodeViewModel.loadPersistedDecodesIfEnabled()
 
         // Observe unread count for badge on Messages tab
@@ -264,6 +275,13 @@ class MainActivity : AppCompatActivity() {
             return
         }
         
+        // Easy JS8 TX button: transmitter disabled, keep the queue until it is enabled again
+        if (!androidx.preference.PreferenceManager.getDefaultSharedPreferences(this)
+                .getBoolean("js8cfg_tx_enabled", true)) {
+            android.util.Log.d("MainActivity", "processNextTxIfIdle: TX disabled")
+            return
+        }
+
         val nextMessage = transmitViewModel.getNextMessage()
         android.util.Log.d("MainActivity", "processNextTxIfIdle: nextMessage=$nextMessage")
         if (nextMessage == null) {
@@ -271,6 +289,9 @@ class MainActivity : AppCompatActivity() {
             return
         }
         
+        // Easy JS8: show our transmission in the Message Window (TX color)
+        js8ActivityViewModel.onTransmit(nextMessage.text, nextMessage.directed, transmitViewModel.getTxOffset().toInt())
+
         // Send to service for transmission
         android.util.Log.d("MainActivity", "processNextTxIfIdle: sending to service: text='${nextMessage.text}' directed=${nextMessage.directed}")
         val txIntent = Intent(this, JS8EngineService::class.java).apply {

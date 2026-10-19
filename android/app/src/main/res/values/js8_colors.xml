@@ -1,0 +1,53 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- JS8Call 3.0.3 desktop colors (JS8_UI/styles.h, Windows branch). See LAYOUT.md. -->
+<resources>
+    <color name="js8_header_bg">#DDEEFF</color>
+    <color name="js8_display_bg">#000000</color>
+    <color name="js8_display_text">#39FF14</color>
+    <color name="js8_display_pressed">#222222</color>
+
+    <color name="js8_blue">#6699FF</color>
+    <color name="js8_blue_hover">#4D7FFF</color>
+    <color name="js8_blue_pressed">#003EAA</color>
+    <color name="js8_disabled_bg">#ECECEC</color>
+    <color name="js8_disabled_text">#888888</color>
+    <color name="js8_lightgray">#D3D3D3</color>
+    <color name="js8_green">#22FF22</color>
+    <color name="js8_red">#FF2222</color>
+
+    <color name="js8_slider_fill">#A5CDFF</color>
+    <color name="js8_slider_empty">#E0E0E0</color>
+    <color name="js8_slider_border">#B0B0B0</color>
+    <color name="js8_slider_handle_border">#C2C8D1</color>
+
+    <color name="js8_message_window">#FFEAA7</color>
+    <color name="js8_message_hint">#8C8670</color>
+    <color name="js8_typing_box">#FFFFFF</color>
+    <color name="js8_typing_hint">#808080</color>
+    <color name="js8_list_bg">#FFFFFF</color>
+    <color name="js8_list_text">#000000</color>
+    <color name="js8_list_divider">#E3E3E3</color>
+    <color name="js8_waterfall">#000000</color>
+
+    <color name="js8_ruler_bg">#FFFFFF</color>
+    <color name="js8_ruler_text">#000000</color>
+    <color name="js8_ruler_band_yellow">#F2C300</color>
+    <color name="js8_ruler_band_green">#2ECC40</color>
+
+    <!-- Window frame: follows phone dark mode (values-night overrides) -->
+    <color name="js8_frame_bg">#F0F0F0</color>
+    <color name="js8_frame_text">#000000</color>
+    <color name="js8_list_header_bg">#F0F0F0</color>
+    <color name="js8_list_header_text">#000000</color>
+    <color name="js8_list_header_border">#D0D0D0</color>
+    <color name="js8_panel_border">#ABABAB</color>
+
+    <!-- Settings window (Configuration dialog), light; values-night has the dark capture values -->
+    <color name="js8_cfg_pane">#FFFFFF</color>
+    <color name="js8_cfg_field">#FFFFFF</color>
+    <color name="js8_cfg_field_border">#ABABAB</color>
+    <color name="js8_cfg_field_underline">#808080</color>
+    <color name="js8_cfg_group_border">#A0A0A0</color>
+    <color name="js8_cfg_tab_border">#C0C0C0</color>
+    <color name="js8_cfg_placeholder">#8A8A8A</color>
+</resources>

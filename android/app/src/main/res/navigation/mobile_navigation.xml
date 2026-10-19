@@ -2,7 +2,39 @@
 <navigation xmlns:android="http://schemas.android.com/apk/res/android"
     xmlns:app="http://schemas.android.com/apk/res-auto"
     android:id="@+id/mobile_navigation"
-    app:startDestination="@id/navigation_monitor">
+    app:startDestination="@id/navigation_js8_main">
+
+    <fragment
+        android:id="@+id/navigation_js8_main"
+        android:name="com.js8call.example.js8ui.Js8MainFragment"
+        android:label="Easy JS8" />
+
+    <!-- Settings window (header Settings button): operating settings -->
+    <fragment
+        android:id="@+id/navigation_js8_settings"
+        android:name="com.js8call.example.js8ui.Js8SettingsFragment"
+        android:label="Settings">
+        <argument
+            android:name="window"
+            android:defaultValue="settings"
+            app:argType="string" />
+    </fragment>
+
+    <!-- Station window (Menu > File > Station…): the PC's File > Settings -->
+    <fragment
+        android:id="@+id/navigation_js8_station"
+        android:name="com.js8call.example.js8ui.Js8SettingsFragment"
+        android:label="Station">
+        <argument
+            android:name="window"
+            android:defaultValue="station"
+            app:argType="string" />
+    </fragment>
+
+    <fragment
+        android:id="@+id/navigation_js8_menu"
+        android:name="com.js8call.example.js8ui.Js8MenuFragment"
+        android:label="Menu" />
 
     <fragment
         android:id="@+id/navigation_monitor"

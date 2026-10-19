@@ -1,0 +1,17 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Warning mark in an empty required box (Configuration.cpp attachRequiredIndicator, SP_MessageBoxWarning) -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="18dp"
+    android:height="18dp"
+    android:viewportWidth="24"
+    android:viewportHeight="24">
+    <path
+        android:fillColor="#FFCC00"
+        android:strokeColor="#806600"
+        android:strokeWidth="1"
+        android:strokeLineJoin="round"
+        android:pathData="M12,2.5 L22.5,21 L1.5,21 Z" />
+    <path
+        android:fillColor="#000000"
+        android:pathData="M10.9,8.5 h2.2 v6.5 h-2.2 z M10.9,16.6 h2.2 v2.2 h-2.2 z" />
+</vector>

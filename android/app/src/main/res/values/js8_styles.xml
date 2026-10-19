@@ -1,0 +1,75 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+    Easy JS8 desktop-copy styles. Text sizes are dp (not sp) so the layout matches the
+    PC window regardless of the phone's font-size setting. Sizes measured from the
+    JS8Call 3.0.2 capture (cap heights / 1.5 scale), see LAYOUT.md.
+-->
+<resources>
+    <dimen name="js8_text">14.3dp</dimen>
+    <dimen name="js8_text_freq">31dp</dimen>
+    <dimen name="js8_text_clock">20dp</dimen>
+    <dimen name="js8_text_callsign">19dp</dimen>
+    <dimen name="js8_button_height">25dp</dimen>
+    <dimen name="js8_header_button_height">27dp</dimen>
+    <dimen name="js8_gap">8dp</dimen>
+    <dimen name="js8_list_header_height">27dp</dimen>
+    <dimen name="js8_list_row_height">22dp</dimen>
+
+    <style name="Js8Text">
+        <item name="android:fontFamily">@font/selawik</item>
+        <item name="android:textSize">@dimen/js8_text</item>
+        <item name="android:textColor">#000000</item>
+        <item name="android:includeFontPadding">false</item>
+    </style>
+
+    <style name="Js8FrameText" parent="Js8Text">
+        <item name="android:textColor">@color/js8_frame_text</item>
+    </style>
+
+    <style name="Js8Button">
+        <item name="android:layout_height">@dimen/js8_button_height</item>
+        <item name="android:background">@drawable/js8_btn_blue</item>
+        <item name="android:textColor">@color/js8_btn_text</item>
+        <item name="android:fontFamily">@font/selawik</item>
+        <item name="android:textSize">@dimen/js8_text</item>
+        <item name="android:textAllCaps">false</item>
+        <item name="android:minHeight">0dp</item>
+        <item name="android:minWidth">0dp</item>
+        <item name="android:minEms">0</item>
+        <item name="android:paddingStart">4dp</item>
+        <item name="android:paddingEnd">4dp</item>
+        <item name="android:paddingTop">0dp</item>
+        <item name="android:paddingBottom">0dp</item>
+        <item name="android:stateListAnimator">@null</item>
+        <item name="android:includeFontPadding">false</item>
+        <item name="android:singleLine">true</item>
+        <item name="android:ellipsize">none</item>
+    </style>
+
+    <style name="Js8HeaderToggleGreen" parent="Js8Button">
+        <item name="android:layout_height">@dimen/js8_header_button_height</item>
+        <item name="android:background">@drawable/js8_btn_toggle_green</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+
+    <style name="Js8HeaderToggleBlue" parent="Js8Button">
+        <item name="android:layout_height">@dimen/js8_header_button_height</item>
+        <item name="android:background">@drawable/js8_btn_toggle_blue</item>
+    </style>
+
+    <style name="Js8HeaderModeButton" parent="Js8Button">
+        <item name="android:layout_height">@dimen/js8_header_button_height</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+
+    <style name="Js8StatusLabel" parent="Js8Text">
+        <item name="android:layout_height">22dp</item>
+        <item name="android:gravity">center</item>
+        <item name="android:paddingStart">8dp</item>
+        <item name="android:paddingEnd">8dp</item>
+        <item name="android:background">@drawable/js8_status_blue</item>
+        <item name="android:singleLine">true</item>
+    </style>
+
+    <style name="Js8GroupTitle" parent="Js8FrameText" />
+</resources>

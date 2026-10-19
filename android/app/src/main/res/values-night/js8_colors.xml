@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Window frame colors when the phone is in dark mode (matches Windows dark mode capture). -->
+<resources>
+    <color name="js8_frame_bg">#1E1E1E</color>
+    <color name="js8_frame_text">#FFFFFF</color>
+    <color name="js8_list_header_bg">#3C3C3C</color>
+    <color name="js8_list_header_text">#FFFFFF</color>
+    <color name="js8_list_header_border">#555555</color>
+    <color name="js8_panel_border">#FFFFFF</color>
+
+    <!-- Settings window, measured from Rob's JS8Call Settings screenshot (dark) -->
+    <color name="js8_cfg_pane">#2D2D2D</color>
+    <color name="js8_cfg_field">#2D2D2D</color>
+    <color name="js8_cfg_field_border">#393939</color>
+    <color name="js8_cfg_field_underline">#818181</color>
+    <color name="js8_cfg_group_border">#999999</color>
+    <color name="js8_cfg_tab_border">#3C3C3C</color>
+    <color name="js8_cfg_placeholder">#808080</color>
+</resources>

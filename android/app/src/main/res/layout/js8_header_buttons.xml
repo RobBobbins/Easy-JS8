@@ -1,0 +1,76 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Header right: RX TX mode / SPOT LOG TUNE. Widths 87:87:217 as on the PC. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:baselineAligned="false"
+        android:orientation="horizontal">
+
+        <androidx.appcompat.widget.AppCompatButton
+            android:id="@+id/js8_btn_rx"
+            style="@style/Js8HeaderToggleGreen"
+            android:layout_width="0dp"
+            android:layout_weight="87"
+            android:text="RX" />
+
+        <androidx.appcompat.widget.AppCompatButton
+            android:id="@+id/js8_btn_tx"
+            style="@style/Js8HeaderToggleGreen"
+            android:layout_width="0dp"
+            android:layout_marginStart="12dp"
+            android:layout_weight="87"
+            android:text="TX" />
+
+        <androidx.appcompat.widget.AppCompatButton
+            android:id="@+id/js8_btn_mode"
+            style="@style/Js8HeaderModeButton"
+            android:layout_width="0dp"
+            android:autoSizeMaxTextSize="14.3dp"
+            android:autoSizeMinTextSize="8dp"
+            android:autoSizeStepGranularity="0.5dp"
+            android:autoSizeTextType="uniform"
+            android:maxLines="1"
+            android:singleLine="false"
+            android:gravity="center"
+            android:layout_marginStart="12dp"
+            android:layout_weight="217"
+            android:text="Settings" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:baselineAligned="false"
+        android:orientation="horizontal">
+
+        <androidx.appcompat.widget.AppCompatButton
+            android:id="@+id/js8_btn_spot"
+            style="@style/Js8HeaderToggleBlue"
+            android:layout_width="0dp"
+            android:layout_weight="87"
+            android:textStyle="bold"
+            android:text="SPOT" />
+
+        <androidx.appcompat.widget.AppCompatButton
+            android:id="@+id/js8_btn_log"
+            style="@style/Js8HeaderToggleBlue"
+            android:layout_width="0dp"
+            android:layout_marginStart="12dp"
+            android:layout_weight="87"
+            android:text="LOG" />
+
+        <androidx.appcompat.widget.AppCompatButton
+            android:id="@+id/js8_btn_tune"
+            style="@style/Js8HeaderToggleBlue"
+            android:layout_width="0dp"
+            android:layout_marginStart="12dp"
+            android:layout_weight="217"
+            android:text="TUNE" />
+    </LinearLayout>
+</LinearLayout>

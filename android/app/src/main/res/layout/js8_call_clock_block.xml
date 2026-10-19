@@ -1,0 +1,30 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Header middle: callsign over UTC clock. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:gravity="center_horizontal"
+    android:orientation="vertical">
+
+    <TextView
+        android:id="@+id/js8_callsign"
+        style="@style/Js8Text"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginBottom="8dp"
+        android:text="NOCALL"
+        android:textSize="@dimen/js8_text_callsign" />
+
+    <TextView
+        android:id="@+id/js8_clock"
+        style="@style/Js8Text"
+        android:layout_width="268dp"
+        android:layout_height="39dp"
+        android:background="@drawable/js8_display"
+        android:fontFamily="@font/cascadia_mono"
+        android:gravity="center"
+        android:text="2026 Oct 19 12:45:18"
+        android:textColor="@color/js8_display_text"
+        android:textSize="@dimen/js8_text_clock"
+        android:textStyle="bold" />
+</LinearLayout>

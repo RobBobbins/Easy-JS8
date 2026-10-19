@@ -7,6 +7,15 @@
             android:name="com.js8call.example.debug.DebugDecodeReceiver"
             android:exported="true"
             android:permission="android.permission.DUMP" />
+        <!-- Easy JS8 UI tests: gestures from adb (pinch, double-tap, drag) -->
+        <receiver
+            android:name="com.js8call.example.debug.DebugGestureReceiver"
+            android:exported="true"
+            android:permission="android.permission.DUMP" />
+        <provider
+            android:name="com.js8call.example.debug.ResumedActivityTracker"
+            android:authorities="${applicationId}.debug.tracker"
+            android:exported="false" />
     </application>
 
 </manifest>

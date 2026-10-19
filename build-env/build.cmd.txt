@@ -1,0 +1,9 @@
+Build command (Git Bash, folder E:\new-w3bguru-websites\easy js8):
+
+docker build -t easyjs8-build build-env
+MSYS_NO_PATHCONV=1 docker run --rm -v "E:/new-w3bguru-websites/easy js8:/src" -v easyjs8-gradle:/root/.gradle -v easyjs8-android:/root/.android -v easyjs8-ndk:/opt/android-sdk/ndk easyjs8-build bash /src/build-env/build.sh
+
+The easyjs8-android volume keeps the debug signing key, so each build installs over the last one.
+Output: E:\new-w3bguru-websites\easy js8\android\app\build\outputs\apk\debug\app-debug.apk
+The easyjs8-ndk volume keeps the Android NDKs. The build plugin also downloads NDK 25.1.8937393
+(its default); without the volume that 600 MB download happens on every build.

@@ -1,0 +1,49 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Inbox: "Message Inbox" dock (JS8_UI/MessagePanel.ui). -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:orientation="vertical">
+
+    <TextView
+        style="@style/Js8FrameText"
+        android:layout_width="wrap_content"
+        android:layout_height="27dp"
+        android:gravity="center_vertical"
+        android:text="Message Inbox" />
+
+    <com.js8call.example.js8ui.Js8TableView
+        android:id="@+id/js8_inbox_table"
+        android:layout_width="match_parent"
+        android:layout_height="160dp" />
+
+    <TextView
+        android:id="@+id/js8_inbox_message"
+        style="@style/Js8Text"
+        android:layout_width="match_parent"
+        android:layout_height="80dp"
+        android:layout_marginTop="6dp"
+        android:background="@drawable/js8_panel_list"
+        android:gravity="top|start"
+        android:padding="5dp" />
+
+    <EditText
+        android:id="@+id/js8_inbox_reply_text"
+        style="@style/Js8Text"
+        android:layout_width="match_parent"
+        android:layout_height="60dp"
+        android:layout_marginTop="6dp"
+        android:background="@drawable/js8_panel_list"
+        android:gravity="top|start"
+        android:importantForAutofill="no"
+        android:inputType="textMultiLine|textCapCharacters|textNoSuggestions"
+        android:padding="5dp" />
+
+    <androidx.appcompat.widget.AppCompatButton
+        android:id="@+id/js8_inbox_reply"
+        style="@style/Js8Button"
+        android:layout_width="81dp"
+        android:layout_gravity="end"
+        android:layout_marginTop="6dp"
+        android:text="Reply" />
+</LinearLayout>

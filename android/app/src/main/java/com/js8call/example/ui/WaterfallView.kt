@@ -1,10 +1,13 @@
 package com.js8call.example.ui
 
 import android.content.Context
+import android.graphics.Bitmap
+import android.graphics.BitmapShader
 import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.Rect
+import android.graphics.Shader
 import android.util.AttributeSet
 import android.view.View
 
@@ -19,23 +22,60 @@ class WaterfallView @JvmOverloads constructor(
 ) : View(context, attrs, defStyleAttr) {
 
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
-    private val markerPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.argb(180, 255, 0, 0)
-        style = Paint.Style.FILL
+
+    // Offset dial as on the PC (CPlotter::drawDials): 2 px red outline, white alpha 75
+    // Dense4Pattern (50% checker) fill, left edge at the offset, as wide as the mode.
+    // In screen pixels like the PC's 2 px pen: a 50 Hz dial is only ~4 dp wide on a phone
+    // (0-3000 Hz across the waterfall), so a 2 dp pen would fill it solid red.
+    private val dialOutline = Paint().apply {
+        color = Color.RED
+        style = Paint.Style.STROKE
+        strokeWidth = 2f
+        strokeJoin = Paint.Join.MITER
+    }
+    private val dialFill = Paint().apply {
+        val checker = Bitmap.createBitmap(2, 2, Bitmap.Config.ARGB_8888).apply {
+            setPixel(0, 0, Color.argb(75, 255, 255, 255))
+            setPixel(1, 1, Color.argb(75, 255, 255, 255))
+        }
+        shader = BitmapShader(checker, Shader.TileMode.REPEAT, Shader.TileMode.REPEAT)
     }
     private val srcRect = Rect()
     private val dstRect = Rect()
 
     private var renderer: WaterfallRenderer? = null
 
-    // TX offset tracking
+    // TX offset tracking (PC: no lower limit above 0 Hz)
     var txOffsetHz: Float = 1500f
         set(value) {
-            field = value.coerceAtLeast(500f)
+            field = value.coerceAtLeast(0f)
             postInvalidate()
         }
-    // Callback for offset changes
+    /** Width of the offset dial: the bandwidth of the current mode (Normal 50 Hz). */
+    var bandwidthHz: Float = 50f
+        set(value) {
+            field = value
+            postInvalidate()
+        }
+    // Callback for a tap: the frequency under the finger. The owner applies it.
     var onOffsetChanged: ((Float) -> Unit)? = null
+
+    /** Hz at the left edge: from the spectrum once it arrives, else 0 (0-3000 Hz, as the ruler). */
+    private fun startHz(): Float {
+        val r = renderer ?: return 0f
+        val binHz = r.getCurrentBinHz()
+        return if (binHz > 0 && r.getDisplayEndBin() > r.getDisplayStartBin()) r.getDisplayStartBin() * binHz else 0f
+    }
+
+    private fun hzPerPixel(): Float {
+        if (width <= 0) return 0f
+        val r = renderer
+        val binHz = r?.getCurrentBinHz() ?: 0f
+        if (r != null && binHz > 0 && r.getDisplayEndBin() > r.getDisplayStartBin()) {
+            return (r.getDisplayEndBin() - r.getDisplayStartBin()) * binHz / width
+        }
+        return 3000f / width
+    }
 
     init {
         isClickable = true
@@ -66,40 +106,21 @@ class WaterfallView @JvmOverloads constructor(
         val bitmap = renderer?.getBitmap()
         if (bitmap == null) {
             canvas.drawColor(Color.BLACK)
-            return
+        } else {
+            // Draw the waterfall bitmap scaled to fill the view
+            srcRect.set(0, 0, bitmap.width, bitmap.height)
+            dstRect.set(0, 0, width, height)
+            canvas.drawBitmap(bitmap, srcRect, dstRect, paint)
         }
 
-        // Draw the waterfall bitmap scaled to fill the view
-        srcRect.set(0, 0, bitmap.width, bitmap.height)
-        dstRect.set(0, 0, width, height)
-        canvas.drawBitmap(bitmap, srcRect, dstRect, paint)
-
-        // Draw TX offset marker bar (50Hz bandwidth for normal mode)
-        val currentBinHz = renderer?.getCurrentBinHz() ?: 0f
-        val displayStartBin = renderer?.getDisplayStartBin() ?: 0
-        val displayEndBin = renderer?.getDisplayEndBin() ?: -1
-        if (currentBinHz > 0 && displayEndBin > displayStartBin) {
-            val usableBins = displayEndBin - displayStartBin
-            val binIndex = (txOffsetHz / currentBinHz).toInt()
-            val displayBinIndex = binIndex - displayStartBin
-
-            if (displayBinIndex in 0 until usableBins) {
-                val pixelsPerBin = width.toFloat() / usableBins
-                val xPosition = displayBinIndex * pixelsPerBin
-
-                // Calculate bar width for 50Hz filter bandwidth (25Hz on each side)
-                val bandwidthBins = 50f / currentBinHz
-                val barWidth = bandwidthBins * pixelsPerBin
-
-                // Draw vertical bar marker centered on offset
-                canvas.drawRect(
-                    xPosition - barWidth / 2f,
-                    0f,
-                    xPosition + barWidth / 2f,
-                    height.toFloat(),
-                    markerPaint
-                )
-            }
+        // Offset dial (CPlotter::paintEvent / drawDials), also while RX is off
+        val hzPerPx = hzPerPixel()
+        if (hzPerPx > 0f) {
+            val x = ((txOffsetHz - startHz()) / hzPerPx + 0.5f).toInt().coerceIn(0, width).toFloat()
+            val w = (bandwidthHz / hzPerPx + 0.5f).toInt().toFloat()
+            val inset = 1f // QRect(1, 1, width - 2, height - 2)
+            canvas.drawRect(x + inset, inset, x + w - inset, height - inset, dialFill)
+            canvas.drawRect(x + inset, inset, x + w - inset, height - inset, dialOutline)
         }
     }
 
@@ -109,26 +130,22 @@ class WaterfallView @JvmOverloads constructor(
                 return true
             }
             android.view.MotionEvent.ACTION_UP -> {
-                val currentBinHz = renderer?.getCurrentBinHz() ?: 0f
-                val displayStartBin = renderer?.getDisplayStartBin() ?: 0
-                val displayEndBin = renderer?.getDisplayEndBin() ?: -1
-                if (currentBinHz > 0 && displayEndBin > displayStartBin) {
-                    val usableBins = displayEndBin - displayStartBin
-                    val pixelsPerBin = width.toFloat() / usableBins
+                // CPlotter::mouseReleaseEvent: offset = whole Hz under the finger
+                val hzPerPx = hzPerPixel()
+                if (hzPerPx > 0f) {
                     val xPosition = event.x.coerceIn(0f, width.toFloat())
-                    val binIndex = (xPosition / pixelsPerBin).toInt()
-                    val actualBinIndex = binIndex + displayStartBin
-                    val newOffsetHz = actualBinIndex * currentBinHz
-
-                    txOffsetHz = newOffsetHz
-                    onOffsetChanged?.invoke(txOffsetHz)
-                    android.util.Log.d("WaterfallView", "TX offset set to $txOffsetHz Hz at x=$xPosition (bin=$actualBinIndex)")
+                    val newOffsetHz = kotlin.math.floor(startHz() + xPosition * hzPerPx)
+                    onOffsetChanged?.invoke(newOffsetHz)
+                    android.util.Log.d("WaterfallView", "Tap at x=$xPosition: offset $newOffsetHz Hz")
                 }
+                performClick()
                 return true
             }
         }
         return super.onTouchEvent(event)
     }
+
+    override fun performClick(): Boolean = super.performClick()
 
     override fun onAttachedToWindow() {
         super.onAttachedToWindow()

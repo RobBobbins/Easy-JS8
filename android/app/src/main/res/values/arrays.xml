@@ -116,4 +116,12 @@
         <item>30</item>
         <item>60</item>
     </string-array>
+    <string-array name="js8_landscape_layout_entries">
+        <item>PC</item>
+        <item>Swipe</item>
+    </string-array>
+    <string-array name="js8_landscape_layout_values">
+        <item>pc</item>
+        <item>swipe</item>
+    </string-array>
 </resources>
