@@ -240,6 +240,7 @@ class JS8EngineService : Service() {
                 txMonitorWasAudioActive = true
                 logTxStarted()
                 broadcastTxState(TX_STATE_STARTED)
+                broadcastTxFrame(activeEngine)
             } else if (!audioActive && txMonitorWasAudioActive) {
                 txMonitorWasAudioActive = false
                 if (rigConnected) {
@@ -2903,6 +2904,25 @@ class JS8EngineService : Service() {
         }
     }
 
+    /**
+     * The part (frame) of the message that just started going out, as text (PC
+     * prepareNextMessageFrame: each frame shown in the Message Window as it is sent).
+     */
+    private fun broadcastTxFrame(activeEngine: JS8Engine) {
+        val texts = activeEngine.txFrameTexts()
+        val index = activeEngine.txFramesStarted() - 1
+        if (texts.isEmpty() || index !in texts.indices) return
+        val intent = Intent(ACTION_TX_FRAME).apply {
+            putExtra(EXTRA_TX_FRAME_TEXT, texts[index])
+            putExtra(EXTRA_TX_FRAME_INDEX, index)
+            putExtra(EXTRA_TX_FRAME_COUNT, texts.size)
+            // PC setCharsSent(m_totalTxMessage.length()): text of the parts sent so far, this one included
+            putExtra(EXTRA_TX_FRAME_CHARS_SENT, texts.take(index + 1).sumOf { it.length })
+            putExtra(EXTRA_TX_OFFSET_HZ, lastTxFrequencyHz)
+        }
+        LocalBroadcastManager.getInstance(this).sendBroadcast(intent)
+    }
+
     private fun broadcastTxState(state: String) {
         val intent = Intent(ACTION_TX_STATE).apply {
             putExtra(EXTRA_TX_STATE, state)
@@ -4279,6 +4299,12 @@ class JS8EngineService : Service() {
         const val ACTION_ERROR = "com.js8call.example.ACTION_ERROR"
         const val ACTION_TRANSMIT_MESSAGE = "com.js8call.example.ACTION_TRANSMIT_MESSAGE"
         const val ACTION_TX_STATE = "com.js8call.example.ACTION_TX_STATE"
+        /** A part of the message being sent just started going out (text, index, count, chars sent, offset). */
+        const val ACTION_TX_FRAME = "com.js8call.example.ACTION_TX_FRAME"
+        const val EXTRA_TX_FRAME_TEXT = "tx_frame_text"
+        const val EXTRA_TX_FRAME_INDEX = "tx_frame_index"
+        const val EXTRA_TX_FRAME_COUNT = "tx_frame_count"
+        const val EXTRA_TX_FRAME_CHARS_SENT = "tx_frame_chars_sent"
         const val ACTION_RADIO_FREQUENCY = "com.js8call.example.ACTION_RADIO_FREQUENCY"
         const val ACTION_MESSAGE_RECEIVED = "com.js8call.example.ACTION_MESSAGE_RECEIVED"
         const val ACTION_QUEUE_TX = "com.js8call.example.ACTION_QUEUE_TX"

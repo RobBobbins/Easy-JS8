@@ -57,12 +57,12 @@
                 android:layout_height="match_parent"
                 android:layout_weight="1" />
 
+            <!-- Call Activity narrower than Band Activity (Rob, 2026-10-19): fits the icon and Callsigns columns -->
             <com.js8call.example.js8ui.Js8TableView
                 android:id="@+id/js8_call_activity"
-                android:layout_width="0dp"
+                android:layout_width="130dp"
                 android:layout_height="match_parent"
-                android:layout_marginStart="6dp"
-                android:layout_weight="1" />
+                android:layout_marginStart="6dp" />
         </LinearLayout>
 
         <!-- 3. Message Window -->

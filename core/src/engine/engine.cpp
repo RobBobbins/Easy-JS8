@@ -227,8 +227,11 @@ public:
     {
       std::lock_guard<std::mutex> lock(tx_mutex_);
       tx_queue_.clear();
+      tx_message_frames_.clear();
+      tx_frames_started_ = 0;
       for (auto& frame : built) {
         if (!frame.frame.empty()) {
+          tx_message_frames_.emplace_back(frame.frame, frame.bits);
           tx_queue_.push_back(std::move(frame));
         }
       }
@@ -266,6 +269,8 @@ public:
     {
       std::lock_guard<std::mutex> lock(tx_mutex_);
       tx_queue_.clear();
+      tx_message_frames_.clear();
+      tx_frames_started_ = 0;
       tx_queue_.push_back(std::move(frame));
       tx_settings_.submode = request.submode;
       tx_settings_.audio_frequency_hz = request.audio_frequency_hz;
@@ -292,6 +297,8 @@ public:
     {
       std::lock_guard<std::mutex> lock(tx_mutex_);
       tx_queue_.clear();
+      tx_message_frames_.clear();
+      tx_frames_started_ = 0;
       tx_settings_.submode = submode;
       tx_settings_.audio_frequency_hz = audio_frequency_hz;
       tx_settings_.tx_delay_s = tx_delay_s;
@@ -320,6 +327,8 @@ public:
     std::lock_guard<std::mutex> lock(tx_mutex_);
     tx_active_ = false;
     tx_queue_.clear();
+    tx_message_frames_.clear();
+    tx_frames_started_ = 0;
     tx_settings_.tuning = false;
     tx_modulator_.stop();
     tx_resampler_.reset();
@@ -339,6 +348,16 @@ public:
 
   int tx_milliseconds_until_audio() const override {
     return tx_modulator_.milliseconds_until_active();
+  }
+
+  std::vector<std::pair<std::string, int>> tx_message_frames() override {
+    std::lock_guard<std::mutex> lock(tx_mutex_);
+    return tx_message_frames_;
+  }
+
+  int tx_frames_started() override {
+    std::lock_guard<std::mutex> lock(tx_mutex_);
+    return tx_frames_started_;
   }
 
   void set_tx_ready(bool ready) override {
@@ -900,6 +919,7 @@ public:
 
       TxFrame frame = std::move(tx_queue_.front());
       tx_queue_.pop_front();
+      if (!tx_message_frames_.empty()) ++tx_frames_started_;
 
       tx_modulator_.start(frame.tones,
                           sm->symbol_samples,
@@ -1038,6 +1058,9 @@ public:
     bool running_{false};
     std::mutex tx_mutex_;
     std::deque<TxFrame> tx_queue_;
+    // Parts of the message being sent (frame, bits) and how many reached the modulator
+    std::vector<std::pair<std::string, int>> tx_message_frames_;
+    int tx_frames_started_ = 0;
     TxSettings tx_settings_{};
     tx::Modulator tx_modulator_;
     dsp::Resampler tx_resampler_;

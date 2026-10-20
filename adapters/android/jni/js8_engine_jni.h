@@ -54,6 +54,8 @@ void js8_engine_stop_transmit(JS8Engine_Native* engine);
 int js8_engine_is_transmitting(JS8Engine_Native* engine);
 int js8_engine_is_transmitting_audio(JS8Engine_Native* engine);
 int js8_engine_tx_milliseconds_until_audio(JS8Engine_Native* engine);
+// How many parts of the message being sent have started.
+int js8_engine_tx_frames_started(JS8Engine_Native* engine);
 void js8_engine_set_tx_ready(JS8Engine_Native* engine, bool ready);
 
 // Status queries
@@ -64,4 +66,11 @@ int js8_register_natives(JavaVM* vm, JNIEnv* env);
 
 #ifdef __cplusplus
 }
+#endif
+
+#ifdef __cplusplus
+#include <string>
+#include <vector>
+// Text of each part of the message being sent (same text a receiver would show).
+std::vector<std::string> js8_engine_tx_frame_texts(JS8Engine_Native* engine);
 #endif

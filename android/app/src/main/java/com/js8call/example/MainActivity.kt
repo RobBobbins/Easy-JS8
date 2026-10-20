@@ -70,6 +70,8 @@ class MainActivity : AppCompatActivity() {
                     val state = intent.getStringExtra(JS8EngineService.EXTRA_TX_STATE)
                     when (state) {
                         JS8EngineService.TX_STATE_FINISHED, JS8EngineService.TX_STATE_FAILED -> {
+                            // Easy JS8: the typed message leaves the Typing Box once it is done
+                            js8ActivityViewModel.onTxEnded()
                             // Update ViewModel state first
                             if (state == JS8EngineService.TX_STATE_FINISHED) {
                                 transmitViewModel.transmissionComplete()
@@ -86,6 +88,16 @@ class MainActivity : AppCompatActivity() {
                             transmitViewModel.startTransmitting()
                         }
                     }
+                }
+                JS8EngineService.ACTION_TX_FRAME -> {
+                    // Easy JS8: each part of our transmission in the Message Window as it goes out
+                    js8ActivityViewModel.onTxFrame(
+                        intent.getStringExtra(JS8EngineService.EXTRA_TX_FRAME_TEXT).orEmpty(),
+                        intent.getIntExtra(JS8EngineService.EXTRA_TX_FRAME_INDEX, 0),
+                        intent.getIntExtra(JS8EngineService.EXTRA_TX_FRAME_COUNT, 1),
+                        intent.getIntExtra(JS8EngineService.EXTRA_TX_FRAME_CHARS_SENT, 0),
+                        intent.getDoubleExtra(JS8EngineService.EXTRA_TX_OFFSET_HZ, 0.0).toInt()
+                    )
                 }
                 ACTION_PROCESS_TX_QUEUE -> {
                     android.util.Log.d("MainActivity", "Received ACTION_PROCESS_TX_QUEUE")
@@ -189,7 +201,8 @@ class MainActivity : AppCompatActivity() {
             bottomNav.visibility = if (destination.id == R.id.navigation_js8_main ||
                 destination.id == R.id.navigation_js8_menu ||
                 destination.id == R.id.navigation_js8_settings ||
-                destination.id == R.id.navigation_js8_station) android.view.View.GONE else android.view.View.VISIBLE
+                destination.id == R.id.navigation_js8_station ||
+                destination.id == R.id.navigation_js8_aprs) android.view.View.GONE else android.view.View.VISIBLE
             onMonitorTab = destination.id == R.id.navigation_monitor
             if (destination.id == R.id.navigation_conversation) {
                 bottomNav.menu.findItem(R.id.navigation_messages).isChecked = true
@@ -230,6 +243,7 @@ class MainActivity : AppCompatActivity() {
             addAction(JS8EngineService.ACTION_DECODE)
             addAction(JS8EngineService.ACTION_QUEUE_TX)
             addAction(JS8EngineService.ACTION_TX_STATE)
+            addAction(JS8EngineService.ACTION_TX_FRAME)
             addAction(ACTION_PROCESS_TX_QUEUE)
         }
         LocalBroadcastManager.getInstance(this)
@@ -289,8 +303,8 @@ class MainActivity : AppCompatActivity() {
             return
         }
         
-        // Easy JS8: show our transmission in the Message Window (TX color)
-        js8ActivityViewModel.onTransmit(nextMessage.text, nextMessage.directed, transmitViewModel.getTxOffset().toInt())
+        // Easy JS8: the Message Window shows each part as it goes out (ACTION_TX_FRAME), not here
+        js8ActivityViewModel.onSentToEngine(nextMessage.text)
 
         // Send to service for transmission
         android.util.Log.d("MainActivity", "processNextTxIfIdle: sending to service: text='${nextMessage.text}' directed=${nextMessage.directed}")

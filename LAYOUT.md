@@ -52,7 +52,10 @@ same place, same blue bold style, opens the Settings window.
    - RX, TX, **Settings**
    - SPOT, LOG, TUNE
    - No frequency display, no ▲▼, no Offset slider, no ⋮ (moved to the Settings window).
-2. **Band Activity** and **Call Activity**, side by side, half width each
+2. **Band Activity** and **Call Activity**, side by side. Call Activity is 130 dp wide (icon and
+   Callsigns columns), Band Activity takes the rest. Band Activity starts with only Age and
+   Message(s); **Settings → View → Show Offset in Band Activity / Show SNR in Band Activity** bring
+   those columns back (same setting as press-and-hold on the header). Sideways keeps the PC columns.
 3. **Message Window**
 4. **Typing Box**
 5. **Buttons**, two rows of five, neat even widths:

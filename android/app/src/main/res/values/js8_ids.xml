@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- APRS pages (Js8AprsFragment): fixed ids so typed text survives turning the phone -->
+    <item name="js8_aprs_to" type="id" />
+    <item name="js8_aprs_message" type="id" />
+</resources>

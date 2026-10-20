@@ -359,6 +359,33 @@ Java_com_js8call_core_JS8Engine_nativeIsTransmittingAudio(
   return js8_engine_is_transmitting_audio(engine) ? JNI_TRUE : JNI_FALSE;
 }
 
+JNIEXPORT jobjectArray JNICALL
+Java_com_js8call_core_JS8Engine_nativeGetTxFrameTexts(
+    JNIEnv* env,
+    jobject /* thiz */,
+    jlong handle) {
+  JS8Engine_Native* engine = reinterpret_cast<JS8Engine_Native*>(handle);
+  auto texts = js8_engine_tx_frame_texts(engine);
+  jclass string_class = env->FindClass("java/lang/String");
+  jobjectArray out = env->NewObjectArray(static_cast<jsize>(texts.size()), string_class, nullptr);
+  for (std::size_t i = 0; i < texts.size(); ++i) {
+    jstring item = env->NewStringUTF(texts[i].c_str());
+    env->SetObjectArrayElement(out, static_cast<jsize>(i), item);
+    env->DeleteLocalRef(item);
+  }
+  env->DeleteLocalRef(string_class);
+  return out;
+}
+
+JNIEXPORT jint JNICALL
+Java_com_js8call_core_JS8Engine_nativeGetTxFramesStarted(
+    JNIEnv* /* env */,
+    jobject /* thiz */,
+    jlong handle) {
+  JS8Engine_Native* engine = reinterpret_cast<JS8Engine_Native*>(handle);
+  return js8_engine_tx_frames_started(engine);
+}
+
 JNIEXPORT jint JNICALL
 Java_com_js8call_core_JS8Engine_nativeTxMillisecondsUntilAudio(
     JNIEnv* /* env */,

@@ -205,6 +205,9 @@ object Js8SettingsSchema {
         // From Menu > View (Rob, 2026-10-19). The Clear buttons act at once, not on OK.
         Section("View", null, listOf(
             check("js8cfg_show_hb_acks", "Show Band Heartbeats and ACKs", false),
+            // Band Activity columns, upright (Rob, 2026-10-19); same setting as press-and-hold on the header
+            check("js8_table_${BAND_TABLE_UPRIGHT}_col_offset", "Show Offset in Band Activity", false),
+            check("js8_table_${BAND_TABLE_UPRIGHT}_col_snr", "Show SNR in Band Activity", false),
             ButtonRow(listOf("Clear Band Activity" to "clear_band")),
             ButtonRow(listOf("Clear Call Activity" to "clear_call")),
             ButtonRow(listOf("Clear RX Activity" to "clear_rx")),
@@ -212,6 +215,8 @@ object Js8SettingsSchema {
         ))
     )
 
+    /** Js8TableView key of the upright Band Activity (its columns are js8_table_<key>_col_<column>). */
+    const val BAND_TABLE_UPRIGHT = "band_upright"
     const val MULTI_KEY = "js8cfg_multi"
     /** Live AUTO switch: the engine's autoreply_enabled. */
     const val AUTOREPLY_KEY = "autoreply_enabled"

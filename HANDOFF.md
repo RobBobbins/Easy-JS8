@@ -92,7 +92,39 @@ values (ViewModel keyed by window).
 - Status bar mode label (JS8 Normal…) and cycle counter (n/15, n/10…) follow the speed.
 - Transmit frames get only the first 4 grid characters, like the PC (`my_grid().left(4)`).
 
+### APRS pages (third session, 2026-10-19)
+
+- **Saved** menu (upright only) ends with **APRS EMAIL**, **APRS TXT**, **APRS GRID**, **APRS MSG**.
+  Each opens its own page (`js8ui/Js8AprsFragment.kt`, nav `navigation_js8_aprs`, argument `form`).
+  **OK** puts the line in the Typing Box and does not send; **Cancel** / **← Back** leave it alone.
+  The PC has no APRS forms (you type @APRSIS commands by hand).
+- Lines: `@APRSIS CMD :EMAIL-2  :ADDR MSG{NN`, `@APRSIS CMD :SMSGTE   :@PHONE MSG{NN`,
+  `@APRSIS GRID <grid>` (grid from Station, no number), `@APRSIS CMD :CALL-SSID:MSG{NN`
+  (addressee padded to 9). Rob: message number is `{01` only, no closing `}`.
+- Rules (APRS 1.2 spec ch. 14): `{01`–`{99` then `{01`, one counter `js8cfg_aprs_msg_number`,
+  goes up on OK; APRS text ≤ 67 characters (email address / `@phone` count toward it); no `{` in the message.
+- Easy JS8 itself does not gate @APRSIS to the internet (engine has no APRS-IS code); a PC station
+  with spotting on has to hear it.
+
+### Lists, Message Window, sending (third session, 2026-10-19)
+
+- Upright: Call Activity 130 dp wide; Band Activity starts with Age + Message(s) only, Offset / SNR
+  back via **Settings → View → Show Offset / Show SNR in Band Activity** (table key `band_upright`).
+- Lists redraw the PC way: decodes gathered, redrawn at most once a second (`activityDirty`),
+  only changed rows touched (DiffUtil, no item animations), scroll position kept (`Js8TableView`).
+- Message Window text is only set when it changed and scrolls to the end before drawing
+  (it used to jump to the top every 5 s — the "bounce" Rob filmed).
+- Sending like the PC (`prepareNextMessageFrame`): engine now remembers the message's parts
+  (`tx_message_frames()`, `tx_frames_started()` in core; JNI `nativeGetTxFrameTexts` /
+  `nativeGetTxFramesStarted`). Service broadcasts `ACTION_TX_FRAME` when each part's audio starts;
+  the Message Window adds it in red (first part new line, last part ◊). Typing Box keeps the
+  message locked with sent text struck through, empties after the last part or on Halt; Saved /
+  CQ / Directed etc. do nothing meanwhile (`Js8ActivityViewModel.typed`). Heartbeats and replies
+  show part by part too. Tested on the emulator only, not with a radio.
+
 ## Choices made without Rob confirming yet
+
+- APRS page buttons named **OK** / **Cancel**; APRS menu items hidden sideways.
 
 - **Phone** tab is in Station (Rob unsure; waits for the sideways work).
 - Heading name **Operation** for MULTI / AUTO / HB / ACK in Settings.

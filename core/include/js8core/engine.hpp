@@ -5,6 +5,7 @@
 #include <memory>
 #include <string>
 #include <string_view>
+#include <utility>
 #include <variant>
 #include <vector>
 
@@ -134,6 +135,10 @@ public:
   virtual bool is_transmitting_audio() const = 0;
   virtual int tx_milliseconds_until_audio() const = 0;
   virtual void set_tx_ready(bool ready) = 0;
+  // Parts (12-character frame + bits) of the message being sent by transmit_message, in order,
+  // and how many of them have been handed to the modulator. Empty / 0 for TUNE and single frames.
+  virtual std::vector<std::pair<std::string, int>> tx_message_frames() { return {}; }
+  virtual int tx_frames_started() { return 0; }
   virtual void set_tx_boost_enabled(bool enabled) = 0;
   virtual void set_submodes(int submodes) = 0;
   virtual void set_sync_stats(bool enabled) = 0;

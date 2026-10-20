@@ -64,7 +64,7 @@ class Js8TableView @JvmOverloads constructor(
     var onRowClick: ((Row) -> Unit)? = null
     var onRowDoubleClick: ((Row) -> Unit)? = null
     var selectedRowId: String? = null
-        set(value) { field = value; adapter.notifyDataSetChanged() }
+        set(value) { field = value; rebindAll() }
 
     private var columns: List<Column> = emptyList()
     private var rows: List<Row> = emptyList()
@@ -74,6 +74,7 @@ class Js8TableView @JvmOverloads constructor(
 
     private val dp = resources.displayMetrics.density
     private val font: Typeface? = ResourcesCompat.getFont(context, R.font.selawik)
+    private val boldFont: Typeface = Typeface.create(font, Typeface.BOLD)
     private val textSizePx = resources.getDimension(R.dimen.js8_text)
     private val headerHeight = resources.getDimensionPixelSize(R.dimen.js8_list_header_height)
     private val rowHeight = resources.getDimensionPixelSize(R.dimen.js8_list_row_height)
@@ -92,6 +93,8 @@ class Js8TableView @JvmOverloads constructor(
         setPadding(1, 1, 1, 1)
         list.layoutManager = LinearLayoutManager(context)
         list.adapter = adapter
+        // Rows change in place, no fade / slide animations (they made the text bounce on each refresh)
+        list.itemAnimator = null
         list.isNestedScrollingEnabled = true
         list.setBackgroundColor(ContextCompat.getColor(context, R.color.js8_list_bg))
         inner.addView(header, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, headerHeight))
@@ -114,10 +117,42 @@ class Js8TableView @JvmOverloads constructor(
         rebuildHeader()
     }
 
+    /**
+     * New rows. Only rows whose text or color changed are redrawn, in place; the list keeps its
+     * scroll position (PC displayBandActivity: updates off, rebuild, scroll bar put back).
+     */
     fun setRows(newRows: List<Row>) {
+        if (newRows == rows) return
         rows = newRows
         if (measureContents()) rebuildHeader()
         applySort()
+    }
+
+    /** Redraw every row in place (column widths, selection), without rebuilding the list. */
+    private fun rebindAll() {
+        if (adapter.itemCount > 0) adapter.notifyItemRangeChanged(0, adapter.itemCount)
+    }
+
+    /** Show [newSorted]: inserts, removals and changed rows only, scroll position kept. */
+    private fun showRows(newSorted: List<Row>) {
+        val old = sortedRows
+        if (old == newSorted) return
+        val lm = list.layoutManager as LinearLayoutManager
+        val first = lm.findFirstVisibleItemPosition()
+        val top = list.getChildAt(0)?.top ?: 0
+        val diff = androidx.recyclerview.widget.DiffUtil.calculateDiff(object : androidx.recyclerview.widget.DiffUtil.Callback() {
+            override fun getOldListSize() = old.size
+            override fun getNewListSize() = newSorted.size
+            override fun areItemsTheSame(o: Int, n: Int) = old[o].id == newSorted[n].id
+            override fun areContentsTheSame(o: Int, n: Int) = old[o] == newSorted[n]
+        }, false)
+        sortedRows = newSorted
+        diff.dispatchUpdatesTo(adapter)
+        // Put the scroll position back unless a finger is moving the list
+        if (first != RecyclerView.NO_POSITION && list.scrollState == RecyclerView.SCROLL_STATE_IDLE &&
+            first < newSorted.size) {
+            lm.scrollToPositionWithOffset(first, top - list.paddingTop)
+        }
     }
 
     private fun prefKey(col: Column) = "js8_table_${tableKey}_col_${col.key}"
@@ -187,7 +222,7 @@ class Js8TableView @JvmOverloads constructor(
             }
             header.addView(label, LinearLayout.LayoutParams(widths[i], ViewGroup.LayoutParams.MATCH_PARENT))
         }
-        adapter.notifyDataSetChanged()
+        rebindAll()
     }
 
     private fun onHeaderTap(col: Column) {
@@ -198,15 +233,14 @@ class Js8TableView @JvmOverloads constructor(
     @Suppress("UNCHECKED_CAST")
     private fun applySort() {
         val key = sortKey
-        sortedRows = if (key == null) rows else {
+        showRows(if (key == null) rows else {
             val cmp = Comparator<Row> { a, b ->
                 val av = (a.sortValues[key] ?: a.values[key] ?: "") as Comparable<Any>
                 val bv = (b.sortValues[key] ?: b.values[key] ?: "") as Comparable<Any>
                 try { av.compareTo(bv) } catch (_: ClassCastException) { av.toString().compareTo(bv.toString()) }
             }
             if (sortAscending) rows.sortedWith(cmp) else rows.sortedWith(cmp.reversed())
-        }
-        adapter.notifyDataSetChanged()
+        })
     }
 
 
@@ -247,26 +281,36 @@ class Js8TableView @JvmOverloads constructor(
             val vis = visibleColumns()
             val widths = columnWidths()
             val rv = holder.rowView
-            rv.removeAllViews()
+            // Same number of cells: change them in place (no new views, so nothing jumps)
+            if (rv.childCount != vis.size) {
+                rv.removeAllViews()
+                repeat(vis.size) {
+                    rv.addView(TextView(context).apply {
+                        setTextSize(TypedValue.COMPLEX_UNIT_PX, textSizePx)
+                        isSingleLine = true
+                        includeFontPadding = false
+                        setPadding((4 * dp).toInt(), 0, (4 * dp).toInt(), 0)
+                    }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT))
+                }
+            }
             val selected = row.id == selectedRowId
             // Selected row: desktop colorTableHighlight #3498db
             rv.setBackgroundColor(if (selected) SELECTED_BG else row.bg ?: 0)
+            val face = if (row.bold) boldFont else font
             vis.forEachIndexed { i, col ->
-                val tv = TextView(context).apply {
-                    text = row.values[col.key].orEmpty()
-                    typeface = if (row.bold) Typeface.create(font, Typeface.BOLD) else font
-                    setTextSize(TypedValue.COMPLEX_UNIT_PX, textSizePx)
-                    setTextColor(row.colors[col.key] ?: ContextCompat.getColor(context, R.color.js8_list_text))
-                    gravity = Gravity.CENTER_VERTICAL or when {
-                        col.key in row.center -> Gravity.CENTER_HORIZONTAL
-                        col.numeric -> Gravity.END
-                        else -> Gravity.START
-                    }
-                    isSingleLine = true
-                    includeFontPadding = false
-                    setPadding((4 * dp).toInt(), 0, (4 * dp).toInt(), 0)
+                val tv = rv.getChildAt(i) as TextView
+                val text = row.values[col.key].orEmpty()
+                if (tv.text.toString() != text) tv.text = text
+                if (tv.typeface != face) tv.typeface = face
+                tv.setTextColor(row.colors[col.key] ?: ContextCompat.getColor(context, R.color.js8_list_text))
+                val g = Gravity.CENTER_VERTICAL or when {
+                    col.key in row.center -> Gravity.CENTER_HORIZONTAL
+                    col.numeric -> Gravity.END
+                    else -> Gravity.START
                 }
-                rv.addView(tv, LinearLayout.LayoutParams(widths[i], ViewGroup.LayoutParams.MATCH_PARENT))
+                if (tv.gravity != g) tv.gravity = g
+                val lp = tv.layoutParams
+                if (lp.width != widths[i]) { lp.width = widths[i]; tv.layoutParams = lp }
             }
             rv.setOnClickListener {
                 val now = System.currentTimeMillis()

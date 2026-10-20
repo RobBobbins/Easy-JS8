@@ -23,10 +23,42 @@ class Js8ActivityViewModel(app: Application) : AndroidViewModel(app) {
         if (activity.onFrame(m, myOffset, cfg())) changed()
     }
 
-    fun onTransmit(text: String, directed: String?, offset: Int) {
-        val body = if (!directed.isNullOrBlank() && !text.uppercase().startsWith(directed.uppercase())) "$directed $text" else text
-        activity.writeTx(body, offset, cfg())
+    /** A message from the Typing Box, kept there (locked) until its last part has gone out. */
+    data class TypedTx(val text: String, val onAir: Boolean = false, val charsSent: Int = 0)
+
+    private val _typed = MutableLiveData<TypedTx?>(null)
+    /** Typing Box message waiting or being sent; null = the box is free. */
+    val typed: LiveData<TypedTx?> = _typed
+    /** The typed message finished (or was halted): the Typing Box still has to be emptied. */
+    var typedClearPending = false
+
+    /** Send pressed: the Typing Box keeps [text] until it has been sent. */
+    fun onTypedQueued(text: String) {
+        _typed.value = TypedTx(text)
+    }
+
+    /** The queue handed [text] to the engine; if it is the typed message, its parts now count. */
+    fun onSentToEngine(text: String) {
+        val t = _typed.value ?: return
+        if (!t.onAir && t.text == text) _typed.value = t.copy(onAir = true)
+    }
+
+    /** A part of any of our transmissions started going out (heartbeats and replies too). */
+    fun onTxFrame(text: String, index: Int, count: Int, charsSent: Int, offset: Int) {
+        activity.writeTxFrame(text, offset, first = index == 0, last = index == count - 1, cfg = cfg())
+        _typed.value?.let { if (it.onAir) _typed.value = it.copy(charsSent = charsSent) }
         changed()
+    }
+
+    /** Transmission finished or failed: the typed message (if it was on air) leaves the box. */
+    fun onTxEnded() {
+        if (_typed.value?.onAir == true) clearTyped()
+    }
+
+    /** Halt, or the message is done: free and empty the Typing Box (PC resetMessageUI). */
+    fun clearTyped() {
+        typedClearPending = true
+        _typed.value = null
     }
 
     fun changed() { _version.value = (_version.value ?: 0) + 1 }

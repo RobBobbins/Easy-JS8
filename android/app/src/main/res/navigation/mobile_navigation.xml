@@ -31,6 +31,17 @@
             app:argType="string" />
     </fragment>
 
+    <!-- Saved > APRS EMAIL / APRS TXT / APRS GRID / APRS MSG: fills the Typing Box -->
+    <fragment
+        android:id="@+id/navigation_js8_aprs"
+        android:name="com.js8call.example.js8ui.Js8AprsFragment"
+        android:label="APRS">
+        <argument
+            android:name="form"
+            android:defaultValue="msg"
+            app:argType="string" />
+    </fragment>
+
     <fragment
         android:id="@+id/navigation_js8_menu"
         android:name="com.js8call.example.js8ui.Js8MenuFragment"

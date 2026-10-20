@@ -228,6 +228,19 @@ class JS8Engine private constructor(
     }
 
     /**
+     * Text of each part (frame) of the message being sent, as a receiver would show it.
+     * Empty for TUNE, single frames and when nothing is being sent.
+     */
+    fun txFrameTexts(): List<String> {
+        return withNativeHandleOr(emptyList()) { nativeGetTxFrameTexts(it).toList() }
+    }
+
+    /** How many parts of the message being sent have started (the one on air is this minus 1). */
+    fun txFramesStarted(): Int {
+        return withNativeHandleOr(0) { nativeGetTxFramesStarted(it) }
+    }
+
+    /**
      * Milliseconds until scheduled TX audio begins, or -1 when no TX is active.
      */
     fun txMillisecondsUntilAudio(): Int {
@@ -338,6 +351,8 @@ class JS8Engine private constructor(
     private external fun nativeStopTransmit(handle: Long)
     private external fun nativeIsTransmitting(handle: Long): Boolean
     private external fun nativeIsTransmittingAudio(handle: Long): Boolean
+    private external fun nativeGetTxFrameTexts(handle: Long): Array<String>
+    private external fun nativeGetTxFramesStarted(handle: Long): Int
     private external fun nativeTxMillisecondsUntilAudio(handle: Long): Int
     private external fun nativeSetTxReady(handle: Long, ready: Boolean)
     private external fun nativeSetTimeDriftMs(handle: Long, driftMs: Long)

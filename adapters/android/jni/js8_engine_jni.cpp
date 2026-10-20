@@ -42,6 +42,8 @@ JNIEXPORT jboolean JNICALL Java_com_js8call_core_JS8Engine_nativeStartTune(JNIEn
 JNIEXPORT void JNICALL Java_com_js8call_core_JS8Engine_nativeStopTransmit(JNIEnv*, jobject, jlong);
 JNIEXPORT jboolean JNICALL Java_com_js8call_core_JS8Engine_nativeIsTransmitting(JNIEnv*, jobject, jlong);
 JNIEXPORT jboolean JNICALL Java_com_js8call_core_JS8Engine_nativeIsTransmittingAudio(JNIEnv*, jobject, jlong);
+JNIEXPORT jobjectArray JNICALL Java_com_js8call_core_JS8Engine_nativeGetTxFrameTexts(JNIEnv*, jobject, jlong);
+JNIEXPORT jint JNICALL Java_com_js8call_core_JS8Engine_nativeGetTxFramesStarted(JNIEnv*, jobject, jlong);
 JNIEXPORT jint JNICALL Java_com_js8call_core_JS8Engine_nativeTxMillisecondsUntilAudio(JNIEnv*, jobject, jlong);
 JNIEXPORT void JNICALL Java_com_js8call_core_JS8Engine_nativeSetTxReady(JNIEnv*, jobject, jlong, jboolean);
 JNIEXPORT void JNICALL Java_com_js8call_core_JS8Engine_nativeSetTimeDriftMs(JNIEnv*, jobject, jlong, jlong);
@@ -272,7 +274,9 @@ static std::string maybe_insert_callsign_prefix(std::string const& text, bool fi
 
 // Renders the display text. *type gets the frame type, with the data flag
 // added when only the payload carried it.
-static std::string render_decoded_text(JS8Engine_Native* native,
+// compound_calls: compound callsigns seen recently (received text uses the engine's list;
+// sent parts use their own, so they can't change what is shown for received frames).
+static std::string render_decoded_text(std::vector<JS8Engine_Native::CompoundCall>& compound_calls,
                                        js8core::events::Decoded const& decoded,
                                        int* type) {
   using namespace js8core::protocol::varicode;
@@ -367,25 +371,25 @@ static std::string render_decoded_text(JS8Engine_Native* native,
       }
       if (type == 1 && !parts.front().empty()) {
         auto now = std::chrono::steady_clock::now();
-        native->compound_calls.erase(
-            std::remove_if(native->compound_calls.begin(), native->compound_calls.end(),
+        compound_calls.erase(
+            std::remove_if(compound_calls.begin(), compound_calls.end(),
                            [&](auto const& call) { return now - call.received_at > std::chrono::seconds(60); }),
-            native->compound_calls.end());
-        native->compound_calls.push_back({parts.front(), decoded.frequency, now});
+            compound_calls.end());
+        compound_calls.push_back({parts.front(), decoded.frequency, now});
       }
       if (type == 2 && !parts.front().empty() && !out.empty()) {
-        auto closest = native->compound_calls.end();
+        auto closest = compound_calls.end();
         auto closest_distance = std::numeric_limits<float>::max();
-        for (auto it = native->compound_calls.begin(); it != native->compound_calls.end(); ++it) {
+        for (auto it = compound_calls.begin(); it != compound_calls.end(); ++it) {
           auto distance = std::fabs(decoded.frequency - it->frequency);
           if (distance <= 10.0f && distance < closest_distance) {
             closest = it;
             closest_distance = distance;
           }
         }
-        if (closest != native->compound_calls.end()) {
+        if (closest != compound_calls.end()) {
           out = closest->callsign + ": " + out;
-          native->compound_calls.erase(closest);
+          compound_calls.erase(closest);
         }
       }
       if (!out.empty()) {
@@ -444,7 +448,7 @@ static void event_callback(JS8Engine_Native* native, js8core::events::Variant co
   // Handle different event types
   if (auto* decoded = std::get_if<js8core::events::Decoded>(&event)) {
     int type = 0;
-    auto rendered = render_decoded_text(native, *decoded, &type);
+    auto rendered = render_decoded_text(native->compound_calls, *decoded, &type);
     __android_log_print(ANDROID_LOG_INFO, "JS8Engine_Native",
                        "DECODED: SNR=%d dB, freq=%.1f Hz, text='%s', raw='%s', type=%d, mode=%d",
                        decoded->snr, decoded->frequency, rendered.c_str(),
@@ -932,6 +936,30 @@ int js8_engine_tx_milliseconds_until_audio(JS8Engine_Native* engine) {
   return engine->engine->tx_milliseconds_until_audio();
 }
 
+}  // extern "C" (C++ return type below)
+
+std::vector<std::string> js8_engine_tx_frame_texts(JS8Engine_Native* engine) {
+  std::vector<std::string> out;
+  if (!engine || !engine->engine) return out;
+  // Same text as a received copy of each part (PC: DecodedText(frame, bits).message())
+  std::vector<JS8Engine_Native::CompoundCall> compound_calls;
+  for (auto const& [frame, bits] : engine->engine->tx_message_frames()) {
+    js8core::events::Decoded decoded;
+    decoded.data = frame;
+    decoded.type = bits;
+    int type = 0;
+    out.push_back(render_decoded_text(compound_calls, decoded, &type));
+  }
+  return out;
+}
+
+extern "C" {
+
+int js8_engine_tx_frames_started(JS8Engine_Native* engine) {
+  if (!engine || !engine->engine) return 0;
+  return engine->engine->tx_frames_started();
+}
+
 void js8_engine_set_tx_ready(JS8Engine_Native* engine, bool ready) {
   if (!engine || !engine->engine) return;
   engine->engine->set_tx_ready(ready);
@@ -987,6 +1015,10 @@ int js8_register_natives(JavaVM* vm, JNIEnv* env) {
      (void*)Java_com_js8call_core_JS8Engine_nativeIsTransmitting},
     {"nativeIsTransmittingAudio", "(J)Z",
       (void*)Java_com_js8call_core_JS8Engine_nativeIsTransmittingAudio},
+    {"nativeGetTxFrameTexts", "(J)[Ljava/lang/String;",
+     (void*)Java_com_js8call_core_JS8Engine_nativeGetTxFrameTexts},
+    {"nativeGetTxFramesStarted", "(J)I",
+     (void*)Java_com_js8call_core_JS8Engine_nativeGetTxFramesStarted},
     {"nativeTxMillisecondsUntilAudio", "(J)I",
      (void*)Java_com_js8call_core_JS8Engine_nativeTxMillisecondsUntilAudio},
     {"nativeSetTxReady", "(JZ)V",

@@ -81,6 +81,12 @@ class Js8MainFragment : Fragment() {
 
     private var dialHz: Long = 14_078_000L
     private var selectedCall: String? = null
+    /** Something changed since the lists were last drawn (PC m_rxDisplayDirty). */
+    private var activityDirty = false
+    /** Lists drawn at least once since this screen's views were made. */
+    private var listsDrawn = false
+    /** Message Window text (and colors) last put in the box; unchanged text is not set again. */
+    private var messageWindowShown: String? = null
 
     private val ui = Handler(Looper.getMainLooper())
     private val clockFormat = SimpleDateFormat("yyyy MMM dd HH:mm:ss", Locale.US).apply {
@@ -91,8 +97,9 @@ class Js8MainFragment : Fragment() {
             val now = System.currentTimeMillis()
             clock.text = clockFormat.format(Date(now))
             progress.seconds = ((now / 1000) % progress.period).toInt()
-            // Ages ("now", "15s", "2m") move on even without new decodes
-            if ((now / 1000) % 5 == 0L) renderActivity()
+            // PC updateTimer: lists redrawn at most once a second, when something changed;
+            // ages ("now", "15s", "2m") move on every 5 seconds even without new decodes
+            if (activityDirty || (now / 1000) % 5 == 0L) renderActivity()
             ui.postDelayed(this, 1000 - now % 1000)
         }
     }
@@ -111,6 +118,8 @@ class Js8MainFragment : Fragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
+        listsDrawn = false // new views: draw the lists as soon as the data arrives
+        messageWindowShown = null
         monitorVm = ViewModelProvider(requireActivity())[MonitorViewModel::class.java]
         decodeVm = ViewModelProvider(requireActivity())[DecodeViewModel::class.java]
         transmitVm = ViewModelProvider(requireActivity())[TransmitViewModel::class.java]
@@ -145,6 +154,10 @@ class Js8MainFragment : Fragment() {
         setUpTables()
         setUpHeader()
         setUpButtons(view)
+        // Saved > APRS page OK: its line goes in the Typing Box, not sent
+        parentFragmentManager.setFragmentResultListener(Js8AprsFragment.RESULT_KEY, viewLifecycleOwner) { _, result ->
+            result.getString(Js8AprsFragment.RESULT_TEXT)?.let { addMessageText(it, send = false) }
+        }
         setUpWaterfall()
         observe()
         if (!startupChecked) {
@@ -222,10 +235,13 @@ class Js8MainFragment : Fragment() {
 
     private fun setUpTables() {
         // Columns and defaults: JS8_UI/mainwindow.cpp buildShowColumnsMenu()
-        bandActivity.setColumns("band", listOf(
-            Js8TableView.Column("offset", "Offset", 48, numeric = true, menuLabel = "Frequency Offset"),
+        // Upright keeps its own Band Activity columns: Offset and SNR hidden at first, shown again from
+        // Settings > View (Rob, 2026-10-19). Sideways keeps the PC defaults.
+        val upright = resources.configuration.orientation != Configuration.ORIENTATION_LANDSCAPE
+        bandActivity.setColumns(if (upright) Js8SettingsSchema.BAND_TABLE_UPRIGHT else "band", listOf(
+            Js8TableView.Column("offset", "Offset", 48, defaultVisible = !upright, numeric = true, menuLabel = "Frequency Offset"),
             Js8TableView.Column("timestamp", "Age", 36, numeric = true, menuLabel = "Last heard timestamp"),
-            Js8TableView.Column("snr", "SNR", 36, numeric = true),
+            Js8TableView.Column("snr", "SNR", 36, defaultVisible = !upright, numeric = true),
             Js8TableView.Column("tdrift", "Time Delta", 70, defaultVisible = false, numeric = true),
             Js8TableView.Column("submode", "Mode Speed", 76, defaultVisible = false),
             Js8TableView.Column("message", "Message(s)", 300, stretch = true)
@@ -305,8 +321,41 @@ class Js8MainFragment : Fragment() {
         .split(',', ' ').map { it.trim() }.filter { it.isNotEmpty() }.toSet()
 
     /** displayBandActivity + displayCallActivity + the Message Window. */
+    /**
+     * Typing Box while a typed message waits or is sent (PC TransmitTextEdit): locked, the text
+     * already sent crossed out; emptied and unlocked when the message is done or halted.
+     */
+    private fun renderTyped(t: Js8ActivityViewModel.TypedTx?) {
+        val e = typingBox.text
+        e.getSpans(0, e.length, android.text.style.StrikethroughSpan::class.java).forEach { e.removeSpan(it) }
+        if (t == null) {
+            typingBox.filters = emptyArray()
+            typingBox.isCursorVisible = true
+            typingBox.showSoftInputOnFocus = true
+            if (activityVm.typedClearPending) {
+                activityVm.typedClearPending = false
+                e.clear()
+            }
+        } else {
+            // Locked: typed keys and pastes change nothing
+            typingBox.filters = arrayOf(android.text.InputFilter { _, _, _, dest, dstart, dend -> dest.subSequence(dstart, dend) })
+            typingBox.isCursorVisible = false
+            typingBox.showSoftInputOnFocus = false
+            val n = t.charsSent.coerceAtMost(e.length)
+            if (n > 0) e.setSpan(android.text.style.StrikethroughSpan(), 0, n, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
+        }
+        view?.findViewById<View>(R.id.js8_btn_send)?.isEnabled = !listenOnly() && e.isNotBlank() && t == null
+    }
+
+    /** Lists need redrawing; the first time after the screen opens it happens at once. */
+    private fun requestRender() {
+        if (!listsDrawn) renderActivity() else activityDirty = true
+    }
+
     private fun renderActivity() {
         if (view == null) return
+        activityDirty = false
+        listsDrawn = true
         val a = activityVm.activity
         val cfg = Js8Activity.Config(prefs())
         val now = System.currentTimeMillis()
@@ -411,12 +460,22 @@ class Js8MainFragment : Fragment() {
                 .append(") - ").append(line.text.toString().trimEnd())
             sb.setSpan(android.text.style.ForegroundColorSpan(if (line.isTx) txFg else rxFg), start, sb.length, 0)
         }
+        // Only when the text changed: setting it throws the box back to the top (the bounce Rob saw
+        // every 5 seconds). The jump to the newest line happens before the box is drawn.
+        val shown = "$rxFg/$txFg/$sb"
+        if (shown == messageWindowShown) return
+        messageWindowShown = shown
         messageWindow.text = sb
-        messageWindow.post {
-            val layout = messageWindow.layout ?: return@post
-            val y = layout.height - messageWindow.height + messageWindow.paddingTop + messageWindow.paddingBottom
-            if (y > 0) messageWindow.scrollTo(0, y)
-        }
+        messageWindow.viewTreeObserver.addOnPreDrawListener(object : android.view.ViewTreeObserver.OnPreDrawListener {
+            override fun onPreDraw(): Boolean {
+                messageWindow.viewTreeObserver.removeOnPreDrawListener(this)
+                val layout = messageWindow.layout ?: return true
+                val y = layout.height - messageWindow.height + messageWindow.paddingTop + messageWindow.paddingBottom
+                if (y <= 0 || messageWindow.scrollY == y) return true
+                messageWindow.scrollTo(0, y)
+                return false // skip this frame; the next one is drawn already scrolled
+            }
+        })
     }
 
     // ---- Inbox (JS8Android message store: MSG messages received) -----------------------
@@ -448,7 +507,7 @@ class Js8MainFragment : Fragment() {
             })
             // Call Activity flag: stations with unread messages (displayCallActivity hasMessage)
             unreadFrom = inboxMessages.filter { !it.isRead }.map { it.senderCallsign ?: it.conversationId }.toSet()
-            renderActivity()
+            requestRender()
         }
     }
 
@@ -557,6 +616,8 @@ class Js8MainFragment : Fragment() {
      * transmit it straight away (toggleTx).
      */
     private fun addMessageText(text: String, send: Boolean) {
+        // PC: nothing is added while a message waits or is being sent
+        if (activityVm.typed.value != null) return
         typingBox.setText(text)
         val placeholder = text.indexOf('[')
         if (placeholder >= 0 && text.indexOf(']', placeholder) > placeholder) {
@@ -572,7 +633,8 @@ class Js8MainFragment : Fragment() {
         if (!ensureCallsignSet(alert = true)) return
         Js8Macros.touch()
         transmitVm.queueMessage(text, selectedCall?.takeIf { !text.uppercase().startsWith(it.uppercase()) })
-        typingBox.text.clear()
+        // PC: the message stays in the Typing Box until its last part has been sent
+        activityVm.onTypedQueued(text)
         processTxQueue()
     }
 
@@ -615,7 +677,7 @@ class Js8MainFragment : Fragment() {
         val swl = listenOnly()
         listOf(R.id.js8_btn_cq, R.id.js8_btn_status, R.id.js8_btn_saved, R.id.js8_btn_tune)
             .forEach { v.findViewById<View>(it).isEnabled = !swl }
-        v.findViewById<View>(R.id.js8_btn_send).isEnabled = !swl && typingBox.text.isNotBlank()
+        v.findViewById<View>(R.id.js8_btn_send).isEnabled = !swl && typingBox.text.isNotBlank() && activityVm.typed.value == null
         btnTx.isEnabled = !swl
         btnTx.isActivated = !swl && boolPref("js8cfg_tx_enabled", true)
         renderSelection()
@@ -666,13 +728,15 @@ class Js8MainFragment : Fragment() {
             requireContext().startService(Intent(requireContext(), JS8EngineService::class.java).apply {
                 action = JS8EngineService.ACTION_HALT_TX
             })
+            activityVm.clearTyped() // PC on_stopTxButton_clicked -> resetMessage: the Typing Box empties
             view.findViewById<View>(R.id.js8_btn_tune).isActivated = false
         }
         view.findViewById<View>(R.id.js8_inbox_reply).setOnClickListener { inboxReply() }
         typingBox.addTextChangedListener(object : android.text.TextWatcher {
             override fun afterTextChanged(s: android.text.Editable?) {
                 Js8Macros.touch()
-                view.findViewById<View>(R.id.js8_btn_send).isEnabled = !s.isNullOrBlank() && !listenOnly()
+                view.findViewById<View>(R.id.js8_btn_send).isEnabled =
+                    !s.isNullOrBlank() && !listenOnly() && activityVm.typed.value == null
             }
             override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
             override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
@@ -693,12 +757,34 @@ class Js8MainFragment : Fragment() {
         val menu = android.widget.PopupMenu(requireContext(), anchor)
         saved.forEachIndexed { i, m -> menu.menu.add(0, i, i, m) }
         menu.menu.add(0, 9999, 9999, "Edit Saved Messages…")
+        // APRS pages, upright only for now (Rob, 2026-10-19); sideways is not changed yet
+        val aprs = listOf(
+            "APRS EMAIL" to Js8AprsFragment.FORM_EMAIL,
+            "APRS TXT" to Js8AprsFragment.FORM_TXT,
+            "APRS GRID" to Js8AprsFragment.FORM_GRID,
+            "APRS MSG" to Js8AprsFragment.FORM_MSG
+        )
+        if (resources.configuration.orientation != Configuration.ORIENTATION_LANDSCAPE) {
+            aprs.forEachIndexed { i, (label, _) -> menu.menu.add(0, 10000 + i, 10000 + i, label) }
+        }
         menu.setOnMenuItemClickListener { item ->
-            if (item.itemId == 9999) openStation() // Saved Messages are in Station
-            else addMessageText(macro(saved[item.itemId]), send = true)
+            when {
+                item.itemId == 9999 -> openStation() // Saved Messages are in Station
+                item.itemId >= 10000 -> openAprs(aprs[item.itemId - 10000].second)
+                else -> addMessageText(macro(saved[item.itemId]), send = true)
+            }
             true
         }
         menu.show()
+    }
+
+    /** Saved > APRS page; its OK puts the line in the Typing Box without sending (Rob, 2026-10-19). */
+    private fun openAprs(form: String) {
+        if (!isAdded) return
+        val nav = findNavController()
+        if (nav.currentDestination?.id == R.id.navigation_js8_main) {
+            nav.navigate(R.id.navigation_js8_aprs, android.os.Bundle().apply { putString(Js8AprsFragment.ARG_FORM, form) })
+        }
     }
 
     /** Directed button: the query menu (JS8_Mainwindow/buildQueryMenu.cpp). */
@@ -796,7 +882,9 @@ class Js8MainFragment : Fragment() {
     // ---- Engine -------------------------------------------------------------------------
 
     private fun observe() {
-        activityVm.version.observe(viewLifecycleOwner) { renderActivity() }
+        // New decodes are gathered and drawn by the clock tick (PC: m_rxDisplayDirty)
+        activityVm.version.observe(viewLifecycleOwner) { requestRender() }
+        activityVm.typed.observe(viewLifecycleOwner) { renderTyped(it) }
         observeInbox()
         monitorVm.status.observe(viewLifecycleOwner) { status ->
             val running = status.state == EngineState.RUNNING || status.state == EngineState.STARTING

@@ -348,9 +348,13 @@ class Js8Activity {
         }
     }
 
-    /** Our own transmission, shown in the Message Window in the TX color. */
-    fun writeTx(text: String, offset: Int, cfg: Config) =
-        writeRx("${cfg.myCall}: $text", offset, System.currentTimeMillis(), isTx = true, newLine = true, isLast = true, cfg = cfg)
+    /**
+     * One part of our own transmission, shown in the TX color as it starts going out
+     * (PC prepareNextMessageFrame -> displayTextForFreq): the first part starts a line,
+     * later parts join it, the last one ends it with the EOT mark.
+     */
+    fun writeTxFrame(text: String, offset: Int, first: Boolean, last: Boolean, cfg: Config) =
+        writeRx(text, offset, System.currentTimeMillis(), isTx = true, newLine = first, isLast = last, cfg = cfg)
 
     /** Band Activity row text for one offset, with the hide rules of displayBandActivity.cpp. */
     fun bandRowText(offset: Int, now: Long, agingMin: Int, showHb: Boolean, selected: Boolean, eot: String): Pair<String, ActivityDetail?> {
