@@ -73,22 +73,25 @@ class WaterfallView @JvmOverloads constructor(
     // Callback for a tap: the frequency under the finger. The owner applies it.
     var onOffsetChanged: ((Float) -> Unit)? = null
 
-    /** Hz at the left edge: from the spectrum once it arrives, else 0 (0-3000 Hz, as the ruler). */
-    private fun startHz(): Float {
-        val r = renderer ?: return 0f
-        val binHz = r.getCurrentBinHz()
-        return if (binHz > 0 && r.getDisplayEndBin() > r.getDisplayStartBin()) r.getDisplayStartBin() * binHz else 0f
+    /** Hz at the left edge (Waterfall Controls > Display > Start). */
+    fun startHz(): Float = renderer?.startHz() ?: 0f
+
+    /** Hz across one screen pixel (Bins Per Pixel). */
+    fun hzPerPixel(): Float {
+        if (width <= 0) return 0f
+        return renderer?.hzPerPixel() ?: (3000f / width)
     }
 
-    private fun hzPerPixel(): Float {
-        if (width <= 0) return 0f
-        val r = renderer
-        val binHz = r?.getCurrentBinHz() ?: 0f
-        if (r != null && binHz > 0 && r.getDisplayEndBin() > r.getDisplayStartBin()) {
-            return (r.getDisplayEndBin() - r.getDisplayStartBin()) * binHz / width
-        }
-        return 3000f / width
+    /** Waterfall Controls > Display: new values; the frequency scale follows via [onDisplayChanged]. */
+    fun setDisplay(value: WaterfallRenderer.Display) {
+        renderer?.setDisplay(value)
+        onDisplayChanged?.invoke()
+        invalidate()
     }
+
+    fun waterfallDisplay(): WaterfallRenderer.Display? = renderer?.getDisplay()
+
+    var onDisplayChanged: (() -> Unit)? = null
 
     init {
         isClickable = true

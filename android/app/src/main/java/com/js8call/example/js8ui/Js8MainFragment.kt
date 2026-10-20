@@ -1185,6 +1185,7 @@ class Js8MainFragment : Fragment() {
         waterfall.onOffsetChanged = tapOffset
         ruler.onOffsetChanged = tapOffset
         waterfall.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> syncRuler() }
+        waterfall.onDisplayChanged = { syncRuler() }
     }
 
     /**
@@ -1198,18 +1199,11 @@ class Js8MainFragment : Fragment() {
         return !queued || boolPref("js8cfg_tx_qsy", false)
     }
 
+    /** Frequency scale = waterfall range (Waterfall Controls > Display > Start, Bins Per Pixel). */
     private fun syncRuler() {
-        val r = monitorVm.getWaterfallRenderer()
-        val binHz = r.getCurrentBinHz()
-        val start = r.getDisplayStartBin()
-        val end = r.getDisplayEndBin()
-        if (binHz > 0 && end > start && waterfall.width > 0) {
-            ruler.startHz = start * binHz
-            ruler.hzPerPixel = (end - start) * binHz / waterfall.width
-        } else if (waterfall.width > 0) {
-            ruler.startHz = 0f
-            ruler.hzPerPixel = 3000f / waterfall.width
-        }
+        if (waterfall.width <= 0) return
+        ruler.startHz = waterfall.startHz()
+        ruler.hzPerPixel = waterfall.hzPerPixel()
     }
 
     // ---- Engine -------------------------------------------------------------------------

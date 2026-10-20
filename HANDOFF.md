@@ -5,8 +5,9 @@ this session too).
 
 **Fourth session (2026-10-20) worked on sideways, mostly PC mode** (see "Sideways, fourth session").
 **Fifth session (2026-10-20):** Waterfall Controls → **Timing** tab built (see "Timing tab").
-**Next:** Display tab (Rob's PC capture described under the fourth session); the wpm box upright
-is still to place. Fourth session committed (7717b9d8); Timing tab committed in the fifth session.
+**Next:** Display tab, bigger group (Avg N, Current / Cumulative / Linear Avg, Smooth, Spectrum,
+Display Decode Attempts, Adjust...); the wpm box upright is still to place. Fourth session committed
+(7717b9d8); Timing tab committed (71a831f2); Display tab first part not committed yet.
 
 ## What this is
 
@@ -252,6 +253,22 @@ Rob's rule: **every menu has the same items in every layout; only the look diffe
   (`Js8WaterfallControls.fitUpright`). Sideways keeps the PC's fill-the-panel widths; there
   **Set Time Drift to Now (Minute Start)** shrinks its text to fit a narrow panel.
   Line endings: most source files are CRLF, some LF — keep each file's own when editing.
+- **Display tab, first part** (fifth session; WideGraph.ui displayTab, CPlotter.cpp, WideGraph.cpp
+  dataSink, Flatten.cpp): **Size** Start (100 Hz steps, 0-5000, 500) and Bins Per Pixel (1-1000),
+  **Palette** (the PC's 29 .pal files in `android/app/src/main/assets/palettes`, PC interpolation;
+  **Adjust...** greyed, not built), **Scrolling & Averaging** Scroll Speed (1-100, 4 fps) + Flatten
+  (on), **Waterfall** Gain / Zero sliders (-50..50, 0), **Filter** Opacity (0-100, 50%).
+  `WaterfallRenderer` rewritten to the PC's drawing: one PC pixel = one dp = Bins Per Pixel x
+  1500/2048 Hz; 10*log10 power, Flatten (Kotlin port of the PC's, `WaterfallFlatten.kt`; the engine's
+  own copy in core/src/dsp/flatten.cpp is not the PC's algorithm and crashed, not used), then
+  zero + scale*value (Scaler1D); fps dp per second, repeating the last spectrum. The old automatic
+  brightness is gone. Frequency scale and taps follow Start / Bins Per Pixel.
+  Rob (option 2): Bins Per Pixel kept apart, upright default 6 (`js8cfg_wf_bpp_upright`, 500-1,610 Hz
+  on S22), sideways 2 (`js8cfg_wf_bpp_sideways`; PC mode shows 500-~1,400 Hz with the 340 dp controls).
+  Other keys `js8cfg_wf_start/palette/fps/flatten/gain/zero`, `js8cfg_filter_opacity`.
+  Upright: fit to text, centred; Gain / Zero rows 260 dp. Tested on S22 upright: layout, Start,
+  Palette (Linrad), Gain, saved values, no crash with Flatten; PC mode: layout and range.
+  Not tested: Flatten off, Zero, Scroll Speed changes, Opacity changes, Swipe, real radio audio.
 - Station sideways: **About** is the last tab; the tab row scrolls to the lit tab.
 - Header Offset slider: locked while a message waits or is sent (same rule as waterfall taps).
   Not tested (needs a queued message).

@@ -3,63 +3,100 @@ package com.js8call.example.ui
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
-import android.graphics.Paint
 import android.graphics.Rect
 import android.os.Handler
 import android.os.Looper
+import android.os.SystemClock
+import kotlin.math.log10
+import kotlin.math.pow
+import kotlin.math.sqrt
 
 /**
  * Offscreen renderer that maintains waterfall bitmap state across view lifecycles.
+ *
+ * Draws like the PC's CPlotter / WideGraph (JS8Call 3.0.3): one PC pixel (one dp here) covers
+ * Bins Per Pixel x 1500/2048 Hz from Start; each line is 10*log10 of the power, flattened when
+ * Flatten is on, then turned into a palette colour with the Gain / Zero scaler. Lines are added
+ * at Scroll Speed (fps) dp per second, repeating the last spectrum until a new one arrives.
  */
 class WaterfallRenderer {
+
+    companion object {
+        /** CPlotter.cpp FFT_BIN_WIDTH: the PC's bin, which Bins Per Pixel counts. */
+        const val PC_BIN_HZ = 1500f / 2048f
+        private const val TICK_MS = 33L
+    }
+
+    /** Waterfall Controls > Display values (WideGraph defaults). */
+    data class Display(
+        val startHz: Int = 500,
+        val binsPerPixel: Int = 2,
+        val fps: Int = 4,
+        val gain: Int = 0,
+        val zero: Int = 0,
+        val flatten: Boolean = true,
+        val colours: IntArray = WaterfallPalettes.fallback(),
+        /** Screen pixels per dp (one PC pixel). */
+        val density: Float = 1f
+    )
 
     private var waterfallBitmap: Bitmap? = null
     private var waterfallCanvas: Canvas? = null
     private var tempBitmap: Bitmap? = null
 
-    private val paint = Paint(Paint.ANTI_ALIAS_FLAG)
-
     private var width = 0
     private var height = 0
 
-    // Display range tracking
-    private var currentBinHz: Float = 0f
-    private var displayStartBin: Int = 0
-    private var displayEndBin: Int = -1
+    private var display = Display()
 
-    // Drawing rate control
+    private var latest: FloatArray? = null
+    private var latestBinHz = 0f
+    private var latestAtMs = 0L
+    private var rowsOwed = 0f
+    private var lastTickMs = 0L
+    private var running = false
+
+    private var columns = FloatArray(0)
+    private var row = IntArray(0)
+
     private val drawHandler = Handler(Looper.getMainLooper())
-    private val drawIntervalMs = 50L
-    private var isDrawing = false
-    private var pendingSpectrum: FloatArray? = null
-
-    private val drawRunnable = object : Runnable {
+    private val tick = object : Runnable {
         override fun run() {
-            val spectrum = pendingSpectrum
-            if (spectrum != null && canDraw()) {
-                pendingSpectrum = null
-                drawSpectrum(spectrum)
-                if (isDrawing) {
-                    drawHandler.postDelayed(this, drawIntervalMs)
-                }
-            } else {
-                isDrawing = false
+            val now = SystemClock.uptimeMillis()
+            // Stop scrolling once spectra stop coming (RX off)
+            if (latest == null || now - latestAtMs > 1500) {
+                running = false
+                return
             }
+            // WideGraph m_drawTimer: fps PC pixels a second, each repeating the latest line
+            rowsOwed += (now - lastTickMs) * display.fps * display.density / 1000f
+            lastTickMs = now
+            val rows = rowsOwed.toInt()
+            if (rows > 0 && canDraw()) {
+                rowsOwed -= rows
+                drawRows(rows.coerceAtMost(height))
+            }
+            drawHandler.postDelayed(this, TICK_MS)
         }
     }
 
     private var invalidateCallback: (() -> Unit)? = null
 
-    // Color palette (256 colors, matching JS8Call style)
-    private val colorPalette = IntArray(256)
-
-    init {
-        initColorPalette()
-    }
-
     fun setInvalidateCallback(callback: (() -> Unit)?) {
         invalidateCallback = callback
     }
+
+    fun setDisplay(value: Display) {
+        display = value
+    }
+
+    fun getDisplay(): Display = display
+
+    /** Hz at the left edge (Start). */
+    fun startHz(): Float = display.startHz.toFloat()
+
+    /** Hz across one screen pixel. */
+    fun hzPerPixel(): Float = display.binsPerPixel * PC_BIN_HZ / display.density.coerceAtLeast(0.1f)
 
     fun setSize(w: Int, h: Int) {
         if (w <= 0 || h <= 0) return
@@ -87,39 +124,28 @@ class WaterfallRenderer {
     }
 
     fun updateSpectrum(bins: FloatArray, binHz: Float) {
-        if (bins.isEmpty()) return
-
-        currentBinHz = binHz
-        pendingSpectrum = bins.copyOf()
-
-        if (!isDrawing) {
-            isDrawing = true
-            drawHandler.post(drawRunnable)
+        if (bins.isEmpty() || binHz <= 0f) return
+        latest = bins.copyOf()
+        latestBinHz = binHz
+        latestAtMs = SystemClock.uptimeMillis()
+        if (!running) {
+            running = true
+            lastTickMs = latestAtMs
+            rowsOwed = 1f
+            drawHandler.post(tick)
         }
     }
 
     fun clear() {
-        isDrawing = false
-        drawHandler.removeCallbacks(drawRunnable)
-        pendingSpectrum = null
-        drawCount = 0
-        startBin = 0
-        endBin = -1
-        displayStartBin = 0
-        displayEndBin = -1
-
-        autoDbMin = -100f
-        autoDbMax = 20f
-        dbMinHistory.clear()
-        dbMaxHistory.clear()
-
+        stopDrawing()
+        latest = null
         waterfallCanvas?.drawColor(Color.BLACK)
         invalidateCallback?.invoke()
     }
 
     fun stopDrawing() {
-        isDrawing = false
-        drawHandler.removeCallbacks(drawRunnable)
+        running = false
+        drawHandler.removeCallbacks(tick)
     }
 
     fun release() {
@@ -133,206 +159,68 @@ class WaterfallRenderer {
 
     fun getBitmap(): Bitmap? = waterfallBitmap
 
-    fun getCurrentBinHz(): Float = currentBinHz
-
-    fun getDisplayStartBin(): Int = displayStartBin
-
-    fun getDisplayEndBin(): Int = displayEndBin
-
     private fun canDraw(): Boolean {
         return width > 0 && height > 0 && waterfallBitmap != null && tempBitmap != null && waterfallCanvas != null
     }
 
-    private fun initColorPalette() {
-        for (i in 0 until 256) {
-            val normalized = i / 255f
-
-            colorPalette[i] = when {
-                normalized < 0.15f -> {
-                    val t = normalized / 0.15f
-                    val b = (t * 128).toInt()
-                    Color.rgb(0, 0, b)
-                }
-                normalized < 0.30f -> {
-                    val t = (normalized - 0.15f) / 0.15f
-                    val b = (128 + t * 127).toInt()
-                    Color.rgb(0, 0, b)
-                }
-                normalized < 0.45f -> {
-                    val t = (normalized - 0.30f) / 0.15f
-                    val g = (t * 255).toInt()
-                    Color.rgb(0, g, 255)
-                }
-                normalized < 0.60f -> {
-                    val t = (normalized - 0.45f) / 0.15f
-                    val b = ((1 - t) * 255).toInt()
-                    Color.rgb(0, 255, b)
-                }
-                normalized < 0.75f -> {
-                    val t = (normalized - 0.60f) / 0.15f
-                    val r = (t * 255).toInt()
-                    Color.rgb(r, 255, 0)
-                }
-                normalized < 0.85f -> {
-                    val t = (normalized - 0.75f) / 0.10f
-                    val g = ((1 - t * 0.5) * 255).toInt()
-                    Color.rgb(255, g, 0)
-                }
-                else -> {
-                    val t = (normalized - 0.85f) / 0.15f
-                    val g = ((1 - t) * 128).toInt()
-                    Color.rgb(255, g, 0)
-                }
+    /**
+     * WideGraph::dataSink + CPlotter::drawData: one value per PC pixel, 10*log10 of the power
+     * over its Bins Per Pixel, flattened, then Scaler1D (zero + scale * value) into 0..254.
+     */
+    private fun lineColours(): IntArray {
+        val bins = latest ?: return row
+        val d = display
+        val density = d.density.coerceAtLeast(0.1f)
+        val cols = (width / density).toInt().coerceAtLeast(1)
+        if (columns.size != cols) columns = FloatArray(cols)
+        val colHz = d.binsPerPixel * PC_BIN_HZ
+        // Phone bins are a different width; sum the power over the column's span, counted in PC bins
+        val perPcBin = PC_BIN_HZ / latestBinHz
+        var valid = 0
+        for (c in 0 until cols) {
+            val f0 = d.startHz + c * colHz
+            val b0 = f0 / latestBinHz
+            val b1 = (f0 + colHz) / latestBinHz
+            if (b1 >= bins.size - 1) { columns[c] = Float.NaN; continue }
+            var sum = 0f
+            var b = b0
+            while (b < b1) {
+                val i = b.toInt()
+                val next = minOf((i + 1).toFloat(), b1)
+                val frac = b - i
+                val v = bins[i] + frac * (bins[i + 1] - bins[i])
+                sum += v * (next - b)
+                b = next
             }
+            val power = sum / perPcBin
+            columns[c] = 10f * log10((d.binsPerPixel * power).coerceAtLeast(1e-20f))
+            valid = c + 1
         }
+        if (d.flatten && valid > 1) WaterfallFlatten.flatten(columns, valid)
+
+        val scale = 10f * sqrt(d.binsPerPixel / 15f) * 10f.pow(0.015f * d.gain)
+        if (row.size != width) row = IntArray(width)
+        for (x in 0 until width) {
+            val v = columns[(x / density).toInt().coerceAtMost(cols - 1)]
+            val index = if (v.isNaN()) 0 else (d.zero + (scale * v).toInt()).coerceIn(0, 254)
+            row[x] = d.colours[index]
+        }
+        return row
     }
 
-    private fun drawSpectrum(bins: FloatArray) {
+    private fun drawRows(rows: Int) {
         val bitmap = waterfallBitmap ?: return
         val temp = tempBitmap ?: return
-        val canvas = waterfallCanvas ?: return
+        val line = lineColours()
+        if (line.size != width) return
 
-        val bitmapWidth = bitmap.width
-        val bitmapHeight = bitmap.height
-
-        if (drawCount < 10) {
-            if (drawCount == 0) {
-                val sampleIndices = listOf(0, bins.size / 4, bins.size / 2, 3 * bins.size / 4, bins.size - 1)
-                val samples = sampleIndices.map { "bins[$it]=${bins[it]}" }.joinToString(", ")
-                android.util.Log.d("WaterfallView", "Raw spectrum sample: $samples")
-                android.util.Log.d(
-                    "WaterfallView",
-                    "Spectrum size: ${bins.size}, min=${bins.minOrNull()}, max=${bins.maxOrNull()}, avg=${bins.average()}"
-                )
-            }
-
-            val mid = bins.size / 2
-            val leftHalf = bins.slice(0 until mid)
-            val rightHalf = bins.slice(mid until bins.size)
-            val leftAvg = leftHalf.average()
-            val rightAvg = rightHalf.average()
-
-            if (rightAvg * 10 < leftAvg) {
-                if (startBin == 0 && endBin == -1) {
-                    android.util.Log.d(
-                        "WaterfallView",
-                        "Right half is mostly noise: leftAvg=$leftAvg, rightAvg=$rightAvg. Using left half only."
-                    )
-                    endBin = mid
-                }
-            } else if (leftAvg * 10 < rightAvg) {
-                if (startBin == 0) {
-                    android.util.Log.d(
-                        "WaterfallView",
-                        "Left half is mostly noise: leftAvg=$leftAvg, rightAvg=$rightAvg. Using right half only."
-                    )
-                    startBin = mid
-                }
-            }
-            drawCount++
-        }
-
+        // Scroll down by [rows]
         val tempCanvas = Canvas(temp)
         tempCanvas.drawColor(Color.BLACK)
-        val srcRect = Rect(0, 0, bitmapWidth, bitmapHeight - 1)
-        val dstRect = Rect(0, 1, bitmapWidth, bitmapHeight)
-        tempCanvas.drawBitmap(bitmap, srcRect, dstRect, null)
-
-        canvas.drawColor(Color.BLACK)
-        canvas.drawBitmap(temp, 0f, 0f, null)
-
-        val actualEndBin = if (endBin > 0) endBin else bins.size
-        displayStartBin = startBin
-        displayEndBin = actualEndBin
-        val usableBins = actualEndBin - startBin
-        val pixelsPerBin = bitmapWidth.toFloat() / usableBins
-
-        var minDb = Float.MAX_VALUE
-        var maxDb = Float.MIN_VALUE
-        var avgDb = 0f
-        val colorCount = IntArray(256)
-
-        for (i in startBin until actualEndBin) {
-            val linearValue = bins[i]
-            val dbValue = if (linearValue > 1e-10f) {
-                10f * kotlin.math.ln(linearValue) / kotlin.math.ln(10f)
-            } else {
-                -100f
-            }
-
-            if (dbValue > maxDb) maxDb = dbValue
-            if (dbValue < minDb) minDb = dbValue
-            avgDb += dbValue
-
-            val normalized = ((dbValue - autoDbMin) / (autoDbMax - autoDbMin)).coerceIn(0f, 1f)
-            val colorIndex = (normalized * 254).toInt().coerceIn(0, 254)
-            val color = colorPalette[colorIndex]
-
-            colorCount[colorIndex]++
-
-            paint.color = color
-            val binIndex = i - startBin
-            val x1 = (binIndex * pixelsPerBin).toInt()
-            val x2 = ((binIndex + 1) * pixelsPerBin).toInt().coerceAtMost(bitmapWidth)
-
-            if (x2 > x1) {
-                canvas.drawRect(x1.toFloat(), 0f, x2.toFloat(), 1f, paint)
-            }
-        }
-
-        avgDb /= usableBins
-
-        dbMinHistory.add(minDb)
-        dbMaxHistory.add(maxDb)
-        if (dbMinHistory.size > historySize) dbMinHistory.removeAt(0)
-        if (dbMaxHistory.size > historySize) dbMaxHistory.removeAt(0)
-
-        val sortedMin = dbMinHistory.sorted()
-        val sortedMax = dbMaxHistory.sorted()
-        val smoothedMin = sortedMin[sortedMin.size / 10]
-        val smoothedMax = sortedMax[(sortedMax.size * 9) / 10]
-
-        autoDbMin = (smoothedMin - 10f).coerceAtLeast(-100f)
-        autoDbMax = (smoothedMax + 10f).coerceAtMost(100f)
-
-        if (autoDbMax - autoDbMin < 30f) {
-            val center = (autoDbMin + autoDbMax) / 2f
-            autoDbMin = center - 15f
-            autoDbMax = center + 15f
-        }
-
-        if (drawCount % 30 == 0) {
-            val significantColors = mutableListOf<Pair<Int, Int>>()
-            for (i in colorCount.indices) {
-                if (colorCount[i] > 10) {
-                    significantColors.add(Pair(i, colorCount[i]))
-                }
-            }
-
-            android.util.Log.d(
-                "WaterfallView",
-                "Spectrum stats: dB range=[%.1f, %.1f], avg=%.1f dB, usableBins=%d/%d, range=[%d, %d), autoRange=[%.1f, %.1f]"
-                    .format(minDb, maxDb, avgDb, usableBins, bins.size, startBin, actualEndBin, autoDbMin, autoDbMax)
-            )
-
-            if (significantColors.isNotEmpty()) {
-                android.util.Log.d(
-                    "WaterfallView",
-                    "Color distribution: ${significantColors.take(5).joinToString { "(idx=${it.first}, cnt=${it.second})" }}"
-                )
-            }
-        }
+        tempCanvas.drawBitmap(bitmap, Rect(0, 0, width, height - rows), Rect(0, rows, width, height), null)
+        waterfallCanvas?.drawBitmap(temp, 0f, 0f, null)
+        for (y in 0 until rows) bitmap.setPixels(line, 0, width, 0, y, width, 1)
 
         invalidateCallback?.invoke()
     }
-
-    private var drawCount = 0
-    private var startBin = 0
-    private var endBin = -1
-
-    private var autoDbMin = -100f
-    private var autoDbMax = 20f
-    private val dbMinHistory = mutableListOf<Float>()
-    private val dbMaxHistory = mutableListOf<Float>()
-    private val historySize = 20
 }

@@ -100,6 +100,7 @@ class Js8WaterfallControls(
         v<View>(R.id.js8_wf_filter_sync)?.setOnClickListener { setFilterCenter(offset()) }
         setUpTabs()
         setUpTiming()
+        Js8WaterfallDisplay(root, prefs, waterfall) { up, down, onStep -> stepper(up, down, onStep) }
         fitUpright()
         renderAll()
     }
@@ -167,14 +168,35 @@ class Js8WaterfallControls(
         }
         listOf(R.id.js8_wf_drift_minute, R.id.js8_wf_drift_end, R.id.js8_wf_drift_start, R.id.js8_wf_drift_reset)
             .forEach { button(it) }
+        // Display tab; the two sliders get a fixed 260 dp row, centred
+        field(R.id.js8_wf_start_box, R.id.js8_wf_start, "Start: $CENTER_MAX Hz")
+        field(R.id.js8_wf_bpp_box, R.id.js8_wf_bpp, "Bins Per Pixel: 1000")
+        centerRow(R.id.js8_wf_palette_row)
+        wrap(R.id.js8_wf_palette)
+        v<TextView>(R.id.js8_wf_palette)?.let { t ->
+            val longest = com.js8call.example.ui.WaterfallPalettes.names(root.context).maxByOrNull { t.paint.measureText(it) } ?: "Default"
+            t.minWidth = Math.ceil(t.paint.measureText("$longest  ▾").toDouble()).toInt() + t.paddingStart + t.paddingEnd
+        }
+        button(R.id.js8_wf_palette_adjust)
+        field(R.id.js8_wf_fps_box, R.id.js8_wf_fps, "Scroll Speed: 100 fps")
+        wrap(R.id.js8_wf_flatten)
+        listOf(R.id.js8_wf_gain_row, R.id.js8_wf_zero_row).forEach { id ->
+            v<View>(id)?.let { row ->
+                (row.layoutParams as? LinearLayout.LayoutParams)?.let { lp ->
+                    lp.width = (260 * dp).toInt(); lp.gravity = Gravity.CENTER_HORIZONTAL; row.layoutParams = lp
+                }
+            }
+        }
+        centerRow(R.id.js8_wf_opacity_row)
+        field(R.id.js8_wf_opacity_box, R.id.js8_wf_opacity, "100%")
     }
 
     // ---- Tabs ---------------------------------------------------------------------------
 
     private fun setUpTabs() {
         v<View>(R.id.js8_wf_tab_control)?.setOnClickListener { showTab(R.id.js8_wf_tab_control) }
+        v<View>(R.id.js8_wf_tab_display)?.setOnClickListener { showTab(R.id.js8_wf_tab_display) }
         v<View>(R.id.js8_wf_tab_timing)?.setOnClickListener { showTab(R.id.js8_wf_tab_timing) }
-        // Display tab: not built yet
     }
 
     private fun showTab(tabId: Int) {
@@ -182,6 +204,7 @@ class Js8WaterfallControls(
             v<View>(id)?.setBackgroundResource(if (id == tabId) R.drawable.js8_tab_selected else 0)
         }
         v<View>(R.id.js8_wf_control_page)?.visibility = if (tabId == R.id.js8_wf_tab_control) View.VISIBLE else View.GONE
+        v<View>(R.id.js8_wf_display_page)?.visibility = if (tabId == R.id.js8_wf_tab_display) View.VISIBLE else View.GONE
         v<View>(R.id.js8_wf_timing_page)?.visibility = if (tabId == R.id.js8_wf_tab_timing) View.VISIBLE else View.GONE
     }
 
