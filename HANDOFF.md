@@ -7,8 +7,7 @@ this session too).
 **Fifth session (2026-10-20):** Waterfall Controls → **Timing** and **Display** tabs built (see
 "Timing tab", "Display tab"), engine waterfall detail fixed ("Engine spectrum detail").
 **Next:** the wpm box upright is still to place. Committed: fourth session 7717b9d8, Timing tab
-71a831f2, Display first part 7d421c12, Display bigger group 1b4c3056; engine waterfall detail not
-committed yet.
+71a831f2, Display first part 7d421c12, Display bigger group 1b4c3056, engine waterfall detail d265512c.
 
 ## What this is
 
