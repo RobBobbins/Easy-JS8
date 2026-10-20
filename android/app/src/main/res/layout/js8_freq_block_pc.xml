@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- PC mode header left (Rob, 2026-10-20): frequency display a bit smaller (220 x 42 dp, 27 dp text;
+     js8_freq_block.xml has 251 x 47, 31 dp), Offset slider half as long (89 dp). Swipe keeps js8_freq_block.xml. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="wrap_content"
+    android:layout_height="wrap_content"
+    android:orientation="vertical">
+
+    <LinearLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:orientation="horizontal">
+
+        <TextView
+            android:id="@+id/js8_freq_display"
+            style="@style/Js8Text"
+            android:layout_width="220dp"
+            android:layout_height="42dp"
+            android:background="@drawable/js8_btn_display"
+            android:fontFamily="@font/cascadia_mono"
+            android:gravity="center"
+            android:text="14.078 000"
+            android:textColor="@color/js8_display_text"
+            android:textSize="27dp"
+            android:textStyle="bold" />
+
+        <LinearLayout
+            android:layout_width="32dp"
+            android:layout_height="40dp"
+            android:layout_marginStart="7dp"
+            android:background="@drawable/js8_display"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/js8_freq_up"
+                style="@style/Js8Text"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:background="@drawable/js8_btn_display"
+                android:gravity="center"
+                android:text="▲"
+                android:textColor="@color/js8_display_text"
+                android:textSize="15dp" />
+
+            <TextView
+                android:id="@+id/js8_freq_down"
+                style="@style/Js8Text"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:background="@drawable/js8_btn_display"
+                android:gravity="center"
+                android:text="▼"
+                android:textColor="@color/js8_display_text"
+                android:textSize="15dp" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="wrap_content"
+        android:layout_height="30dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="10dp">
+
+        <TextView
+            style="@style/Js8Text"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="Offset:" />
+
+        <SeekBar
+            android:id="@+id/js8_offset_slider"
+            android:layout_width="89dp"
+            android:layout_height="24dp"
+            android:max="3000"
+            android:paddingStart="8dp"
+            android:paddingEnd="8dp"
+            android:progress="1500"
+            android:progressDrawable="@drawable/js8_slider_track"
+            android:splitTrack="false"
+            android:thumb="@drawable/js8_slider_thumb"
+            android:thumbOffset="8dp" />
+
+        <TextView
+            android:id="@+id/js8_offset_value"
+            style="@style/Js8Text"
+            android:layout_width="60dp"
+            android:layout_height="wrap_content"
+            android:text="1500 Hz" />
+    </LinearLayout>
+</LinearLayout>

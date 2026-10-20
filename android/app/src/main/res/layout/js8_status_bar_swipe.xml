@@ -1,0 +1,67 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Swipe Status Bar (Rob, 2026-10-20): Receiving | cycle progress (in the PC's empty box's place,
+     as upright) | JS8 Normal | Freq | Auto Reply | wpm | Last Tx. Receiving 110 dp, progress
+     100 dp, wpm 150 dp so all fit (Rob, 2026-10-20). Last Tx is not filled yet and sits off the
+     right edge; the row scrolls sideways. PC mode keeps js8_status_bar.xml (PC order). -->
+<HorizontalScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:scrollbars="none">
+
+    <LinearLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <TextView
+            android:id="@+id/js8_status_state"
+            style="@style/Js8StatusLabel"
+            android:layout_width="110dp"
+            android:background="@drawable/js8_status_green"
+            android:text="Receiving" />
+
+        <com.js8call.example.js8ui.Js8CycleProgressView
+            android:id="@+id/js8_status_progress"
+            android:layout_width="100dp"
+            android:layout_height="22dp"
+            android:layout_marginStart="9dp" />
+
+        <TextView
+            android:id="@+id/js8_status_mode"
+            style="@style/Js8StatusLabel"
+            android:layout_width="wrap_content"
+            android:layout_marginStart="9dp"
+            android:text="JS8 Normal" />
+
+        <TextView
+            android:id="@+id/js8_status_freq"
+            style="@style/Js8StatusLabel"
+            android:layout_width="wrap_content"
+            android:layout_marginStart="9dp"
+            android:text="Freq: 14.079 500" />
+
+        <TextView
+            android:id="@+id/js8_status_autoreply"
+            style="@style/Js8StatusLabel"
+            android:layout_width="wrap_content"
+            android:layout_marginStart="9dp"
+            android:text="Auto Reply: On" />
+
+        <!-- PC wpm_label: words / characters per minute of the Typing Box text, hidden while it is empty -->
+        <TextView
+            android:id="@+id/js8_status_wpm"
+            style="@style/Js8StatusLabel"
+            android:layout_width="150dp"
+            android:layout_marginStart="9dp"
+            android:visibility="gone" />
+
+        <!-- PC Last Tx (not filled yet) -->
+        <TextView
+            android:id="@+id/js8_status_blank"
+            style="@style/Js8StatusLabel"
+            android:layout_width="173dp"
+            android:layout_marginStart="9dp"
+            android:layout_marginEnd="22dp" />
+    </LinearLayout>
+</HorizontalScrollView>

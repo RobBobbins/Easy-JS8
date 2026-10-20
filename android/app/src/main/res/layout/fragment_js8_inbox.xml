@@ -1,0 +1,93 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Message Inbox screen (PC mode: View > Inbox). Same ids as the Swipe Inbox page. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/js8_frame_bg"
+    android:orientation="vertical"
+    android:padding="6dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="40dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <TextView
+            android:id="@+id/js8_inbox_back"
+            style="@style/Js8FrameText"
+            android:layout_width="72dp"
+            android:layout_height="match_parent"
+            android:gravity="center_vertical"
+            android:paddingStart="6dp"
+            android:text="← Back"
+            android:textStyle="bold" />
+
+        <TextView
+            style="@style/Js8FrameText"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:gravity="center"
+            android:text="Message Inbox"
+            android:textStyle="bold" />
+
+        <!-- Same width as ← Back, so the title is centred -->
+        <View
+            android:layout_width="72dp"
+            android:layout_height="1dp" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:baselineAligned="false"
+        android:orientation="horizontal">
+
+        <com.js8call.example.js8ui.Js8TableView
+            android:id="@+id/js8_inbox_table"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="3" />
+
+        <LinearLayout
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_marginStart="8dp"
+            android:layout_weight="2"
+            android:orientation="vertical">
+
+            <TextView
+                android:id="@+id/js8_inbox_message"
+                style="@style/Js8Text"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:background="@drawable/js8_panel_list"
+                android:gravity="top|start"
+                android:padding="5dp" />
+
+            <EditText
+                android:id="@+id/js8_inbox_reply_text"
+                style="@style/Js8Text"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_marginTop="6dp"
+                android:layout_weight="1"
+                android:background="@drawable/js8_panel_list"
+                android:gravity="top|start"
+                android:importantForAutofill="no"
+                android:inputType="textMultiLine|textCapCharacters|textNoSuggestions"
+                android:padding="5dp" />
+
+            <androidx.appcompat.widget.AppCompatButton
+                android:id="@+id/js8_inbox_reply"
+                style="@style/Js8Button"
+                android:layout_width="81dp"
+                android:layout_gravity="end"
+                android:layout_marginTop="6dp"
+                android:text="Reply" />
+        </LinearLayout>
+    </LinearLayout>
+</LinearLayout>

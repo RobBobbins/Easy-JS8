@@ -1,7 +1,11 @@
-# Easy JS8 — Handoff (2026-10-19, end of the second session)
+# Easy JS8 — Handoff (2026-10-20, end of the third session)
 
 Read this first, then `LAYOUT.md` (the layout spec and the PC values it copies; updated for
 this session too).
+
+**Fourth session (2026-10-20) worked on sideways, mostly PC mode** (see "Sideways, fourth session").
+**Next:** Waterfall Controls → Timing tab, then Display tab (Rob's PC captures described there);
+the wpm box upright is still to place. Nothing from the fourth session is committed yet.
 
 ## What this is
 
@@ -137,6 +141,122 @@ values (ViewModel keyed by window).
   (RX on). Test WAVs: `E:\new-w3bguru-websites\easyft8\ft8af\app\src\main\cpp\ft8af_glue\testdata\ft8`
   (20m_busy_test_01: 18 of 24 listed decodes). Not tested with real FT8 over a radio.
 
+### Call Activity menu, menus, status bar (third session, 2026-10-19/20)
+
+- **Press and hold a callsign** in Call Activity (all layouts) = the PC's right-click menu
+  (`UI_Constructor.cpp` tableWidgetCalls customContextMenuRequested), `Js8MainFragment.showCallMenu`:
+  Jump to <offset>Hz · Jump to <speed> speed (only if different and sendable) · Jump to <n> ms
+  time drift · Log... (greyed, LOG not built) · Show Message Inbox... (scrolls to Inbox; greyed
+  without messages from them) · Store Message... (greyed: engine can't hold messages for others)
+  · Saved Messages › · Directed to CALL... › · Relay via CALL... (`CALL>` at Typing Box start) ·
+  Deselect · Add New Station or Group... · Remove This Station/Group · Block This Station
+  (`js8cfg_rx_blocklist`) · Clear Entire List · Clear All Lists. "Center filter" never shown
+  (no working waterfall filter). @ALLCALL / groups grey items like the PC.
+  Tested: Jump to offset, Directed sub-menu, Relay, Add. Not tested: speed, drift, Remove,
+  Block, Clear.
+- **Popup menus** (Saved, Directed, Call Activity) use `ThemeOverlay.Js8PopupMenu`: list text
+  size (`js8_text`), 36 dp rows.
+- **Upright status bar** (`js8_status_bar_upright.xml`): Receiving · cycle progress bar
+  (width set in code to reach the page's right edge, same as Halt) · JS8 mode · Freq ·
+  Auto Reply · Last Tx (empty, never filled). Progress bar has rounded ends like the PC
+  (`progress_bar_stylesheet`, radius 5/14 of height), fills one step per second.
+
+### Station Settings and About (third session)
+
+- Station upright list: title **Station Settings** centred; rows 280 dp wide, centred, 40 dp
+  tall (all 11 fit on the S22); last row **About** (upright only, not a settings section).
+- **About** (`Js8SettingsFragment.renderAbout`): About Easy JS8 / by VA3OSO / Version x (build n)
+  / Built <date> (BuildConfig.BUILD_DATE, set at build time, UTC, "2026 Oct 20") / "Easy JS8 is
+  a fork of JS8Android." / Features: Traditional style, Upright and sideways layouts, SWL mode,
+  JS8 Slow decoding, APRS forms, FT8 decodes / Source link / "Licence: GPLv3. No warranty." /
+  Credits in order: WSJT-X, JS8Call (+ team calls), JS8Android, ft8_lib, fonts.
+- **Rob's wording rule for anything public (About, README, store text):** Easy JS8 "is a fork of
+  JS8Android". Nothing about copying JS8Call or using it as a starting point, no "not endorsed"
+  sentence. Features listed are only what Easy JS8 has over JS8Android (JS8Call has no phone
+  app, so it isn't the comparison). Names only, no descriptions.
+
+### Waiting for Rob's yes
+
+- Settings window field widths (upright): **Frequency:** dropdown 200 dp, **Custom frequency
+  (MHz):** 120 dp, **Offset:** 120 dp including ▲▼, each left-aligned under its label. Speed
+  box, checkboxes, Clear buttons unchanged; Station pages keep full-width boxes.
+
+### Sideways, fourth session (2026-10-20)
+
+Rob's rule: **every menu has the same items in every layout; only the look differs.**
+- Saved menu: APRS EMAIL / TXT / GRID / MSG in all layouts (APRS page checked sideways).
+- Swipe: no ⋮ on the Header screen; tab 5 renamed **Station**; own status bar
+  `js8_status_bar_swipe.xml` (Receiving · progress bar in the empty box's place · JS8 Normal · Freq ·
+  Auto Reply · Last Tx off the right edge). PC mode keeps `js8_status_bar.xml` (PC order).
+- PC mode menu bar: File → Station; Configurations, Mode, View, Control → Settings window;
+  Log → "Log QSO is not built yet"; Help → Station opened on About. The Menu page
+  (`Js8MenuFragment.kt`, nav `navigation_js8_menu`) is no longer opened from anywhere; file kept.
+- PC mode has no inbox strip (Rob): window 1077 x 714 dp (`gen_pc_layout.py`, `Js8ZoomLayout`
+  default). It fits by height, so nothing got bigger, only more empty space at the sides.
+  **View** on the menu bar = popup **Inbox** / **Settings…**; Inbox and Call Activity →
+  Show Message Inbox... open the **Message Inbox** screen (`Js8InboxFragment`, nav
+  `navigation_js8_inbox`, layout `fragment_js8_inbox.xml`); its Reply fills the Typing Box and
+  goes back. List code shared in `Js8Inbox.kt`. `js8_inbox_pc.xml` no longer used (file kept).
+- PC mode dividers (PC splitters, `Js8PcSplitters.kt`): three invisible grab spots, 44 PC dp:
+  left / right corner where the upright lines meet the Message Window / Typing Box line
+  (sideways = list width, up/down = that line) and the STATUS / Saved gap (up/down = buttons row
+  and waterfall top). Minimums mine (lists 100, middle 120, text boxes 30, waterfall 40 dp; PC:
+  lists/text area >= 50 dp). Kept in `js8cfg_pc_split_*`; **View → Reset Window Sizes**.
+  First setting / reset = Rob's layout (Band right 375, Call left 759, Message Window bottom 374,
+  lists bottom 441 PC dp; the generated XML keeps the PC capture's 441 / 759 / 277 / 351).
+  Fourth spot (24 x 44 PC dp) at the top of the waterfall / Waterfall Controls line: sideways
+  trades width (PC WideGraph.ui: waterfall >= 267 dp, controls >= 67 dp). Controls 200 dp wide at
+  first (was 116). A drag that starts just left of it lands on the frequency scale and moves the
+  offset.
+  Each spot has a small raised mark (Rob): corners 10x10, STATUS/Saved 16x8, waterfall line
+  8x16 PC dp; face #5A5A5A, light edge #8A8A8A top/left, dark #2A2A2A bottom/right.
+  Tested: drag, kept after restart, reset. Seen once: keyboard opened right after a reset; not
+  repeatable.
+- PC mode header buttons: all six 72 x 24 dp, right-aligned (`js8_header_buttons_pc.xml`, Rob).
+  Upright / Swipe keep `js8_header_buttons.xml` (87:87:217, 27 dp).
+  PC frequency block `js8_freq_block_pc.xml`: display 220 x 42 dp, 27 dp text, Offset slider 89 dp
+  (half). Callsign + clock centred between it and the buttons, and top to bottom.
+- **Waterfall Controls → Control tab** (Rob's capture of the PC, 2026-10-20; `Js8WaterfallControls.kt`,
+  `Js8KnobView.kt`, `js8_waterfall_controls.xml`): Offset ∧ ∨ (same lock as the slider), QSY + Center
+  ∧ ∨ (QSY moves `last_frequency` by offset − center and sets the offset to center; the PC also shifts
+  Band Activity rows, not done; untested with a radio), Filter: Enable Filter (PC default on), Sync
+  (filter center = offset), Center / Width ∧ ∨ and two knobs (300° like QDial). ∧ ∨ hold repeats
+  (1, then 10, then 100 Hz). Filter drawn on the waterfall (`WaterfallView`): black at 50 % outside,
+  yellow edge lines. Call Activity menu gets **Center filter at …Hz** while the filter is on.
+  Keys `js8cfg_wf_center`, `js8cfg_filter_enabled/center/width`. Waterfall Controls first width now
+  340 dp (filter row fits). Tested: layout, Width ∧, Sync. Not tested: knobs, Enable Filter off, QSY.
+  **Next:** Timing tab (Rob's capture: Time Drift ∧ ∨, Start Automatic Time Drift, Stop After n
+  decode(s), three Set Time Drift to Now buttons, Reset Time Drift; engine has time drift), then
+  Display tab (Rob's capture: Start, Bins Per Pixel, Palette, Scroll Speed, Avg N, Flatten, Smooth,
+  Waterfall Gain/Zero, Display Decode Attempts, Spectrum, Filter Opacity — mostly new drawing code).
+- Station sideways: **About** is the last tab; the tab row scrolls to the lit tab.
+- Header Offset slider: locked while a message waits or is sent (same rule as waterfall taps).
+  Not tested (needs a queued message).
+- Still open: header ▲▼ beside the frequency do nothing (no code behind them).
+- **wpm box** (PC `wpm_label`, `updateTextStatsDisplay`): PC mode only so far, after the progress
+  bar (`js8_status_wpm`, 150 dp, 9 dp gap). "12.0wpm / 58.0cpm" for the Typing
+  Box text, counted 100 ms after typing stops, hidden while the box is empty. Engine: new static
+  `JS8Engine.messageFrameTexts()` (JNI `nativeBuildFrameTexts`, core `build_message_frames`).
+  PC mode progress bar now 136 x 14 dp (was 200 x 12; width measured beside the wpm box on Rob's
+  PC capture, thicker at Rob's request).
+  Swipe: placed after Auto Reply, 150 dp; to fit, Swipe's Receiving box is 110 dp and its
+  progress bar 100 dp (`js8_status_bar_swipe.xml`). Upright: not placed yet (Rob: one at a time).
+
+### Sideways: where it stood at the start of the fourth session
+
+Two layouts, Station → Phone → **Sideways layout:** PC (full window, pinch zoom) or Swipe
+(5 screens + tabs). Emulator currently on Swipe. Not updated since the first session:
+1. Header still has frequency display, ▲▼, Offset slider and ⋮ menu (upright moved them into
+   the Settings window).
+2. ⋮ Menu page still exists; its Help → About is a greyed placeholder (About is now in Station).
+3. Swipe tab 5 is labelled **Settings** but opens Station.
+4. APRS items not in the Saved menu sideways.
+5. Offset slider not locked while a message waits (PC locks it).
+6. Swipe Activity screen: status bar wider than the screen.
+Already working sideways: FT8 decodes, part-by-part sending, press-and-hold callsign menu,
+smaller menus, smooth lists, Message Window fix; the progress bar has rounded ends there too.
+Station window sideways = PC tabs, no About tab.
+
 ## Choices made without Rob confirming yet
 
 - APRS page buttons named **OK** / **Cancel**; APRS menu items hidden sideways.
@@ -201,6 +321,13 @@ APK: `android/app/build/outputs/apk/debug/app-debug.apk`. Details: `build-env/bu
   position is Mountain View (CM87WK91). The emulator is short on memory; its System UI can freeze
   ("System UI isn't responding" → Wait). `uiautomator dump` only lists on-screen views.
 - Test values (callsign, grid, frequency) on the emulator don't matter; no need to restore them.
+- **Test traffic** (fills Band / Call Activity; Rob asked for it to stay on while tweaking lists):
+  run in the background from the project folder, every 60 s:
+  `while true; do T=build-env/test/inject.sh; $T "VE3ABC: @ALLCALL CQ CQ CQ FN03" 620 3 -8; $T "W1AW: VE3KTB HW CPY?" 745 3 -14; $T "K4RDX: @ALLCALL CQ CQ FM17" 860 3 -3; $T "VA3TOM: W8JJK SNR -11" 985 3 -11; $T "N0QBF: @ALLCALL CQ CQ CQ EN34" 1105 3 -19; $T "VE7XYZ: KC1ABC GRID?" 1230 3 -6; $T "W8JJK: VA3TOM SNR -15" 1355 3 -15; $T "KC1ABC: VE7XYZ GRID FN42" 1480 3 -9; $T "VE3KTB: W1AW FB OM TNX 73" 1605 3 -2; $T "AA5BC: @ALLCALL CQ CQ EM12" 1730 3 -21; $T "VA2PQ: N0QBF INFO?" 1855 3 -12; $T "K9ZZ: @APRSIS GRID EN61" 1980 3 -7; $T "VE1LU: @ALLCALL CQ CQ CQ FN74" 2105 3 -16; $T "WB6TX: AA5BC QSL?" 2230 3 -4; sleep 60; done`
+  None of these are addressed to VA3OSO, so nothing auto-replies.
+- Rob also uses S22 by hand: don't type into the emulator while he is testing, and if a
+  screenshot looks wrong, ask before assuming. Easy FT8 screenshots (DX Call, Tx even/1st, FT8
+  in the status bar) belong to the other project.
 
 ## Reference material
 
@@ -220,3 +347,4 @@ from the phone's point of view.
 - **Don't ask sideways questions during upright work** — it loses him. Sideways waits until he raises it.
 - One question at a time, short. A small text mockup of the screen works better than paragraphs.
 - When he repeats himself, take his words literally (e.g. "File, Station") instead of offering options again.
+- Research before answering (PC source, his captures, the engine code); he notices guesses.

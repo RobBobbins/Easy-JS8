@@ -157,8 +157,10 @@ class Js8SettingsFragment : Fragment() {
         const val ARG_EMBEDDED = "embedded"
         /** "station" (default: Menu > File > Station…, Swipe screen 5) or "settings" (header Settings). */
         const val ARG_WINDOW = "window"
-        /** Station upright: last page of the list, not a settings section. */
-        private const val ABOUT_PAGE = "About"
+        /** Station: last page of the list (upright) or last tab (sideways), not a settings section. */
+        const val ABOUT_PAGE = "About"
+        /** Station: page to open on (PC mode menu bar Help opens About). */
+        const val ARG_PAGE = "page"
     }
 
     private lateinit var vm: Js8SettingsViewModel
@@ -190,6 +192,12 @@ class Js8SettingsFragment : Fragment() {
         draft = Js8SettingsSchema.Draft(PreferenceManager.getDefaultSharedPreferences(requireContext()))
         draft.values.putAll(vm.values)
         sideways = resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+        // Opened on one page (Help > About); after rotating, the page shown stays as it was
+        if (savedInstanceState == null) arguments?.getString(ARG_PAGE)?.let { page ->
+            vm.page = page
+            vm.tab = stationPages().indexOf(page).coerceAtLeast(0)
+            vm.subTab = 0
+        }
 
         val root = LinearLayout(requireContext()).apply {
             orientation = LinearLayout.VERTICAL
@@ -373,9 +381,11 @@ class Js8SettingsFragment : Fragment() {
      * Station upright: a list of the PC's tab names (General, Radio, ...); tap one to see only
      * that page (Rob, 2026-10-19: one long list was too much).
      */
+    /** Station's pages (the PC's tab names) with About last (Rob, 2026-10-19: Settings > gear > Station > About). */
+    private fun stationPages() = sections.map { it.tab }.distinct() + ABOUT_PAGE
+
     private fun renderStationPage() {
-        // About last, upright only (Rob, 2026-10-19: Settings > gear > Station > About)
-        val pages = sections.map { it.tab }.distinct() + ABOUT_PAGE
+        val pages = stationPages()
         val page = vm.page?.takeIf { it in pages }
         val col = column().apply { setPadding(px(10), px(4), px(10), px(16)) }
         if (page == null) {
@@ -453,7 +463,8 @@ class Js8SettingsFragment : Fragment() {
 
     /** Sideways: PC window with main tabs and sub-tabs. */
     private fun renderTabs() {
-        val tabs = sections.map { it.tab }.distinct()
+        // Station has an About tab too: the same pages as upright (Rob, 2026-10-20)
+        val tabs = if (station) stationPages() else sections.map { it.tab }.distinct()
         vm.tab = vm.tab.coerceIn(0, tabs.lastIndex)
         val tabName = tabs[vm.tab]
         val inTab = sections.filter { it.tab == tabName }
@@ -471,6 +482,7 @@ class Js8SettingsFragment : Fragment() {
         val scroll = ScrollView(requireContext())
         val inner = column()
         scroll.addView(inner)
+        if (tabName == ABOUT_PAGE) renderAbout(inner)
         head?.let { renderItems(inner, it.items) }
         if (subs.isNotEmpty()) {
             inner.addView(tabStrip(subs.map { it.subTab!! }, vm.subTab) { i -> vm.subTab = i; render() })
@@ -497,7 +509,15 @@ class Js8SettingsFragment : Fragment() {
                 setOnClickListener { onPick(i) }
             }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, px(30)).apply { marginEnd = px(3) })
         }
-        return HorizontalScrollView(requireContext()).apply { isHorizontalScrollBarEnabled = false; addView(row) }
+        return HorizontalScrollView(requireContext()).apply {
+            isHorizontalScrollBarEnabled = false
+            addView(row)
+            // The lit tab is always in view (About is past the right edge on a phone)
+            post {
+                val tab = row.getChildAt(selected) ?: return@post
+                if (tab.right > scrollX + width || tab.left < scrollX) scrollTo(tab.right - width, 0)
+            }
+        }
     }
 
     private fun renderItems(parent: LinearLayout, items: List<Item>) {

@@ -33,6 +33,8 @@
             android:text="Display" />
     </LinearLayout>
 
+    <!-- Control tab (WideGraph.ui, Rob's capture 2026-10-20): spin boxes with ∧ ∨, QSY, filter
+         with Sync and two knobs. Wired in Js8WaterfallControls.kt. -->
     <LinearLayout
         android:id="@+id/js8_wf_control_page"
         android:layout_width="match_parent"
@@ -46,10 +48,16 @@
             android:layout_height="wrap_content" android:text="Offset" />
         <LinearLayout android:id="@+id/js8_wf_offset_box" android:layout_width="match_parent" android:layout_height="wrap_content"
             android:background="@drawable/js8_groupbox" android:padding="8dp">
-            <TextView android:id="@+id/js8_wf_offset" style="@style/Js8FrameText"
-                android:layout_width="match_parent" android:layout_height="30dp"
-                android:background="@drawable/js8_spin_field" android:singleLine="true" android:ellipsize="none" android:gravity="center_vertical"
-                android:paddingStart="10dp" android:text="Offset: 1500 Hz" />
+            <LinearLayout android:id="@+id/js8_wf_offset_spin" android:layout_width="match_parent" android:layout_height="30dp"
+                android:background="@drawable/js8_spin_field" android:gravity="center_vertical" android:orientation="horizontal">
+                <TextView android:id="@+id/js8_wf_offset" style="@style/Js8FrameText" android:layout_width="0dp"
+                    android:layout_height="match_parent" android:layout_weight="1" android:ellipsize="none" android:gravity="center_vertical"
+                    android:paddingStart="8dp" android:singleLine="true" android:text="Offset: 1500 Hz" />
+                <TextView android:id="@+id/js8_wf_offset_up" style="@style/Js8FrameText" android:layout_width="18dp"
+                    android:layout_height="match_parent" android:gravity="center" android:text="∧" />
+                <TextView android:id="@+id/js8_wf_offset_down" style="@style/Js8FrameText" android:layout_width="18dp"
+                    android:layout_height="match_parent" android:layout_marginEnd="4dp" android:gravity="center" android:text="∨" />
+            </LinearLayout>
         </LinearLayout>
 
         <TextView style="@style/Js8GroupTitle" android:layout_width="wrap_content"
@@ -58,28 +66,64 @@
             android:background="@drawable/js8_groupbox" android:orientation="vertical" android:padding="8dp">
             <androidx.appcompat.widget.AppCompatButton android:id="@+id/js8_wf_qsy"
                 style="@style/Js8Button" android:layout_width="match_parent" android:text="QSY" />
-            <TextView android:id="@+id/js8_wf_center" style="@style/Js8FrameText"
-                android:layout_width="match_parent" android:layout_height="30dp"
-                android:layout_marginTop="8dp" android:background="@drawable/js8_spin_field" android:singleLine="true" android:ellipsize="none"
-                android:gravity="center_vertical" android:paddingStart="10dp" android:text="Center: 1500 Hz" />
+            <LinearLayout android:id="@+id/js8_wf_center_box" android:layout_width="match_parent" android:layout_height="30dp" android:layout_marginTop="8dp"
+                android:background="@drawable/js8_spin_field" android:gravity="center_vertical" android:orientation="horizontal">
+                <TextView android:id="@+id/js8_wf_center" style="@style/Js8FrameText" android:layout_width="0dp"
+                    android:layout_height="match_parent" android:layout_weight="1" android:ellipsize="none" android:gravity="center_vertical"
+                    android:paddingStart="8dp" android:singleLine="true" android:text="Center: 1500 Hz" />
+                <TextView android:id="@+id/js8_wf_center_up" style="@style/Js8FrameText" android:layout_width="18dp"
+                    android:layout_height="match_parent" android:gravity="center" android:text="∧" />
+                <TextView android:id="@+id/js8_wf_center_down" style="@style/Js8FrameText" android:layout_width="18dp"
+                    android:layout_height="match_parent" android:layout_marginEnd="4dp" android:gravity="center" android:text="∨" />
+            </LinearLayout>
         </LinearLayout>
 
         <TextView style="@style/Js8GroupTitle" android:layout_width="wrap_content"
             android:layout_height="wrap_content" android:layout_marginTop="8dp" android:text="Filter" />
         <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
             android:background="@drawable/js8_groupbox" android:orientation="vertical" android:padding="8dp">
-            <CheckBox android:id="@+id/js8_wf_filter_enable" style="@style/Js8FrameText"
-                android:layout_width="wrap_content" android:layout_height="30dp" android:singleLine="true" android:text="Enable Filter" />
-            <androidx.appcompat.widget.AppCompatButton android:id="@+id/js8_wf_filter_sync"
-                style="@style/Js8Button" android:layout_width="match_parent" android:text="Sync" />
-            <TextView android:id="@+id/js8_wf_filter_center" style="@style/Js8FrameText"
-                android:layout_width="match_parent" android:layout_height="30dp"
-                android:layout_marginTop="8dp" android:background="@drawable/js8_spin_field" android:singleLine="true" android:ellipsize="none"
-                android:gravity="center_vertical" android:paddingStart="10dp" android:text="Center: 1500 Hz" />
-            <TextView android:id="@+id/js8_wf_filter_width" style="@style/Js8FrameText"
-                android:layout_width="match_parent" android:layout_height="30dp"
-                android:layout_marginTop="8dp" android:background="@drawable/js8_spin_field" android:singleLine="true" android:ellipsize="none"
-                android:gravity="center_vertical" android:paddingStart="10dp" android:text="Width: 500 Hz" />
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:baselineAligned="false" android:gravity="center_vertical" android:orientation="horizontal">
+                <CheckBox android:id="@+id/js8_wf_filter_enable" style="@style/Js8FrameText"
+                    android:layout_width="0dp" android:layout_height="30dp" android:layout_weight="1"
+                    android:singleLine="true" android:text="Enable Filter" />
+                <androidx.appcompat.widget.AppCompatButton android:id="@+id/js8_wf_filter_sync"
+                    style="@style/Js8Button" android:layout_width="0dp" android:layout_weight="1"
+                    android:layout_marginStart="8dp" android:text="Sync" />
+            </LinearLayout>
+            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:layout_marginTop="8dp" android:baselineAligned="false" android:orientation="horizontal">
+                <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
+                    android:gravity="center_horizontal" android:orientation="vertical">
+                    <LinearLayout android:id="@+id/js8_wf_filter_center_box" android:layout_width="match_parent" android:layout_height="30dp"
+                android:background="@drawable/js8_spin_field" android:gravity="center_vertical" android:orientation="horizontal">
+                <TextView android:id="@+id/js8_wf_filter_center" style="@style/Js8FrameText" android:layout_width="0dp"
+                    android:layout_height="match_parent" android:layout_weight="1" android:ellipsize="none" android:gravity="center_vertical"
+                    android:paddingStart="8dp" android:singleLine="true" android:text="Center: 1500 Hz" />
+                <TextView android:id="@+id/js8_wf_filter_center_up" style="@style/Js8FrameText" android:layout_width="18dp"
+                    android:layout_height="match_parent" android:gravity="center" android:text="∧" />
+                <TextView android:id="@+id/js8_wf_filter_center_down" style="@style/Js8FrameText" android:layout_width="18dp"
+                    android:layout_height="match_parent" android:layout_marginEnd="4dp" android:gravity="center" android:text="∨" />
+            </LinearLayout>
+                    <com.js8call.example.js8ui.Js8KnobView android:id="@+id/js8_wf_filter_center_knob"
+                        android:layout_width="64dp" android:layout_height="64dp" android:layout_marginTop="10dp" />
+                </LinearLayout>
+                <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
+                    android:layout_marginStart="8dp" android:gravity="center_horizontal" android:orientation="vertical">
+                    <LinearLayout android:id="@+id/js8_wf_filter_width_box" android:layout_width="match_parent" android:layout_height="30dp"
+                android:background="@drawable/js8_spin_field" android:gravity="center_vertical" android:orientation="horizontal">
+                <TextView android:id="@+id/js8_wf_filter_width" style="@style/Js8FrameText" android:layout_width="0dp"
+                    android:layout_height="match_parent" android:layout_weight="1" android:ellipsize="none" android:gravity="center_vertical"
+                    android:paddingStart="8dp" android:singleLine="true" android:text="Width: 2000 Hz" />
+                <TextView android:id="@+id/js8_wf_filter_width_up" style="@style/Js8FrameText" android:layout_width="18dp"
+                    android:layout_height="match_parent" android:gravity="center" android:text="∧" />
+                <TextView android:id="@+id/js8_wf_filter_width_down" style="@style/Js8FrameText" android:layout_width="18dp"
+                    android:layout_height="match_parent" android:layout_marginEnd="4dp" android:gravity="center" android:text="∨" />
+            </LinearLayout>
+                    <com.js8call.example.js8ui.Js8KnobView android:id="@+id/js8_wf_filter_width_knob"
+                        android:layout_width="64dp" android:layout_height="64dp" android:layout_marginTop="10dp" />
+                </LinearLayout>
+            </LinearLayout>
         </LinearLayout>
     </LinearLayout>
 </LinearLayout>

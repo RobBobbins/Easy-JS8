@@ -41,6 +41,29 @@ class JS8Engine private constructor(
             return JS8Engine(handle, callbackHandler)
         }
 
+        /**
+         * Text of each part (frame) the message would be sent as, as a receiver would show it
+         * (PC BuildMessageFramesThread). No engine needed: the Status Bar wpm box uses it while typing.
+         */
+        fun messageFrameTexts(
+            text: String,
+            myCall: String,
+            myGrid: String,
+            selectedCall: String,
+            submode: Int,
+            forceIdentify: Boolean
+        ): List<String> = nativeBuildFrameTexts(text, myCall, myGrid, selectedCall, submode, forceIdentify).toList()
+
+        @JvmStatic
+        private external fun nativeBuildFrameTexts(
+            text: String,
+            myCall: String,
+            myGrid: String,
+            selectedCall: String,
+            submode: Int,
+            forceIdentify: Boolean
+        ): Array<String>
+
         @JvmStatic
         private external fun nativeCreate(
             callbackHandler: CallbackHandler,

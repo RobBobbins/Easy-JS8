@@ -77,4 +77,8 @@ int js8_register_natives(JavaVM* vm, JNIEnv* env);
 #include <vector>
 // Text of each part of the message being sent (same text a receiver would show).
 std::vector<std::string> js8_engine_tx_frame_texts(JS8Engine_Native* engine);
+// Text of each part a message would be sent as (Status Bar wpm box; PC BuildMessageFramesThread).
+std::vector<std::string> js8_build_frame_texts(std::string const& text, std::string const& my_call,
+                                               std::string const& my_grid, std::string const& selected_call,
+                                               int submode, bool force_identify);
 #endif

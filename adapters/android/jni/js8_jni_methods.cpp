@@ -402,6 +402,36 @@ Java_com_js8call_core_JS8Engine_nativeDebugFt8Recording(
   env->ReleaseShortArrayElements(samples, data, JNI_ABORT);
 }
 
+JNIEXPORT jobjectArray JNICALL
+Java_com_js8call_core_JS8Engine_nativeBuildFrameTexts(
+    JNIEnv* env,
+    jclass /* clazz */,
+    jstring text,
+    jstring my_call,
+    jstring my_grid,
+    jstring selected_call,
+    jint submode,
+    jboolean force_identify) {
+  auto str = [env](jstring s) {
+    if (!s) return std::string();
+    const char* c = env->GetStringUTFChars(s, nullptr);
+    std::string out = c ? c : "";
+    if (c) env->ReleaseStringUTFChars(s, c);
+    return out;
+  };
+  auto texts = js8_build_frame_texts(str(text), str(my_call), str(my_grid), str(selected_call),
+                                     static_cast<int>(submode), force_identify == JNI_TRUE);
+  jclass string_class = env->FindClass("java/lang/String");
+  jobjectArray out = env->NewObjectArray(static_cast<jsize>(texts.size()), string_class, nullptr);
+  for (std::size_t i = 0; i < texts.size(); ++i) {
+    jstring item = env->NewStringUTF(texts[i].c_str());
+    env->SetObjectArrayElement(out, static_cast<jsize>(i), item);
+    env->DeleteLocalRef(item);
+  }
+  env->DeleteLocalRef(string_class);
+  return out;
+}
+
 JNIEXPORT jint JNICALL
 Java_com_js8call_core_JS8Engine_nativeGetTxFramesStarted(
     JNIEnv* /* env */,

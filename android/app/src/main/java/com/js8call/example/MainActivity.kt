@@ -211,7 +211,8 @@ class MainActivity : AppCompatActivity() {
                 destination.id == R.id.navigation_js8_menu ||
                 destination.id == R.id.navigation_js8_settings ||
                 destination.id == R.id.navigation_js8_station ||
-                destination.id == R.id.navigation_js8_aprs) android.view.View.GONE else android.view.View.VISIBLE
+                destination.id == R.id.navigation_js8_aprs ||
+                destination.id == R.id.navigation_js8_inbox) android.view.View.GONE else android.view.View.VISIBLE
             onMonitorTab = destination.id == R.id.navigation_monitor
             if (destination.id == R.id.navigation_conversation) {
                 bottomNav.menu.findItem(R.id.navigation_messages).isChecked = true

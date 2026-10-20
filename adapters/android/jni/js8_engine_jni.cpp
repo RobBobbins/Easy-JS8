@@ -45,6 +45,7 @@ JNIEXPORT jboolean JNICALL Java_com_js8call_core_JS8Engine_nativeIsTransmitting(
 JNIEXPORT jboolean JNICALL Java_com_js8call_core_JS8Engine_nativeIsTransmittingAudio(JNIEnv*, jobject, jlong);
 JNIEXPORT jobjectArray JNICALL Java_com_js8call_core_JS8Engine_nativeGetTxFrameTexts(JNIEnv*, jobject, jlong);
 JNIEXPORT jint JNICALL Java_com_js8call_core_JS8Engine_nativeGetTxFramesStarted(JNIEnv*, jobject, jlong);
+JNIEXPORT jobjectArray JNICALL Java_com_js8call_core_JS8Engine_nativeBuildFrameTexts(JNIEnv*, jclass, jstring, jstring, jstring, jstring, jint, jboolean);
 JNIEXPORT void JNICALL Java_com_js8call_core_JS8Engine_nativeSetFt8Enabled(JNIEnv*, jobject, jlong, jboolean);
 JNIEXPORT void JNICALL Java_com_js8call_core_JS8Engine_nativeDebugFt8Recording(JNIEnv*, jobject, jlong, jshortArray);
 JNIEXPORT jint JNICALL Java_com_js8call_core_JS8Engine_nativeTxMillisecondsUntilAudio(JNIEnv*, jobject, jlong);
@@ -996,6 +997,26 @@ std::vector<std::string> js8_engine_tx_frame_texts(JS8Engine_Native* engine) {
   return out;
 }
 
+std::vector<std::string> js8_build_frame_texts(std::string const& text, std::string const& my_call,
+                                               std::string const& my_grid, std::string const& selected_call,
+                                               int submode, bool force_identify) {
+  // PC BuildMessageFramesThread::run: build the frames as transmit_message would, then the
+  // text a receiver would show for each (DecodedText(frame, bits).message())
+  std::vector<std::string> out;
+  auto frames = js8core::protocol::varicode::build_message_frames(
+      my_call, my_grid, selected_call, text, force_identify, false, submode);
+  std::vector<JS8Engine_Native::CompoundCall> compound_calls;
+  for (auto const& [frame, bits] : frames) {
+    if (frame.size() < 12) continue;
+    js8core::events::Decoded decoded;
+    decoded.data = frame.substr(0, 12);
+    decoded.type = bits;
+    int type = 0;
+    out.push_back(render_decoded_text(compound_calls, decoded, &type));
+  }
+  return out;
+}
+
 extern "C" {
 
 void js8_engine_debug_ft8_recording(JS8Engine_Native* engine, const int16_t* samples, size_t frames) {
@@ -1072,6 +1093,8 @@ int js8_register_natives(JavaVM* vm, JNIEnv* env) {
      (void*)Java_com_js8call_core_JS8Engine_nativeGetTxFrameTexts},
     {"nativeGetTxFramesStarted", "(J)I",
      (void*)Java_com_js8call_core_JS8Engine_nativeGetTxFramesStarted},
+    {"nativeBuildFrameTexts", "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;IZ)[Ljava/lang/String;",
+     (void*)Java_com_js8call_core_JS8Engine_nativeBuildFrameTexts},
     {"nativeSetFt8Enabled", "(JZ)V",
      (void*)Java_com_js8call_core_JS8Engine_nativeSetFt8Enabled},
     {"nativeDebugFt8Recording", "(J[S)V",

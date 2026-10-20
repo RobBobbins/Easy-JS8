@@ -50,6 +50,7 @@ class Js8MainFragment : Fragment() {
         private const val ID_JUMP_OFFSET = 1
         private const val ID_JUMP_SPEED = 2
         private const val ID_JUMP_DRIFT = 3
+        private const val ID_FILTER_CENTER = 4
         private const val ID_LOG = 10
         private const val ID_INBOX = 11
         private const val ID_STORE = 12
@@ -88,7 +89,8 @@ class Js8MainFragment : Fragment() {
     private lateinit var btnTx: View
     private lateinit var bandActivity: Js8TableView
     private lateinit var callActivity: Js8TableView
-    private lateinit var inbox: Js8TableView
+    /** Upright and Swipe only; PC mode opens the Message Inbox screen instead (Rob, 2026-10-20). */
+    private var inbox: Js8TableView? = null
     private lateinit var messageWindow: TextView
     private lateinit var typingBox: EditText
     private lateinit var statusState: TextView
@@ -101,6 +103,10 @@ class Js8MainFragment : Fragment() {
 
     private var dialHz: Long = 14_078_000L
     private var selectedCall: String? = null
+    /** Waterfall Controls > Control tab (PC and Swipe; upright hides its Offset box). */
+    private var wfControls: Js8WaterfallControls? = null
+    /** PC mode: the draggable dividers (null in the other layouts). */
+    private var splitters: Js8PcSplitters? = null
     /** Something changed since the lists were last drawn (PC m_rxDisplayDirty). */
     private var activityDirty = false
     /** Lists drawn at least once since this screen's views were made. */
@@ -182,14 +188,19 @@ class Js8MainFragment : Fragment() {
         levelMeter = view.findViewById(R.id.js8_level_meter)
 
         setUpSwipe(view)
+        splitters = view.findViewById<android.widget.FrameLayout?>(R.id.js8_pc_window)?.let { Js8PcSplitters(it, prefs()) }
         setUpTables()
         setUpHeader()
         setUpButtons(view)
-        // Saved > APRS page OK: its line goes in the Typing Box, not sent
+        // Saved > APRS page OK and Message Inbox screen Reply: the line goes in the Typing Box, not sent
         parentFragmentManager.setFragmentResultListener(Js8AprsFragment.RESULT_KEY, viewLifecycleOwner) { _, result ->
             result.getString(Js8AprsFragment.RESULT_TEXT)?.let { addMessageText(it, send = false) }
         }
         setUpWaterfall()
+        wfControls = Js8WaterfallControls(view, prefs(), waterfall,
+            offset = { monitorVm.getTxOffset().toInt() },
+            setOffset = { hz -> jumpToOffset(hz) },
+            qsy = { center -> qsy(center) })
         observe()
         if (!startupChecked) {
             startupChecked = true
@@ -225,11 +236,13 @@ class Js8MainFragment : Fragment() {
             applyOffset(savedOffset)
         }
         waterfall.txOffsetHz = monitorVm.getTxOffset() // a rebuilt screen starts on 1500 otherwise
+        renderOffsetBox()
         ui.post(tick)
     }
 
     override fun onPause() {
         ui.removeCallbacks(tick)
+        ui.removeCallbacks(textStats)
         super.onPause()
     }
 
@@ -288,15 +301,7 @@ class Js8MainFragment : Fragment() {
             Js8TableView.Column("logName", "Name", 70, menuLabel = "Logged Name"),
             Js8TableView.Column("logComment", "Comment", 120, stretch = true, menuLabel = "Logged Comment")
         ))
-        inbox.setColumns("inbox", listOf(
-            Js8TableView.Column("flag", "⚑", 24),
-            Js8TableView.Column("id", "ID", 40, numeric = true),
-            Js8TableView.Column("date", "Date", 120),
-            Js8TableView.Column("freq", "Frequency", 80),
-            Js8TableView.Column("from", "From", 70),
-            Js8TableView.Column("to", "To", 70),
-            Js8TableView.Column("message", "Message", 200, stretch = true)
-        ))
+        inbox?.let { Js8Inbox.setColumns(it) }
         // Call Activity click selects a callsign; Band Activity click selects the newest call at that offset
         // (UI_Constructor::callsignSelected). Only one table holds a selection at a time.
         callActivity.onRowClick = { row ->
@@ -333,7 +338,7 @@ class Js8MainFragment : Fragment() {
                 }
             }
         }
-        inbox.onRowClick = { row -> showInboxMessage(row.id) }
+        inbox?.onRowClick = { row -> showInboxMessage(row.id) }
     }
 
     private fun prefs() = PreferenceManager.getDefaultSharedPreferences(requireContext())
@@ -382,6 +387,58 @@ class Js8MainFragment : Fragment() {
         waterfall.bandwidthHz = Js8Activity.bandwidthHz(submode)
         view?.findViewById<TextView?>(R.id.js8_status_mode)?.text = Js8Activity.modeLabel(submode)
         progress.period = Js8Activity.periodSeconds(submode)
+        requestTextStats()
+    }
+
+    // ---- Status Bar wpm box (PC mode) ---------------------------------------------------
+
+    /** Typing Box text, selection or speed changed: count again 100 ms later (PC m_txTextDirtyDebounce). */
+    private val textStats = Runnable { refreshTextStats() }
+
+    private fun requestTextStats() {
+        ui.removeCallbacks(textStats)
+        ui.postDelayed(textStats, 100)
+    }
+
+    /**
+     * UI_Constructor::refreshTextDisplay + updateTextStatsDisplay: build the message's parts the
+     * way it would be sent and show words / characters per minute; hidden while the box is empty.
+     */
+    private fun refreshTextStats() {
+        val label = view?.findViewById<TextView?>(R.id.js8_status_wpm) ?: return
+        val text = typingBox.text.toString().trim()
+        if (text.isEmpty()) {
+            label.visibility = View.GONE
+            label.text = ""
+            return
+        }
+        val p = prefs()
+        val myCall = p.getString("callsign", "").orEmpty().trim().uppercase(Locale.US)
+        val myGrid = p.getString("grid", "").orEmpty().trim().uppercase(Locale.US).take(4)
+        // Same directed callsign and identify rule as sending (sendTyped, JS8EngineService)
+        val directed = selectedCall?.takeIf { !text.uppercase().startsWith(it.uppercase()) }.orEmpty()
+        val submode = p.getInt(Js8SettingsSchema.TX_SUBMODE_KEY, 0)
+        val fpm = 60.0 / Js8Activity.periodSeconds(Js8Activity.txSubmode(submode))
+        viewLifecycleOwner.lifecycleScope.launch {
+            val parts = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.Default) {
+                runCatching {
+                    com.js8call.core.JS8Engine.messageFrameTexts(text, myCall, myGrid, directed, submode, myCall.isNotBlank())
+                }.getOrDefault(emptyList())
+            }
+            // A newer count may be on its way; only the latest text is shown
+            if (typingBox.text.toString().trim() != text) return@launch
+            val count = parts.size
+            if (count == 0) {
+                label.visibility = View.GONE
+                label.text = ""
+                return@launch
+            }
+            val sent = parts.joinToString("")
+            val words = sent.split(" ").count { it.isNotEmpty() }
+            val minutes = count / fpm
+            label.text = String.format(Locale.US, "%.1fwpm / %.1fcpm", words / minutes, sent.length / minutes)
+            label.visibility = View.VISIBLE
+        }
     }
 
     /** Lists need redrawing; the first time after the screen opens it happens at once. */
@@ -528,28 +585,12 @@ class Js8MainFragment : Fragment() {
     private val repository by lazy { com.js8call.example.data.MessageRepository.getInstance(requireContext()) }
     private var inboxMessages: List<com.js8call.example.data.MessageEntity> = emptyList()
     private var unreadFrom: Set<String> = emptySet()
-    private val inboxDate = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC") }
 
     private fun observeInbox() {
         repository.getAllMessages().observe(viewLifecycleOwner) { all ->
-            inboxMessages = all.filter { it.direction == com.js8call.example.data.MessageEntity.DIRECTION_INCOMING }
+            inboxMessages = Js8Inbox.incoming(all)
             val my = prefs().getString("callsign", "").orEmpty().uppercase()
-            inbox.setRows(inboxMessages.map { m ->
-                Js8TableView.Row(
-                    id = m.id.toString(),
-                    values = mapOf(
-                        "flag" to if (m.isRead) "" else "⚑",
-                        "id" to m.id.toString(),
-                        "date" to inboxDate.format(Date(m.timestamp)),
-                        "freq" to (m.frequency?.let { "${it.roundToInt()} Hz" } ?: ""),
-                        "from" to (m.relayPath ?: m.senderCallsign ?: m.conversationId),
-                        "to" to if (m.conversationId.startsWith("@")) m.conversationId else my,
-                        "message" to m.text
-                    ),
-                    sortValues = mapOf("id" to m.id, "date" to m.timestamp),
-                    bold = !m.isRead, center = setOf("flag")
-                )
-            })
+            inbox?.setRows(Js8Inbox.rows(inboxMessages, my))
             // Call Activity flag: stations with unread messages (displayCallActivity hasMessage)
             unreadFrom = inboxMessages.filter { !it.isRead }.map { it.senderCallsign ?: it.conversationId }.toSet()
             requestRender()
@@ -558,17 +599,16 @@ class Js8MainFragment : Fragment() {
 
     private fun showInboxMessage(id: String) {
         val m = inboxMessages.firstOrNull { it.id.toString() == id } ?: return
-        requireView().findViewById<TextView>(R.id.js8_inbox_message).text = m.text
+        requireView().findViewById<TextView?>(R.id.js8_inbox_message)?.text = m.text
         if (!m.isRead) viewLifecycleOwner.lifecycleScope.launch { repository.markMessageAsRead(m.id) }
     }
 
     /** Inbox Reply: "FROM MSG [MESSAGE]" into the Typing Box (MessagePanel::on_replyPushButton_clicked). */
     private fun inboxReply() {
-        val id = inbox.selectedRowId ?: return
+        val id = inbox?.selectedRowId ?: return
         val m = inboxMessages.firstOrNull { it.id.toString() == id } ?: return
-        val path = m.relayPath ?: m.senderCallsign ?: m.conversationId
-        val typed = requireView().findViewById<EditText>(R.id.js8_inbox_reply_text).text.toString().trim()
-        addMessageText("$path MSG ${typed.ifEmpty { "[MESSAGE]" }}", send = false)
+        val typed = requireView().findViewById<EditText>(R.id.js8_inbox_reply_text).text.toString()
+        addMessageText(Js8Inbox.replyText(m, typed), send = false)
     }
 
     // ---- Header -------------------------------------------------------------------------
@@ -576,6 +616,11 @@ class Js8MainFragment : Fragment() {
     private fun setUpHeader() {
         offsetSlider?.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(sb: SeekBar, value: Int, fromUser: Boolean) {
+                // Locked like the waterfall while a message waits or is sent (UI_Constructor::changeFreq)
+                if (fromUser && !offsetChangeAllowed()) {
+                    sb.progress = monitorVm.getTxOffset().toInt()
+                    return
+                }
                 offsetValue?.text = "$value Hz"
                 if (fromUser) applyOffset(value.toFloat())
             }
@@ -617,12 +662,33 @@ class Js8MainFragment : Fragment() {
         }
         // Settings button, where the PC has its mode button (Rob, 2026-10-19)
         requireView().findViewById<View>(R.id.js8_btn_mode).setOnClickListener { openSettings() }
-        // Vertical and Swipe: the ⋮ button. PC mode: the menu bar items.
-        val openMenu = View.OnClickListener { findNavController().navigate(R.id.navigation_js8_menu) }
-        requireView().findViewById<View?>(R.id.js8_menu_button)?.setOnClickListener(openMenu)
-        listOf(R.id.js8_menubar_file, R.id.js8_menubar_configurations, R.id.js8_menubar_mode, R.id.js8_menubar_log,
-            R.id.js8_menubar_view, R.id.js8_menubar_control, R.id.js8_menubar_help)
-            .forEach { requireView().findViewById<View?>(it)?.setOnClickListener(openMenu) }
+        // PC mode menu bar: the same windows as upright, no separate Menu page (Rob, 2026-10-20:
+        // every menu has the same items in every layout). File = the PC's File > Settings (Station);
+        // Configurations, Mode and Control items are in the Settings window; Help > About is in Station.
+        fun menubar(id: Int, action: (View) -> Unit) = requireView().findViewById<View?>(id)?.setOnClickListener { action(it) }
+        menubar(R.id.js8_menubar_file) { openStation() }
+        listOf(R.id.js8_menubar_configurations, R.id.js8_menubar_mode, R.id.js8_menubar_control)
+            .forEach { menubar(it) { openSettings() } }
+        // View: Inbox (PC View > Show Message Inbox...) and Settings… (Rob, 2026-10-20)
+        menubar(R.id.js8_menubar_view) { anchor ->
+            val menu = popupMenu(anchor)
+            menu.menu.add(0, 1, 1, "Inbox")
+            menu.menu.add(0, 2, 2, "Settings…")
+            menu.menu.add(0, 3, 3, "Reset Window Sizes") // PC View > Reset Window Sizes: the dividers
+            menu.setOnMenuItemClickListener { item ->
+                when (item.itemId) {
+                    1 -> openInbox()
+                    2 -> openSettings()
+                    else -> splitters?.reset()
+                }
+                true
+            }
+            menu.show()
+        }
+        menubar(R.id.js8_menubar_log) {
+            android.widget.Toast.makeText(requireContext(), "Log QSO is not built yet", android.widget.Toast.LENGTH_SHORT).show()
+        }
+        menubar(R.id.js8_menubar_help) { openStation(page = Js8SettingsFragment.ABOUT_PAGE) }
     }
 
     private fun applyOffset(hz: Float) {
@@ -631,12 +697,17 @@ class Js8MainFragment : Fragment() {
         waterfall.txOffsetHz = hz
         // Saved, so Settings > Offset shows it and the app starts on it (PC keeps the offset too)
         prefs().edit().putString(Js8SettingsSchema.TX_OFFSET_KEY, hz.toInt().toString()).apply()
-        requireView().findViewById<TextView?>(R.id.js8_wf_offset)?.text = "Offset: ${hz.toInt()} Hz"
+        renderOffsetBox()
         renderFrequency()
         requireContext().startService(Intent(requireContext(), JS8EngineService::class.java).apply {
             action = JS8EngineService.ACTION_SET_TX_OFFSET
             putExtra(JS8EngineService.EXTRA_TX_OFFSET_HZ, hz)
         })
+    }
+
+    /** Waterfall Controls > Offset box: always the current offset (it kept the layout's 1500 at startup). */
+    private fun renderOffsetBox() {
+        view?.findViewById<TextView?>(R.id.js8_wf_offset)?.text = "Offset: ${monitorVm.getTxOffset().toInt()} Hz"
     }
 
     private fun renderFrequency() {
@@ -707,13 +778,21 @@ class Js8MainFragment : Fragment() {
     /** Settings window (header Settings button). */
     private fun openSettings() = navigateFromMain(R.id.navigation_js8_settings)
 
-    /** Station window: callsign, grid and the rest of the PC's File > Settings. */
-    internal fun openStation() = navigateFromMain(R.id.navigation_js8_station)
+    /** Inbox in this layout (upright, Swipe), or the Message Inbox screen (PC mode). */
+    private fun openInbox() {
+        val table = inbox
+        if (table != null) table.requestRectangleOnScreen(android.graphics.Rect(0, 0, table.width, table.height))
+        else navigateFromMain(R.id.navigation_js8_inbox)
+    }
 
-    private fun navigateFromMain(destination: Int) {
+    /** Station window: callsign, grid and the rest of the PC's File > Settings. */
+    internal fun openStation(page: String? = null) = navigateFromMain(R.id.navigation_js8_station,
+        page?.let { android.os.Bundle().apply { putString(Js8SettingsFragment.ARG_PAGE, it) } })
+
+    private fun navigateFromMain(destination: Int, args: android.os.Bundle? = null) {
         if (!isAdded) return
         val nav = findNavController()
-        if (nav.currentDestination?.id == R.id.navigation_js8_main) nav.navigate(destination)
+        if (nav.currentDestination?.id == R.id.navigation_js8_main) nav.navigate(destination, args)
     }
 
     /** Transmit buttons follow SWL (Listening only); REPLY, SNR, INFO, Directed also need a selection. */
@@ -776,10 +855,11 @@ class Js8MainFragment : Fragment() {
             activityVm.clearTyped() // PC on_stopTxButton_clicked -> resetMessage: the Typing Box empties
             view.findViewById<View>(R.id.js8_btn_tune).isActivated = false
         }
-        view.findViewById<View>(R.id.js8_inbox_reply).setOnClickListener { inboxReply() }
+        view.findViewById<View?>(R.id.js8_inbox_reply)?.setOnClickListener { inboxReply() }
         typingBox.addTextChangedListener(object : android.text.TextWatcher {
             override fun afterTextChanged(s: android.text.Editable?) {
                 Js8Macros.touch()
+                requestTextStats()
                 view.findViewById<View>(R.id.js8_btn_send).isEnabled =
                     !s.isNullOrBlank() && !listenOnly() && activityVm.typed.value == null
             }
@@ -808,16 +888,14 @@ class Js8MainFragment : Fragment() {
         val menu = popupMenu(anchor)
         saved.forEachIndexed { i, m -> menu.menu.add(0, i, i, m) }
         menu.menu.add(0, 9999, 9999, "Edit Saved Messages…")
-        // APRS pages, upright only for now (Rob, 2026-10-19); sideways is not changed yet
+        // APRS pages, in every layout: menus have the same items everywhere (Rob, 2026-10-20)
         val aprs = listOf(
             "APRS EMAIL" to Js8AprsFragment.FORM_EMAIL,
             "APRS TXT" to Js8AprsFragment.FORM_TXT,
             "APRS GRID" to Js8AprsFragment.FORM_GRID,
             "APRS MSG" to Js8AprsFragment.FORM_MSG
         )
-        if (resources.configuration.orientation != Configuration.ORIENTATION_LANDSCAPE) {
-            aprs.forEachIndexed { i, (label, _) -> menu.menu.add(0, 10000 + i, 10000 + i, label) }
-        }
+        aprs.forEachIndexed { i, (label, _) -> menu.menu.add(0, 10000 + i, 10000 + i, label) }
         menu.setOnMenuItemClickListener { item ->
             when {
                 item.itemId == 9999 -> openStation() // Saved Messages are in Station
@@ -910,6 +988,8 @@ class Js8MainFragment : Fragment() {
         // Jump to their offset / speed / time drift
         if (!isAllCall && detail != null && detail.offset > 0) {
             m.add(1, ID_JUMP_OFFSET, 1, "Jump to ${detail.offset}Hz")
+            // PC: shown while Enable Filter is on
+            if (wfControls?.filterEnabled == true) m.add(1, ID_FILTER_CENTER, 1, "Center filter at ${detail.offset}Hz")
             if (detail.submode != mySubmode && Js8Activity.txSubmode(detail.submode) == detail.submode) {
                 m.add(1, ID_JUMP_SPEED, 2, "Jump to ${speedName(detail.submode)} speed")
             }
@@ -935,6 +1015,7 @@ class Js8MainFragment : Fragment() {
             val id = item.itemId
             when {
                 id == ID_JUMP_OFFSET -> detail?.let { jumpToOffset(it.offset) }
+                id == ID_FILTER_CENTER -> detail?.let { wfControls?.setFilterCenter(it.offset) }
                 id == ID_JUMP_SPEED -> detail?.let { jumpToSpeed(it.submode) }
                 id == ID_JUMP_DRIFT -> detail?.let {
                     requireContext().startService(Intent(requireContext(), JS8EngineService::class.java).apply {
@@ -942,7 +1023,7 @@ class Js8MainFragment : Fragment() {
                         putExtra(JS8EngineService.EXTRA_TIME_DRIFT_MS, -(it.tdrift * 1000).toLong())
                     })
                 }
-                id == ID_INBOX -> inbox.requestRectangleOnScreen(android.graphics.Rect(0, 0, inbox.width, inbox.height))
+                id == ID_INBOX -> openInbox()
                 id == ID_SAVED_EDIT -> openStation()
                 id in ID_SAVED_FIRST until ID_SAVED_FIRST + saved.size ->
                     addMessageText(macro(saved[id - ID_SAVED_FIRST]), send = true)
@@ -977,6 +1058,22 @@ class Js8MainFragment : Fragment() {
         if (!offsetChangeAllowed()) return
         offsetSlider?.progress = hz
         applyOffset(hz.toFloat())
+    }
+
+    /**
+     * Waterfall Controls > QSY (UI_Constructor::qsy): the dial moves by offset - center, so the
+     * signal at the offset is heard at center, and the offset becomes center. The dial goes to
+     * Settings > Frequency (last_frequency), which retunes the radio when rig control is on.
+     * Not done: the PC also moves the Band Activity rows by the same amount.
+     */
+    private fun qsy(center: Int) {
+        if (!offsetChangeAllowed()) return
+        val delta = monitorVm.getTxOffset().toLong() - center
+        if (delta == 0L) return
+        dialHz += delta
+        prefs().edit().putString(Js8SettingsSchema.FREQUENCY_KEY, dialHz.toString()).apply()
+        jumpToOffset(center)
+        renderFrequency()
     }
 
     /** PC setSubmode: becomes the Speed in Settings too. */
@@ -1050,6 +1147,7 @@ class Js8MainFragment : Fragment() {
 
     /** REPLY, SNR, INFO, Directed, Deselect are enabled only while a callsign is selected (desktop behaviour). */
     private fun renderSelection() {
+        requestTextStats() // the directed callsign changes the parts (PC m_txTextDirtyLastSelectedCall)
         val has = selectedCall != null
         val v = requireView()
         val swl = listenOnly()
@@ -1113,6 +1211,7 @@ class Js8MainFragment : Fragment() {
             levelMeter.levelDb = if (running) (status.powerDb + 90f).coerceIn(0f, 90f) else 0f
             renderStatus()
             offsetSlider?.let { if (it.progress != status.txOffsetHz.toInt()) it.progress = status.txOffsetHz.toInt() }
+            renderOffsetBox()
         }
         monitorVm.spectrum.observe(viewLifecycleOwner) { syncRuler() }
         transmitVm.txState.observe(viewLifecycleOwner) { state ->

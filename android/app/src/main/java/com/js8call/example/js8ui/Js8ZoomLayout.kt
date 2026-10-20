@@ -24,7 +24,7 @@ class Js8ZoomLayout @JvmOverloads constructor(
     attrs: AttributeSet? = null
 ) : FrameLayout(context, attrs) {
 
-    var designWidthDp = 1176f
+    var designWidthDp = 1077f
     var designHeightDp = 714f
     var zoomable = true
     var maxZoomFactor = 4f

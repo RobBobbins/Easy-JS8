@@ -1,5 +1,5 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Status Bar: Receiving | (blank) | JS8 Normal | Freq | Auto Reply | cycle progress -->
+<!-- Status Bar (PC mode): Receiving | (blank) | JS8 Normal | Freq | Auto Reply | cycle progress | wpm -->
 <HorizontalScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
@@ -54,11 +54,25 @@
             android:layout_height="1dp"
             android:layout_weight="1" />
 
+        <!-- 136 dp: measured beside the wpm box on Rob's PC capture; 14 dp tall (Rob, 2026-10-20: a bit thicker) -->
         <com.js8call.example.js8ui.Js8CycleProgressView
             android:id="@+id/js8_status_progress"
-            android:layout_width="200dp"
-            android:layout_height="12dp"
+            android:layout_width="136dp"
+            android:layout_height="14dp"
+            android:layout_marginStart="9dp" />
+
+        <!-- PC wpm_label: "8.0wpm / 72.0cpm" for the Typing Box text, hidden while it is empty
+             (UI_Constructor::updateTextStatsDisplay). 150 dp: fits the gap after Auto Reply (Rob, 2026-10-20). -->
+        <TextView
+            android:id="@+id/js8_status_wpm"
+            style="@style/Js8StatusLabel"
+            android:layout_width="150dp"
             android:layout_marginStart="9dp"
-            android:layout_marginEnd="22dp" />
+            android:visibility="gone" />
+
+        <!-- Room for the PC window's resize grip -->
+        <View
+            android:layout_width="22dp"
+            android:layout_height="1dp" />
     </LinearLayout>
 </HorizontalScrollView>

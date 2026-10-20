@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
     Swipe layout (phone sideways, setting "Swipe"): five screens, swipe or tap a tab.
-    1 Header, 2 Activity, 3 Waterfall, 4 Inbox, 5 Settings. Ids match fragment_js8_main.xml.
+    1 Header, 2 Activity, 3 Waterfall, 4 Inbox, 5 Station. Ids match fragment_js8_main.xml.
 -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
@@ -41,20 +41,7 @@
                     android:layout_marginStart="312dp"
                     android:layout_marginTop="16dp" />
 
-                <TextView
-                    android:id="@+id/js8_menu_button"
-                    style="@style/Js8Text"
-                    android:layout_width="30dp"
-                    android:layout_height="47dp"
-                    android:layout_marginStart="586dp"
-                    android:layout_marginTop="12dp"
-                    android:background="?attr/selectableItemBackgroundBorderless"
-                    android:contentDescription="Menu"
-                    android:gravity="center"
-                    android:text="⋮"
-                    android:textSize="26dp"
-                    android:textStyle="bold" />
-
+                <!-- No ⋮ menu (Rob, 2026-10-20): its items are in the Settings and Station windows, as upright -->
                 <include
                     layout="@layout/js8_header_buttons"
                     android:layout_width="600dp"
@@ -153,7 +140,7 @@
             </LinearLayout>
 
             <include
-                layout="@layout/js8_status_bar"
+                layout="@layout/js8_status_bar_swipe"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
                 android:layout_marginTop="8dp" />
@@ -259,7 +246,7 @@
             </LinearLayout>
         </LinearLayout>
 
-        <!-- 5. Settings: the PC Settings window -->
+        <!-- 5. Station: the PC's File > Settings window -->
         <androidx.fragment.app.FragmentContainerView
             android:id="@+id/js8_settings_container"
             android:name="com.js8call.example.js8ui.Js8SettingsFragment"
@@ -288,6 +275,6 @@
             android:text="Inbox" />
         <TextView android:id="@+id/js8_tab_4" style="@style/Js8FrameText" android:layout_width="0dp"
             android:layout_height="match_parent" android:layout_weight="1" android:gravity="center"
-            android:text="Settings" />
+            android:text="Station" />
     </LinearLayout>
 </LinearLayout>

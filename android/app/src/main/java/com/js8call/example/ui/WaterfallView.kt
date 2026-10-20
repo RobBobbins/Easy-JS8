@@ -57,6 +57,19 @@ class WaterfallView @JvmOverloads constructor(
             field = value
             postInvalidate()
         }
+    /** Filter (WideGraph Control tab, CPlotter::drawFilter): outside center +- width / 2 is darkened. */
+    var filterEnabled = false
+        set(value) { field = value; postInvalidate() }
+    var filterCenterHz = 1500f
+        set(value) { field = value; postInvalidate() }
+    var filterWidthHz = 2000f
+        set(value) { field = value; postInvalidate() }
+    /** PC Display tab > Filter > Opacity, 50 % by default. */
+    var filterOpacityPercent = 50
+        set(value) { field = value; postInvalidate() }
+    private val filterShade = Paint()
+    private val filterEdge = Paint().apply { color = Color.YELLOW; strokeWidth = 1f }
+
     // Callback for a tap: the frequency under the finger. The owner applies it.
     var onOffsetChanged: ((Float) -> Unit)? = null
 
@@ -113,8 +126,23 @@ class WaterfallView @JvmOverloads constructor(
             canvas.drawBitmap(bitmap, srcRect, dstRect, paint)
         }
 
-        // Offset dial (CPlotter::paintEvent / drawDials), also while RX is off
         val hzPerPx = hzPerPixel()
+        // Filter: black at the opacity outside the band, a yellow line at each edge
+        if (filterEnabled && filterWidthHz > 0f && hzPerPx > 0f) {
+            filterShade.color = Color.argb((255 * filterOpacityPercent / 100).coerceIn(0, 255), 0, 0, 0)
+            val start = ((filterCenterHz - filterWidthHz / 2f - startHz()) / hzPerPx).coerceIn(0f, width.toFloat())
+            val end = ((filterCenterHz + filterWidthHz / 2f - startHz()) / hzPerPx).coerceIn(0f, width.toFloat())
+            if (start > 0f) {
+                canvas.drawRect(0f, 0f, start, height.toFloat(), filterShade)
+                canvas.drawLine(start, 1f, start, height.toFloat(), filterEdge)
+            }
+            if (end < width) {
+                canvas.drawRect(end, 0f, width.toFloat(), height.toFloat(), filterShade)
+                canvas.drawLine(end, 1f, end, height.toFloat(), filterEdge)
+            }
+        }
+
+        // Offset dial (CPlotter::paintEvent / drawDials), also while RX is off
         if (hzPerPx > 0f) {
             val x = ((txOffsetHz - startHz()) / hzPerPx + 0.5f).toInt().coerceIn(0, width).toFloat()
             val w = (bandwidthHz / hzPerPx + 0.5f).toInt().toFloat()

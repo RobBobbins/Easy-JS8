@@ -42,6 +42,12 @@
             app:argType="string" />
     </fragment>
 
+    <!-- PC mode View > Inbox: the Message Inbox as its own screen -->
+    <fragment
+        android:id="@+id/navigation_js8_inbox"
+        android:name="com.js8call.example.js8ui.Js8InboxFragment"
+        android:label="Message Inbox" />
+
     <fragment
         android:id="@+id/navigation_js8_menu"
         android:name="com.js8call.example.js8ui.Js8MenuFragment"
