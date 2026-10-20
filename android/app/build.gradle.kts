@@ -1,5 +1,9 @@
 import java.io.FileInputStream
 import java.util.Properties
+import java.text.SimpleDateFormat
+import java.util.Date
+import java.util.Locale
+import java.util.TimeZone
 
 plugins {
     id("com.android.application")
@@ -17,6 +21,10 @@ android {
         targetSdk = 34
         versionCode = 3
         versionName = "1.0"
+        // About page: the day this APK was built, UTC, in the clock's style (e.g. 2026 Oct 20)
+        val buildDate = SimpleDateFormat("yyyy MMM dd", Locale.US)
+            .apply { timeZone = TimeZone.getTimeZone("UTC") }.format(Date())
+        buildConfigField("String", "BUILD_DATE", "\"$buildDate\"")
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }

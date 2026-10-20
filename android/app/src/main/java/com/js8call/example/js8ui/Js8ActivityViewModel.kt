@@ -50,6 +50,12 @@ class Js8ActivityViewModel(app: Application) : AndroidViewModel(app) {
         changed()
     }
 
+    /** FT8 signal heard in the JS8 audio (Settings > View > Show FT8 decodes in the Message Window). */
+    fun onFt8(slotUtcMs: Long, offset: Int, text: String, callDe: String) {
+        activity.writeFt8(slotUtcMs, offset, text, callDe)
+        changed()
+    }
+
     /** Transmission finished or failed: the typed message (if it was on air) leaves the box. */
     fun onTxEnded() {
         if (_typed.value?.onAir == true) clearTyped()

@@ -208,6 +208,8 @@ object Js8SettingsSchema {
             // Band Activity columns, upright (Rob, 2026-10-19); same setting as press-and-hold on the header
             check("js8_table_${BAND_TABLE_UPRIGHT}_col_offset", "Show Offset in Band Activity", false),
             check("js8_table_${BAND_TABLE_UPRIGHT}_col_snr", "Show SNR in Band Activity", false),
+            // FT8 signals heard on the JS8 frequency (Rob, 2026-10-19); off = the FT8 decoder doesn't run
+            check("js8cfg_show_ft8", "Show FT8 decodes in the Message Window", true),
             ButtonRow(listOf("Clear Band Activity" to "clear_band")),
             ButtonRow(listOf("Clear Call Activity" to "clear_call")),
             ButtonRow(listOf("Clear RX Activity" to "clear_rx")),

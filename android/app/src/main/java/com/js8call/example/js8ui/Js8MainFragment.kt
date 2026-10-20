@@ -46,6 +46,26 @@ import kotlinx.coroutines.launch
 class Js8MainFragment : Fragment() {
 
     companion object {
+        // Call Activity press-and-hold menu
+        private const val ID_JUMP_OFFSET = 1
+        private const val ID_JUMP_SPEED = 2
+        private const val ID_JUMP_DRIFT = 3
+        private const val ID_LOG = 10
+        private const val ID_INBOX = 11
+        private const val ID_STORE = 12
+        private const val ID_SAVED = 20
+        private const val ID_DIRECTED = 21
+        private const val ID_RELAY = 22
+        private const val ID_DESELECT = 23
+        private const val ID_ADD = 30
+        private const val ID_REMOVE = 31
+        private const val ID_BLOCK = 32
+        private const val ID_CLEAR_LIST = 40
+        private const val ID_CLEAR_ALL = 41
+        private const val ID_SAVED_EDIT = 999
+        private const val ID_SAVED_FIRST = 1000
+        private const val ID_DIRECTED_FIRST = 2000
+
         const val PREF_LANDSCAPE_LAYOUT = "landscape_layout"
         /** Swipe page kept across rotation / returning from the Menu page. */
         private var swipePage = 1
@@ -146,6 +166,17 @@ class Js8MainFragment : Fragment() {
         statusFreq = view.findViewById(R.id.js8_status_freq)
         statusAutoReply = view.findViewById(R.id.js8_status_autoreply)
         progress = view.findViewById(R.id.js8_status_progress)
+        // Upright: the cycle progress bar runs from beside Receiving to the page's right edge (Rob, 2026-10-19)
+        view.findViewById<View?>(R.id.js8_status_scroll)?.let { scroll ->
+            scroll.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
+                val state = view.findViewById<View>(R.id.js8_status_state)
+                val gap = (progress.layoutParams as ViewGroup.MarginLayoutParams).marginStart
+                val w = scroll.width - scroll.paddingLeft - scroll.paddingRight - state.width - gap
+                if (w > 0 && progress.layoutParams.width != w) {
+                    progress.layoutParams = progress.layoutParams.apply { width = w }
+                }
+            }
+        }
         waterfall = view.findViewById(R.id.js8_waterfall)
         ruler = view.findViewById(R.id.js8_ruler)
         levelMeter = view.findViewById(R.id.js8_level_meter)
@@ -185,11 +216,7 @@ class Js8MainFragment : Fragment() {
         statusAutoReply.text = if (prefs.getBoolean("autoreply_enabled", false)) "Auto Reply: On" else "Auto Reply: Off"
         dialHz = prefs.getString("last_frequency", "14078000")?.toLongOrNull() ?: 14_078_000L
         renderFrequency()
-        // Current speed (Settings > Mode, Menu > Mode): offset dial width, status bar label, cycle
-        val submode = Js8Activity.txSubmode(prefs.getInt(Js8SettingsSchema.TX_SUBMODE_KEY, 0))
-        waterfall.bandwidthHz = Js8Activity.bandwidthHz(submode)
-        requireView().findViewById<TextView?>(R.id.js8_status_mode)?.text = Js8Activity.modeLabel(submode)
-        progress.period = Js8Activity.periodSeconds(submode)
+        renderSpeed()
         renderTransmitEnabled() // Station > SWL (Listening only) may have changed
         // Offset from Settings (or saved last time)
         val savedOffset = prefs.getString(Js8SettingsSchema.TX_OFFSET_KEY, null)?.toFloatOrNull()
@@ -278,6 +305,8 @@ class Js8MainFragment : Fragment() {
             renderSelection()
         }
         // Double-click: put the callsign in the Typing Box (on_tableWidgetCalls_cellDoubleClicked)
+        // Press and hold: the PC's right-click menu for that callsign
+        callActivity.onRowLongClick = { row, anchor -> showCallMenu(anchor, row.id) }
         callActivity.onRowDoubleClick = { row ->
             callActivity.selectedRowId = row.id
             selectedCall = row.id
@@ -345,6 +374,14 @@ class Js8MainFragment : Fragment() {
             if (n > 0) e.setSpan(android.text.style.StrikethroughSpan(), 0, n, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
         }
         view?.findViewById<View>(R.id.js8_btn_send)?.isEnabled = !listenOnly() && e.isNotBlank() && t == null
+    }
+
+    /** Current speed (Settings > Mode, Call Activity > Jump to ... speed): offset dial width, status bar label, cycle. */
+    private fun renderSpeed() {
+        val submode = Js8Activity.txSubmode(prefs().getInt(Js8SettingsSchema.TX_SUBMODE_KEY, 0))
+        waterfall.bandwidthHz = Js8Activity.bandwidthHz(submode)
+        view?.findViewById<TextView?>(R.id.js8_status_mode)?.text = Js8Activity.modeLabel(submode)
+        progress.period = Js8Activity.periodSeconds(submode)
     }
 
     /** Lists need redrawing; the first time after the screen opens it happens at once. */
@@ -457,8 +494,16 @@ class Js8MainFragment : Fragment() {
             if (sb.isNotEmpty()) sb.append('\n')
             val start = sb.length
             sb.append(clockFormat.format(Date(line.utcMs)).substring(12)).append(" - (").append(line.offset.toString())
-                .append(") - ").append(line.text.toString().trimEnd())
+                .append(") - ")
+            val textStart = sb.length
+            sb.append(line.text.toString().trimEnd())
             sb.setSpan(android.text.style.ForegroundColorSpan(if (line.isTx) txFg else rxFg), start, sb.length, 0)
+            // FT8 transmitting callsign in bold
+            line.bold?.let { b ->
+                if (textStart + b.last < sb.length) {
+                    sb.setSpan(android.text.style.StyleSpan(android.graphics.Typeface.BOLD), textStart + b.first, textStart + b.last + 1, 0)
+                }
+            }
         }
         // Only when the text changed: setting it throws the box back to the top (the bounce Rob saw
         // every 5 seconds). The jump to the newest line happens before the box is drawn.
@@ -751,10 +796,16 @@ class Js8MainFragment : Fragment() {
     }
 
     /** Saved button: the Saved Messages list (Settings > Saved Messages), macros expanded. */
+    /** Popup menus with the lists' text size and shorter rows (ThemeOverlay.Js8PopupMenu). */
+    private fun popupMenu(anchor: View) =
+        android.widget.PopupMenu(android.view.ContextThemeWrapper(requireContext(), R.style.ThemeOverlay_Js8PopupMenu), anchor)
+
+    private fun savedMessages() = prefs().getString(Js8SettingsSchema.SAVED_MESSAGES_KEY, Js8SettingsSchema.SAVED_MESSAGES_DEFAULT)
+        .orEmpty().split('\n').filter { it.isNotBlank() }
+
     private fun showSavedMenu(anchor: View) {
-        val saved = prefs().getString(Js8SettingsSchema.SAVED_MESSAGES_KEY, Js8SettingsSchema.SAVED_MESSAGES_DEFAULT)
-            .orEmpty().split('\n').filter { it.isNotBlank() }
-        val menu = android.widget.PopupMenu(requireContext(), anchor)
+        val saved = savedMessages()
+        val menu = popupMenu(anchor)
         saved.forEachIndexed { i, m -> menu.menu.add(0, i, i, m) }
         menu.menu.add(0, 9999, 9999, "Edit Saved Messages…")
         // APRS pages, upright only for now (Rob, 2026-10-19); sideways is not changed yet
@@ -790,6 +841,18 @@ class Js8MainFragment : Fragment() {
     /** Directed button: the query menu (JS8_Mainwindow/buildQueryMenu.cpp). */
     private fun showDirectedMenu(anchor: View) {
         val call = selectedCall ?: return
+        val items = directedItems(call)
+        val menu = popupMenu(anchor)
+        items.forEachIndexed { i, (label, _) -> menu.menu.add(0, i, i, label) }
+        menu.setOnMenuItemClickListener { item ->
+            addMessageText(items[item.itemId].second, send = true)
+            true
+        }
+        menu.show()
+    }
+
+    /** buildQueryMenu items for [call]: menu label to Typing Box text. */
+    private fun directedItems(call: String): List<Pair<String, String>> {
         val grid = prefs().getString("grid", "").orEmpty()
         val snr = activityVm.activity.callActivity[call]?.snr?.let { Js8Activity.formatSnr(it) }.orEmpty()
         val items = listOf(
@@ -818,13 +881,171 @@ class Js8MainFragment : Fragment() {
             "$call YES - I confirm your last inquiry" to "$call YES",
             "$call NO - I do not confirm your last inquiry" to "$call NO"
         )
-        val menu = android.widget.PopupMenu(requireContext(), anchor)
-        items.forEachIndexed { i, (label, _) -> menu.menu.add(0, i, i, label) }
-        menu.setOnMenuItemClickListener { item ->
-            addMessageText(items[item.itemId].second, send = true)
+        return items
+    }
+
+    /**
+     * Press and hold a callsign in Call Activity: the PC's right-click menu
+     * (UI_Constructor.cpp, tableWidgetCalls customContextMenuRequested). Rob, 2026-10-19.
+     */
+    private fun showCallMenu(anchor: View, call: String) {
+        // The row is selected first; the menu acts on it (PC callsignSelected)
+        bandActivity.selectedRowId = null
+        callActivity.selectedRowId = call
+        selectedCall = call
+        renderSelection()
+
+        val a = activityVm.activity
+        val isAllCall = call == "@ALLCALL"
+        val isGroup = call.startsWith("@")
+        val detail = a.callActivity[call]
+        val mySubmode = Js8Activity.txSubmode(prefs().getInt(Js8SettingsSchema.TX_SUBMODE_KEY, 0))
+        val saved = savedMessages()
+        val directed = directedItems(call)
+        val hasInbox = inboxMessages.any { (it.senderCallsign ?: it.conversationId).equals(call, ignoreCase = true) }
+
+        val popup = popupMenu(anchor)
+        val m = popup.menu
+        androidx.core.view.MenuCompat.setGroupDividerEnabled(m, true)
+        // Jump to their offset / speed / time drift
+        if (!isAllCall && detail != null && detail.offset > 0) {
+            m.add(1, ID_JUMP_OFFSET, 1, "Jump to ${detail.offset}Hz")
+            if (detail.submode != mySubmode && Js8Activity.txSubmode(detail.submode) == detail.submode) {
+                m.add(1, ID_JUMP_SPEED, 2, "Jump to ${speedName(detail.submode)} speed")
+            }
+            m.add(1, ID_JUMP_DRIFT, 3, "Jump to ${-(detail.tdrift * 1000).toInt()} ms time drift")
+        }
+        m.add(2, ID_LOG, 10, "Log...").isEnabled = false // LOG not built yet
+        m.add(2, ID_INBOX, 11, "Show Message Inbox...").isEnabled = !isAllCall && hasInbox
+        m.add(2, ID_STORE, 12, "Store Message...").isEnabled = false // engine can't hold messages for others
+        val savedMenu = m.addSubMenu(3, ID_SAVED, 20, "Saved Messages...")
+        saved.forEachIndexed { i, text -> savedMenu.add(0, ID_SAVED_FIRST + i, i, text) }
+        savedMenu.add(0, ID_SAVED_EDIT, saved.size, "Edit Saved Messages\u2026")
+        val directedMenu = m.addSubMenu(3, ID_DIRECTED, 21, "Directed to $call...")
+        directed.forEachIndexed { i, (label, _) -> directedMenu.add(0, ID_DIRECTED_FIRST + i, i, label) }
+        m.add(3, ID_RELAY, 22, "Relay via $call...").isEnabled = !isAllCall
+        m.add(3, ID_DESELECT, 23, "Deselect $call")
+        m.add(4, ID_ADD, 30, "Add New Station or Group...")
+        m.add(4, ID_REMOVE, 31, if (isGroup) "Remove This Group" else "Remove This Station")
+        m.add(4, ID_BLOCK, 32, "Block This Station").isEnabled = !isGroup
+        m.add(5, ID_CLEAR_LIST, 40, "Clear Entire List")
+        m.add(5, ID_CLEAR_ALL, 41, "Clear All Lists")
+
+        popup.setOnMenuItemClickListener { item ->
+            val id = item.itemId
+            when {
+                id == ID_JUMP_OFFSET -> detail?.let { jumpToOffset(it.offset) }
+                id == ID_JUMP_SPEED -> detail?.let { jumpToSpeed(it.submode) }
+                id == ID_JUMP_DRIFT -> detail?.let {
+                    requireContext().startService(Intent(requireContext(), JS8EngineService::class.java).apply {
+                        action = JS8EngineService.ACTION_SET_TIME_DRIFT
+                        putExtra(JS8EngineService.EXTRA_TIME_DRIFT_MS, -(it.tdrift * 1000).toLong())
+                    })
+                }
+                id == ID_INBOX -> inbox.requestRectangleOnScreen(android.graphics.Rect(0, 0, inbox.width, inbox.height))
+                id == ID_SAVED_EDIT -> openStation()
+                id in ID_SAVED_FIRST until ID_SAVED_FIRST + saved.size ->
+                    addMessageText(macro(saved[id - ID_SAVED_FIRST]), send = true)
+                id in ID_DIRECTED_FIRST until ID_DIRECTED_FIRST + directed.size ->
+                    addMessageText(directed[id - ID_DIRECTED_FIRST].second, send = true)
+                // PC buildRelayAction -> prependMessageText("CALL>")
+                id == ID_RELAY -> if (activityVm.typed.value == null) typingBox.text.insert(0, "$call>")
+                id == ID_DESELECT -> clearSelection()
+                id == ID_ADD -> askAddStation()
+                id == ID_REMOVE -> removeStation(call)
+                id == ID_BLOCK -> blockStation(call)
+                id == ID_CLEAR_LIST -> { a.clearCalls(); clearSelection(); activityVm.changed() }
+                id == ID_CLEAR_ALL -> { a.clearBand(); a.clearCalls(); a.clearRx(); clearSelection(); activityVm.changed() }
+                else -> return@setOnMenuItemClickListener false
+            }
             true
         }
-        menu.show()
+        popup.show()
+    }
+
+    /** PC JS8::Submode::name for the Jump to ... speed item. */
+    private fun speedName(submode: Int) = when (submode) {
+        Js8Activity.SUBMODE_FAST -> "Fast"
+        Js8Activity.SUBMODE_TURBO -> "JS8 40"
+        Js8Activity.SUBMODE_SLOW -> "Slow"
+        Js8Activity.SUBMODE_ULTRA -> "JS8 60"
+        else -> "Normal"
+    }
+
+    /** PC changeFreq: same rule as tapping the waterfall. */
+    private fun jumpToOffset(hz: Int) {
+        if (!offsetChangeAllowed()) return
+        offsetSlider?.progress = hz
+        applyOffset(hz.toFloat())
+    }
+
+    /** PC setSubmode: becomes the Speed in Settings too. */
+    private fun jumpToSpeed(submode: Int) {
+        prefs().edit().putInt(Js8SettingsSchema.TX_SUBMODE_KEY, submode).apply()
+        renderSpeed()
+    }
+
+    /** PC addStation: a callsign joins Call Activity, an @GROUP your groups, @ALLCALL comes back. */
+    private fun askAddStation() {
+        val box = EditText(requireContext()).apply {
+            isSingleLine = true
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS
+            filters = arrayOf(android.text.InputFilter.AllCaps())
+        }
+        AlertDialog.Builder(requireContext())
+            .setTitle("Add New Station or Group")
+            .setMessage("Station or Group Callsign:")
+            .setView(box)
+            .setPositiveButton(android.R.string.ok) { _, _ ->
+                val call = box.text.toString().trim().uppercase(Locale.US)
+                if (call.isEmpty()) return@setPositiveButton
+                val p = prefs()
+                when {
+                    call == "@ALLCALL" -> p.edit().putBoolean("js8cfg_avoid_allcall", false).apply()
+                    call.startsWith("@") -> {
+                        if (!Regex("@[A-Z0-9/]+").matches(call)) { showMessage("$call is not a valid group"); return@setPositiveButton }
+                        val groups = p.getString("my_groups", "").orEmpty().split(',', ' ').map { it.trim().uppercase(Locale.US) }
+                            .filter { it.isNotEmpty() }
+                        if (call !in groups) p.edit().putString("my_groups", (groups + call).joinToString(",")).apply()
+                    }
+                    Js8Callsign.isValid(call) -> activityVm.activity.callActivity
+                        .getOrPut(call) { Js8Activity.CallDetail(call, offset = -1, utcMs = System.currentTimeMillis()) }
+                    else -> { showMessage("$call is not a valid callsign or group"); return@setPositiveButton }
+                }
+                activityVm.changed()
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    /** PC removeStation: @ALLCALL hidden, a group leaves your groups, a station leaves the list. */
+    private fun removeStation(call: String) {
+        val p = prefs()
+        when {
+            call == "@ALLCALL" -> p.edit().putBoolean("js8cfg_avoid_allcall", true).apply()
+            call.startsWith("@") -> {
+                val groups = p.getString("my_groups", "").orEmpty().split(',', ' ').map { it.trim() }
+                    .filter { it.isNotEmpty() && !it.equals(call, ignoreCase = true) }
+                p.edit().putString("my_groups", groups.joinToString(",")).apply()
+            }
+            else -> activityVm.activity.callActivity.remove(call)
+        }
+        clearSelection()
+        activityVm.changed()
+    }
+
+    /** PC blockStation: onto the RX block list (Station > Networking & Autoreply). */
+    private fun blockStation(call: String) {
+        val p = prefs()
+        val list = p.getString("js8cfg_rx_blocklist", "").orEmpty().split(',', ' ').map { it.trim() }.filter { it.isNotEmpty() }
+        if (list.none { it.equals(call, ignoreCase = true) }) {
+            p.edit().putString("js8cfg_rx_blocklist", (list + call).joinToString(",")).apply()
+        }
+        activityVm.changed()
+    }
+
+    private fun showMessage(text: String) {
+        AlertDialog.Builder(requireContext()).setMessage(text).setPositiveButton(android.R.string.ok, null).show()
     }
 
     /** REPLY, SNR, INFO, Directed, Deselect are enabled only while a callsign is selected (desktop behaviour). */

@@ -62,6 +62,8 @@ same place, same blue bold style, opens the Settings window.
    - CQ, REPLY, SNR, INFO, STATUS
    - Saved, Directed, Deselect, Send, Halt
 6. **Status Bar** (the mode label and cycle counter follow the speed: JS8 Normal n/15, JS8 Fast n/10 …)
+   Upright order: Receiving · cycle progress bar (to the page's right edge, rounded ends like the PC)
+   · JS8 Normal · Freq · Auto Reply · Last Tx; the last four scroll in from the right (`js8_status_bar_upright.xml`).
 7. **Waterfall**
 8. **Waterfall Controls** (upright: no Offset box; QSY first)
 9. **Inbox**

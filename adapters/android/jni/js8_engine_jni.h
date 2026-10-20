@@ -56,6 +56,10 @@ int js8_engine_is_transmitting_audio(JS8Engine_Native* engine);
 int js8_engine_tx_milliseconds_until_audio(JS8Engine_Native* engine);
 // How many parts of the message being sent have started.
 int js8_engine_tx_frames_started(JS8Engine_Native* engine);
+// FT8 monitor on/off (Easy JS8: FT8 decodes in the Message Window).
+void js8_engine_set_ft8_enabled(JS8Engine_Native* engine, bool enabled);
+// Debug builds: decode one 15 s recording with the FT8 monitor.
+void js8_engine_debug_ft8_recording(JS8Engine_Native* engine, const int16_t* samples, size_t frames);
 void js8_engine_set_tx_ready(JS8Engine_Native* engine, bool ready);
 
 // Status queries

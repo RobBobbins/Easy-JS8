@@ -377,6 +377,31 @@ Java_com_js8call_core_JS8Engine_nativeGetTxFrameTexts(
   return out;
 }
 
+JNIEXPORT void JNICALL
+Java_com_js8call_core_JS8Engine_nativeSetFt8Enabled(
+    JNIEnv* /* env */,
+    jobject /* thiz */,
+    jlong handle,
+    jboolean enabled) {
+  JS8Engine_Native* engine = reinterpret_cast<JS8Engine_Native*>(handle);
+  js8_engine_set_ft8_enabled(engine, enabled == JNI_TRUE);
+}
+
+JNIEXPORT void JNICALL
+Java_com_js8call_core_JS8Engine_nativeDebugFt8Recording(
+    JNIEnv* env,
+    jobject /* thiz */,
+    jlong handle,
+    jshortArray samples) {
+  JS8Engine_Native* engine = reinterpret_cast<JS8Engine_Native*>(handle);
+  if (!samples) return;
+  jsize n = env->GetArrayLength(samples);
+  jshort* data = env->GetShortArrayElements(samples, nullptr);
+  if (!data) return;
+  js8_engine_debug_ft8_recording(engine, reinterpret_cast<const int16_t*>(data), static_cast<size_t>(n));
+  env->ReleaseShortArrayElements(samples, data, JNI_ABORT);
+}
+
 JNIEXPORT jint JNICALL
 Java_com_js8call_core_JS8Engine_nativeGetTxFramesStarted(
     JNIEnv* /* env */,

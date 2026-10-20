@@ -1,14 +1,36 @@
 cmake_minimum_required(VERSION 3.22 FATAL_ERROR)
 
-project(js8core-jni VERSION 1.0.0 LANGUAGES CXX)
+project(js8core-jni VERSION 1.0.0 LANGUAGES C CXX)
 
 # Require C++20
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
 
+# ft8_lib (Karlis Goba, MIT, vendor/ft8_lib): FT8 decoder for the FT8 monitor
+set(FT8LIB_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/../../../vendor/ft8_lib)
+add_library(ft8lib STATIC
+  ${FT8LIB_ROOT}/ft8/decode.c
+  ${FT8LIB_ROOT}/ft8/ldpc.c
+  ${FT8LIB_ROOT}/ft8/osd.c
+  ${FT8LIB_ROOT}/ft8/crc.c
+  ${FT8LIB_ROOT}/ft8/message.c
+  ${FT8LIB_ROOT}/ft8/pack.c
+  ${FT8LIB_ROOT}/ft8/unpack.c
+  ${FT8LIB_ROOT}/ft8/text.c
+  ${FT8LIB_ROOT}/ft8/constants.c
+  ${FT8LIB_ROOT}/ft8/encode.c
+  ${FT8LIB_ROOT}/common/monitor.c
+  ${FT8LIB_ROOT}/fft/kiss_fft.c
+  ${FT8LIB_ROOT}/fft/kiss_fftr.c
+)
+target_include_directories(ft8lib PUBLIC ${FT8LIB_ROOT})
+target_compile_options(ft8lib PRIVATE -Wno-unused-function)
+set_target_properties(ft8lib PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
 # Create the JNI library
 add_library(js8core-jni SHARED
+  ft8_monitor.cpp
   bluetooth_serial_bridge_jni.cpp
   hamlib_rig_control_jni.cpp
   js8_engine_jni.cpp
@@ -29,6 +51,7 @@ target_link_libraries(js8core-jni
   PRIVATE
     js8core::js8core
     js8core::android-adapter
+    ft8lib
 )
 
 # Android-specific configuration

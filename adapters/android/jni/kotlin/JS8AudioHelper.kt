@@ -541,6 +541,12 @@ class UIThreadCallbackAdapter(
         }
     }
 
+    override fun onFt8Decoded(slotUtcMs: Long, freq: Float, snr: Int, text: String, callDe: String) {
+        handler.post {
+            delegate.onFt8Decoded(slotUtcMs, freq, snr, text, callDe)
+        }
+    }
+
     override fun onError(message: String) {
         handler.post {
             delegate.onError(message)

@@ -72,4 +72,14 @@
     </style>
 
     <style name="Js8GroupTitle" parent="Js8FrameText" />
+
+    <!-- Saved, Directed and Call Activity press-and-hold menus: list text size, shorter rows (Rob, 2026-10-19) -->
+    <style name="Js8PopupMenuText" parent="@android:style/TextAppearance.Material.Widget.PopupMenu.Large">
+        <item name="android:textSize">@dimen/js8_text</item>
+    </style>
+    <style name="ThemeOverlay.Js8PopupMenu" parent="">
+        <item name="android:textAppearanceLargePopupMenu">@style/Js8PopupMenuText</item>
+        <item name="android:textAppearanceSmallPopupMenu">@style/Js8PopupMenuText</item>
+        <item name="android:listPreferredItemHeightSmall">36dp</item>
+    </style>
 </resources>

@@ -89,6 +89,15 @@ class MainActivity : AppCompatActivity() {
                         }
                     }
                 }
+                JS8EngineService.ACTION_FT8_DECODED -> {
+                    // Easy JS8: FT8 heard in the JS8 audio, one line in the Message Window
+                    js8ActivityViewModel.onFt8(
+                        intent.getLongExtra(JS8EngineService.EXTRA_FT8_UTC_MS, System.currentTimeMillis()),
+                        intent.getFloatExtra(JS8EngineService.EXTRA_FT8_FREQ, 0f).toInt(),
+                        intent.getStringExtra(JS8EngineService.EXTRA_FT8_TEXT).orEmpty(),
+                        intent.getStringExtra(JS8EngineService.EXTRA_FT8_CALL_DE).orEmpty()
+                    )
+                }
                 JS8EngineService.ACTION_TX_FRAME -> {
                     // Easy JS8: each part of our transmission in the Message Window as it goes out
                     js8ActivityViewModel.onTxFrame(
@@ -244,6 +253,7 @@ class MainActivity : AppCompatActivity() {
             addAction(JS8EngineService.ACTION_QUEUE_TX)
             addAction(JS8EngineService.ACTION_TX_STATE)
             addAction(JS8EngineService.ACTION_TX_FRAME)
+            addAction(JS8EngineService.ACTION_FT8_DECODED)
             addAction(ACTION_PROCESS_TX_QUEUE)
         }
         LocalBroadcastManager.getInstance(this)

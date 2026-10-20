@@ -157,6 +157,8 @@ class Js8SettingsFragment : Fragment() {
         const val ARG_EMBEDDED = "embedded"
         /** "station" (default: Menu > File > Station…, Swipe screen 5) or "settings" (header Settings). */
         const val ARG_WINDOW = "window"
+        /** Station upright: last page of the list, not a settings section. */
+        private const val ABOUT_PAGE = "About"
     }
 
     private lateinit var vm: Js8SettingsViewModel
@@ -372,25 +374,34 @@ class Js8SettingsFragment : Fragment() {
      * that page (Rob, 2026-10-19: one long list was too much).
      */
     private fun renderStationPage() {
-        val pages = sections.map { it.tab }.distinct()
+        // About last, upright only (Rob, 2026-10-19: Settings > gear > Station > About)
+        val pages = sections.map { it.tab }.distinct() + ABOUT_PAGE
         val page = vm.page?.takeIf { it in pages }
         val col = column().apply { setPadding(px(10), px(4), px(10), px(16)) }
         if (page == null) {
-            col.addView(label("Station", size = 1.2f, bold = true).apply { setPadding(0, px(10), 0, px(10)) })
+            // Title centred over the page list (Rob, 2026-10-19)
+            col.addView(label("Station Settings", size = 1.2f, bold = true).apply {
+                setPadding(0, px(10), 0, px(10))
+                gravity = Gravity.CENTER_HORIZONTAL
+            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
             pages.forEach { name ->
                 col.addView(LinearLayout(requireContext()).apply {
                     orientation = LinearLayout.HORIZONTAL
                     gravity = Gravity.CENTER_VERTICAL
-                    minimumHeight = px(48)
+                    // 280 dp wide, centred, 40 dp tall: all pages fit upright (Rob, 2026-10-19)
+                    minimumHeight = px(40)
                     setPadding(px(12), 0, px(12), 0)
                     setBackgroundResource(R.drawable.js8_cfg_field)
                     addView(label(name, size = 1.1f), LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
                     addView(label("›", size = 1.4f))
                     setOnClickListener { vm.page = name; render() }
-                }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                }, LinearLayout.LayoutParams(px(280), ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                    gravity = Gravity.CENTER_HORIZONTAL
                     bottomMargin = px(6)
                 })
             }
+        } else if (page == ABOUT_PAGE) {
+            renderAbout(col)
         } else {
             col.addView(label(page, size = 1.2f, bold = true).apply { setPadding(0, px(10), 0, px(6)) })
             for (s in sections.filter { it.tab == page }) {
@@ -400,6 +411,32 @@ class Js8SettingsFragment : Fragment() {
             }
         }
         content.addView(ScrollView(requireContext()).apply { addView(col) })
+    }
+
+    /** Station > About: version, features over JS8Android, source, licence, credits (Rob, 2026-10-19). */
+    private fun renderAbout(col: LinearLayout) {
+        fun line(text: String, size: Float = 1f, bold: Boolean = false, top: Int = 0) =
+            col.addView(label(text, size, bold).apply {
+                setPadding(0, px(top), 0, px(3))
+                setLinkTextColor(color(R.color.js8_blue))
+                android.text.util.Linkify.addLinks(this, android.text.util.Linkify.WEB_URLS) // tap opens the browser
+            })
+        line("About Easy JS8", size = 1.2f, bold = true, top = 10)
+        line("by VA3OSO")
+        line("Version ${BuildConfig.VERSION_NAME} (build ${BuildConfig.VERSION_CODE})")
+        line("Built ${BuildConfig.BUILD_DATE}")
+        line("Easy JS8 is a fork of JS8Android.", top = 12)
+        line("Features", size = 1.1f, bold = true, top = 16)
+        listOf("Traditional style", "Upright and sideways layouts", "SWL mode", "JS8 Slow decoding",
+            "APRS forms", "FT8 decodes").forEach { line("  •  $it") }
+        line("Source: https://github.com/RobBobbins/Easy-JS8", top = 16)
+        line("Licence: GPLv3. No warranty.")
+        line("Credits", size = 1.1f, bold = true, top = 16)
+        line("WSJT-X: Joe Taylor K1JT and the WSJT Development Group")
+        line("JS8Call: Jordan Sherer KN4CRD and the JS8Call-improved team (AC9KH, W6BAZ, KJ4CTD, K0OG, DJ3EI, K4RWR)", top = 6)
+        line("JS8Android: https://github.com/JS8Call-improved/Android-port", top = 6)
+        line("ft8_lib (FT8 decodes): Kārlis Goba, MIT licence", top = 6)
+        line("Fonts: Selawik, Cascadia Mono (SIL Open Font Licence)", top = 6)
     }
 
     private fun sectionTitle(s: Section) = if (s.subTab != null) "${s.tab} – ${s.subTab}" else s.tab

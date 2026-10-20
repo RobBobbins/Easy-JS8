@@ -106,6 +106,9 @@ struct EngineCallbacks {
   std::function<void(events::Variant const&)> on_event;
   std::function<void(std::string_view message)> on_error;
   std::function<void(LogLevel level, std::string_view message)> on_log;
+  // Received audio as it enters the decode ring: mono samples, the first one's position in the
+  // ring (which is aligned to the UTC minute) and the ring size. Easy JS8 FT8 monitor.
+  std::function<void(std::int16_t const* samples, std::size_t frames, int ring_pos, int ring_size)> on_rx_audio;
 };
 
 struct EngineDependencies {

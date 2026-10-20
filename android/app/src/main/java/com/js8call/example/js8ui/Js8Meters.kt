@@ -123,8 +123,8 @@ class Js8CycleProgressView @JvmOverloads constructor(context: Context, attrs: At
     var period = 15
         set(value) { field = value; invalidate() }
 
-    private val track = Paint().apply { color = Color.WHITE }
-    private val fill = Paint().apply { color = ContextCompat.getColor(context, R.color.js8_slider_fill) }
+    private val track = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE }
+    private val fill = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = ContextCompat.getColor(context, R.color.js8_slider_fill) }
     private val text = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.BLACK
         textSize = resources.getDimension(R.dimen.js8_text) * 0.85f
@@ -132,11 +132,23 @@ class Js8CycleProgressView @JvmOverloads constructor(context: Context, attrs: At
         textAlign = Paint.Align.CENTER
     }
 
+    private val trackPath = android.graphics.Path()
+
     override fun onDraw(canvas: Canvas) {
         val w = width.toFloat()
         val h = height.toFloat()
-        canvas.drawRect(0f, 0f, w, h, track)
-        canvas.drawRect(0f, 0f, w * seconds / period.coerceAtLeast(1), h, fill)
+        // PC progress_bar_stylesheet: rounded ends on the white track and the blue fill (5 px radius on 14 px)
+        val r = h * 5f / 14f
+        trackPath.reset()
+        trackPath.addRoundRect(0f, 0f, w, h, r, r, android.graphics.Path.Direction.CW)
+        canvas.drawPath(trackPath, track)
+        val fw = w * seconds / period.coerceAtLeast(1)
+        if (fw > 0f) {
+            canvas.save()
+            canvas.clipPath(trackPath)
+            canvas.drawRoundRect(0f, 0f, fw, h, r, r, fill)
+            canvas.restore()
+        }
         canvas.drawText("$seconds/$period", w / 2f, h / 2f + text.textSize * 0.35f, text)
     }
 }

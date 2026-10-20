@@ -288,6 +288,9 @@ class JS8EngineService : Service() {
         if (key == PREF_LOG_MESSAGES) {
             updateMessageLogging()
         }
+        if (key == PREF_SHOW_FT8) {
+            applyFt8Setting()
+        }
     }
 
     override fun onCreate() {
@@ -365,6 +368,21 @@ class JS8EngineService : Service() {
             }
             ACTION_DEBUG_INJECT_DECODE -> {
                 if (BuildConfig.DEBUG) injectDecode(intent)
+            }
+            // Debug builds: FT8 monitor test with a 15 s 12 kHz 16-bit WAV in the app's files folder
+            ACTION_DEBUG_FT8_WAV -> {
+                if (BuildConfig.DEBUG) {
+                    val name = intent.getStringExtra("file") ?: "ft8.wav"
+                    val bytes = runCatching { java.io.File(filesDir, name).readBytes() }.getOrNull()
+                    if (bytes == null || bytes.size <= 44) {
+                        Log.w(TAG, "FT8 test: no $name in files")
+                    } else {
+                        val buf = java.nio.ByteBuffer.wrap(bytes, 44, bytes.size - 44).order(java.nio.ByteOrder.LITTLE_ENDIAN)
+                        val samples = ShortArray((bytes.size - 44) / 2) { buf.short }
+                        Log.i(TAG, "FT8 test: decoding $name (${samples.size} samples)")
+                        engine?.debugFt8Recording(samples)
+                    }
+                }
             }
             // Easy JS8 Halt button: stop the transmission now. The TX monitor sees the
             // session end, releases PTT and reports TX_STATE_FINISHED as usual.
@@ -640,6 +658,20 @@ class JS8EngineService : Service() {
                     }
                 }
 
+                // Easy JS8: FT8 heard in the JS8 audio, shown in the Message Window
+                override fun onFt8Decoded(slotUtcMs: Long, freq: Float, snr: Int, text: String, callDe: String) {
+                    Log.i(TAG, "FT8: $text (${freq.toInt()} Hz, $snr dB)")
+                    mainHandler.post {
+                        LocalBroadcastManager.getInstance(this@JS8EngineService).sendBroadcast(Intent(ACTION_FT8_DECODED).apply {
+                            putExtra(EXTRA_FT8_UTC_MS, slotUtcMs)
+                            putExtra(EXTRA_FT8_FREQ, freq)
+                            putExtra(EXTRA_FT8_SNR, snr)
+                            putExtra(EXTRA_FT8_TEXT, text)
+                            putExtra(EXTRA_FT8_CALL_DE, callDe)
+                        })
+                    }
+                }
+
                 override fun onError(message: String) {
                     Log.e(TAG, "Engine error: $message")
                     mainHandler.post {
@@ -691,6 +723,7 @@ class JS8EngineService : Service() {
                 spectrumEventCount = 0
 
                 applyTxBoostSetting()
+                applyFt8Setting()
                 applyTimeDriftSetting()
 
                 if (rigControlMode == "trusdx_serial") {
@@ -1055,6 +1088,13 @@ class JS8EngineService : Service() {
                 if (granted) open() else failEngineStart(generation, "USB permission denied for QMX CAT control.")
             }
         }
+    }
+
+    /** Settings > View > Show FT8 decodes in the Message Window (on when first installed). */
+    private fun applyFt8Setting() {
+        val on = PreferenceManager.getDefaultSharedPreferences(this).getBoolean(PREF_SHOW_FT8, true)
+        engine?.setFt8Enabled(on)
+        Log.i(TAG, "FT8 monitor: ${if (on) "on" else "off"}")
     }
 
     private fun applyTxBoostSetting() {
@@ -4301,6 +4341,14 @@ class JS8EngineService : Service() {
         const val ACTION_TX_STATE = "com.js8call.example.ACTION_TX_STATE"
         /** A part of the message being sent just started going out (text, index, count, chars sent, offset). */
         const val ACTION_TX_FRAME = "com.js8call.example.ACTION_TX_FRAME"
+        /** FT8 signal decoded in the JS8 audio (slot UTC ms, freq, snr, text, transmitting call). */
+        const val ACTION_FT8_DECODED = "com.js8call.example.ACTION_FT8_DECODED"
+        const val EXTRA_FT8_UTC_MS = "ft8_utc_ms"
+        const val EXTRA_FT8_FREQ = "ft8_freq"
+        const val EXTRA_FT8_SNR = "ft8_snr"
+        const val EXTRA_FT8_TEXT = "ft8_text"
+        const val EXTRA_FT8_CALL_DE = "ft8_call_de"
+        const val PREF_SHOW_FT8 = "js8cfg_show_ft8"
         const val EXTRA_TX_FRAME_TEXT = "tx_frame_text"
         const val EXTRA_TX_FRAME_INDEX = "tx_frame_index"
         const val EXTRA_TX_FRAME_COUNT = "tx_frame_count"
@@ -4313,6 +4361,7 @@ class JS8EngineService : Service() {
         const val ACTION_TIME_DRIFT = "com.js8call.example.ACTION_TIME_DRIFT"
         const val ACTION_RIG_STATUS = "com.js8call.example.ACTION_RIG_STATUS"
         const val ACTION_DEBUG_INJECT_DECODE = "com.js8call.example.ACTION_DEBUG_INJECT_DECODE"
+        const val ACTION_DEBUG_FT8_WAV = "com.js8call.example.ACTION_DEBUG_FT8_WAV"
         const val ACTION_HALT_TX = "com.js8call.example.ACTION_HALT_TX"
         const val ACTION_TUNE = "com.js8call.example.ACTION_TUNE"
         const val EXTRA_TUNE_ON = "tune_on"

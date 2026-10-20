@@ -235,6 +235,16 @@ class JS8Engine private constructor(
         return withNativeHandleOr(emptyList()) { nativeGetTxFrameTexts(it).toList() }
     }
 
+    /** FT8 monitor on/off: decodes FT8 signals heard in the JS8 audio (receive only). */
+    fun setFt8Enabled(enabled: Boolean) {
+        withNativeHandle { nativeSetFt8Enabled(it, enabled) }
+    }
+
+    /** Debug builds: decode one 15 s 12 kHz recording with the FT8 monitor (tests without a radio). */
+    fun debugFt8Recording(samples: ShortArray) {
+        withNativeHandle { nativeDebugFt8Recording(it, samples) }
+    }
+
     /** How many parts of the message being sent have started (the one on air is this minus 1). */
     fun txFramesStarted(): Int {
         return withNativeHandleOr(0) { nativeGetTxFramesStarted(it) }
@@ -353,6 +363,8 @@ class JS8Engine private constructor(
     private external fun nativeIsTransmittingAudio(handle: Long): Boolean
     private external fun nativeGetTxFrameTexts(handle: Long): Array<String>
     private external fun nativeGetTxFramesStarted(handle: Long): Int
+    private external fun nativeSetFt8Enabled(handle: Long, enabled: Boolean)
+    private external fun nativeDebugFt8Recording(handle: Long, samples: ShortArray)
     private external fun nativeTxMillisecondsUntilAudio(handle: Long): Int
     private external fun nativeSetTxReady(handle: Long, ready: Boolean)
     private external fun nativeSetTimeDriftMs(handle: Long, driftMs: Long)
@@ -392,6 +404,12 @@ class JS8Engine private constructor(
          * Called when decode cycle starts.
          */
         fun onDecodeStarted(submodes: Int)
+
+        /**
+         * FT8 signal decoded by the FT8 monitor (setFt8Enabled). slotUtcMs = start of its
+         * 15 s slot; callDe = transmitting callsign, empty when the message has none.
+         */
+        fun onFt8Decoded(slotUtcMs: Long, freq: Float, snr: Int, text: String, callDe: String) {}
 
         /**
          * Called when decode cycle finishes.

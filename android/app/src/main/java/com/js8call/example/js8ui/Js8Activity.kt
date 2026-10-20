@@ -48,6 +48,8 @@ class Js8Activity {
     /** One line of the Message Window. */
     class RxLine(val utcMs: Long, val offset: Int, val isTx: Boolean, val text: StringBuilder, var closed: Boolean) {
         var lastWasData = false
+        /** Characters of text shown in bold (FT8 transmitting callsign), or null. */
+        var bold: IntRange? = null
     }
 
     data class Directed(val from: String, val to: String, val cmd: String, val extra: String)
@@ -346,6 +348,24 @@ class Js8Activity {
         if (isLast) openRxLine.clear() else {
             openRxLine[offset] = line; openRxLine[bucket] = line; openRxLine[bucket + 10] = line
         }
+    }
+
+    /**
+     * FT8 signal heard in the JS8 audio: its own line, "FT8: CQ W1AW FN31", with the
+     * transmitting callsign (the message's second callsign) in bold. Repeats within a slot are dropped.
+     */
+    fun writeFt8(slotUtcMs: Long, offset: Int, message: String, callDe: String) {
+        val text = "FT8: $message"
+        if (rxLines.any { it.utcMs == slotUtcMs && it.text.toString() == text }) return
+        val line = RxLine(slotUtcMs, offset, isTx = false, text = StringBuilder(text), closed = true)
+        if (callDe.isNotEmpty()) {
+            // second callsign: search after the first word, so "W1AW W1AW" style repeats bold the right one
+            val firstSpace = message.indexOf(' ')
+            val at = if (firstSpace < 0) -1 else message.indexOf(callDe, firstSpace + 1)
+            if (at >= 0) line.bold = (5 + at) until (5 + at + callDe.length)
+        }
+        rxLines += line
+        while (rxLines.size > 500) rxLines.removeAt(0)
     }
 
     /**

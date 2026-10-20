@@ -180,7 +180,7 @@
 
         <!-- 6. Status Bar -->
         <include
-            layout="@layout/js8_status_bar"
+            layout="@layout/js8_status_bar_upright"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="10dp" />

@@ -1,0 +1,59 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Upright Status Bar (Rob, 2026-10-19): Receiving | cycle progress (to the page's right edge,
+     width set in Js8MainFragment) | JS8 Normal | Freq | Auto Reply | Last Tx. The last four are
+     off to the right; the row scrolls sideways. -->
+<HorizontalScrollView xmlns:android="http://schemas.android.com/apk/res/android"
+    android:id="@+id/js8_status_scroll"
+    android:layout_width="match_parent"
+    android:layout_height="wrap_content"
+    android:scrollbars="none">
+
+    <LinearLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <TextView
+            android:id="@+id/js8_status_state"
+            style="@style/Js8StatusLabel"
+            android:layout_width="173dp"
+            android:background="@drawable/js8_status_green"
+            android:text="Receiving" />
+
+        <com.js8call.example.js8ui.Js8CycleProgressView
+            android:id="@+id/js8_status_progress"
+            android:layout_width="173dp"
+            android:layout_height="22dp"
+            android:layout_marginStart="9dp" />
+
+        <TextView
+            android:id="@+id/js8_status_mode"
+            style="@style/Js8StatusLabel"
+            android:layout_width="wrap_content"
+            android:layout_marginStart="9dp"
+            android:text="JS8 Normal" />
+
+        <TextView
+            android:id="@+id/js8_status_freq"
+            style="@style/Js8StatusLabel"
+            android:layout_width="wrap_content"
+            android:layout_marginStart="9dp"
+            android:text="Freq: 14.079 500" />
+
+        <TextView
+            android:id="@+id/js8_status_autoreply"
+            style="@style/Js8StatusLabel"
+            android:layout_width="wrap_content"
+            android:layout_marginStart="9dp"
+            android:text="Auto Reply: On" />
+
+        <!-- PC Last Tx (not filled yet) -->
+        <TextView
+            android:id="@+id/js8_status_blank"
+            style="@style/Js8StatusLabel"
+            android:layout_width="173dp"
+            android:layout_marginStart="9dp"
+            android:layout_marginEnd="22dp" />
+    </LinearLayout>
+</HorizontalScrollView>

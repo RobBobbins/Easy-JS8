@@ -63,6 +63,8 @@ class Js8TableView @JvmOverloads constructor(
     var tableKey: String = ""
     var onRowClick: ((Row) -> Unit)? = null
     var onRowDoubleClick: ((Row) -> Unit)? = null
+    /** Press and hold a row (PC right-click): the row and the view to anchor a menu to. */
+    var onRowLongClick: ((Row, android.view.View) -> Unit)? = null
     var selectedRowId: String? = null
         set(value) { field = value; rebindAll() }
 
@@ -322,6 +324,11 @@ class Js8TableView @JvmOverloads constructor(
                 }
                 lastClickId = row.id
                 lastClickTime = now
+            }
+            rv.setOnLongClickListener { v ->
+                val handler = onRowLongClick ?: return@setOnLongClickListener false
+                handler(row, v)
+                true
             }
         }
     }

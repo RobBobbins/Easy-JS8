@@ -22,6 +22,7 @@
 #include "js8core/android/rig_android.hpp"
 #include "js8core/android/scheduler_android.hpp"
 #include "js8core/android/storage_android.hpp"
+#include "ft8_monitor.hpp"
 
 // Forward declarations of JNI methods (defined in js8_jni_methods.cpp)
 extern "C" {
@@ -44,6 +45,8 @@ JNIEXPORT jboolean JNICALL Java_com_js8call_core_JS8Engine_nativeIsTransmitting(
 JNIEXPORT jboolean JNICALL Java_com_js8call_core_JS8Engine_nativeIsTransmittingAudio(JNIEnv*, jobject, jlong);
 JNIEXPORT jobjectArray JNICALL Java_com_js8call_core_JS8Engine_nativeGetTxFrameTexts(JNIEnv*, jobject, jlong);
 JNIEXPORT jint JNICALL Java_com_js8call_core_JS8Engine_nativeGetTxFramesStarted(JNIEnv*, jobject, jlong);
+JNIEXPORT void JNICALL Java_com_js8call_core_JS8Engine_nativeSetFt8Enabled(JNIEnv*, jobject, jlong, jboolean);
+JNIEXPORT void JNICALL Java_com_js8call_core_JS8Engine_nativeDebugFt8Recording(JNIEnv*, jobject, jlong, jshortArray);
 JNIEXPORT jint JNICALL Java_com_js8call_core_JS8Engine_nativeTxMillisecondsUntilAudio(JNIEnv*, jobject, jlong);
 JNIEXPORT void JNICALL Java_com_js8call_core_JS8Engine_nativeSetTxReady(JNIEnv*, jobject, jlong, jboolean);
 JNIEXPORT void JNICALL Java_com_js8call_core_JS8Engine_nativeSetTimeDriftMs(JNIEnv*, jobject, jlong, jlong);
@@ -74,6 +77,9 @@ struct JS8Engine_Native {
     std::chrono::steady_clock::time_point received_at;
   };
   std::vector<CompoundCall> compound_calls;
+
+  // Easy JS8: FT8 signals heard in the JS8 audio (receive only)
+  std::unique_ptr<Ft8Monitor> ft8;
 
   bool tx_boost_enabled = false;
   std::mutex tx_boost_mutex;
@@ -537,6 +543,32 @@ static void log_callback(JS8Engine_Native* native, js8core::LogLevel level, std:
 
 extern "C" {
 
+// FT8 decodes to Java: CallbackHandler.onFt8Decoded(slotUtcMs, freq, snr, text, callDe).
+static void ft8_callback(JS8Engine_Native* native, std::vector<Ft8Decode> const& decodes) {
+  if (!native || !native->callback_handler) return;
+  JNIEnv* env = get_jni_env();
+  if (!env) return;
+  std::lock_guard<std::mutex> lock(native->callback_mutex);
+  jclass handler_class = env->GetObjectClass(native->callback_handler);
+  if (!handler_class) return;
+  jmethodID method = env->GetMethodID(handler_class, "onFt8Decoded",
+                                      "(JFILjava/lang/String;Ljava/lang/String;)V");
+  if (!method) {
+    env->ExceptionClear();
+  } else {
+    for (auto const& d : decodes) {
+      jstring text = env->NewStringUTF(d.text.c_str());
+      jstring call_de = env->NewStringUTF(d.call_de.c_str());
+      env->CallVoidMethod(native->callback_handler, method, static_cast<jlong>(d.slot_utc_ms),
+                          static_cast<jfloat>(d.freq_hz), static_cast<jint>(d.snr), text, call_de);
+      if (env->ExceptionCheck()) env->ExceptionClear();
+      env->DeleteLocalRef(text);
+      env->DeleteLocalRef(call_de);
+    }
+  }
+  env->DeleteLocalRef(handler_class);
+}
+
 JS8Engine_Native* js8_engine_create(JNIEnv* env, jobject callback_handler,
                                      int sample_rate_hz, int submodes,
                                      int enable_tx_audio_tap,
@@ -632,6 +664,15 @@ JS8Engine_Native* js8_engine_create(JNIEnv* env, jobject callback_handler,
     log_callback(native, level, msg);
   };
 
+  // FT8 monitor: off until the app turns it on (Settings > View > Show FT8 decodes ...)
+  native->ft8 = std::make_unique<Ft8Monitor>(
+      [native](std::vector<Ft8Decode> const& decodes) { ft8_callback(native, decodes); },
+      []() { if (g_jvm) g_jvm->DetachCurrentThread(); });
+  callbacks.on_rx_audio = [native, sample_rate_hz](std::int16_t const* samples, std::size_t frames,
+                                                   int ring_pos, int ring_size) {
+    if (native->ft8) native->ft8->feed(samples, frames, ring_pos, ring_size, sample_rate_hz);
+  };
+
   js8core::EngineDependencies deps;
   deps.audio_in = nullptr;  // Use Java-side capture instead of native Oboe
   deps.audio_out = native->audio_out.get();
@@ -661,6 +702,8 @@ void js8_engine_destroy(JS8Engine_Native* engine) {
   // Destroy the core engine while its callbacks and adapter dependencies are
   // still alive. Its destructor stops and joins the decode/spectrum workers.
   engine->engine.reset();
+  // Then the FT8 monitor (joins its worker, which may still call into Java)
+  engine->ft8.reset();
 
   // Delete global reference to callback handler
   if (engine->callback_handler) {
@@ -955,6 +998,16 @@ std::vector<std::string> js8_engine_tx_frame_texts(JS8Engine_Native* engine) {
 
 extern "C" {
 
+void js8_engine_debug_ft8_recording(JS8Engine_Native* engine, const int16_t* samples, size_t frames) {
+  if (!engine || !engine->ft8) return;
+  engine->ft8->decode_recording(samples, frames, engine->audio_format.sample_rate);
+}
+
+void js8_engine_set_ft8_enabled(JS8Engine_Native* engine, bool enabled) {
+  if (!engine || !engine->ft8) return;
+  engine->ft8->set_enabled(enabled);
+}
+
 int js8_engine_tx_frames_started(JS8Engine_Native* engine) {
   if (!engine || !engine->engine) return 0;
   return engine->engine->tx_frames_started();
@@ -1019,6 +1072,10 @@ int js8_register_natives(JavaVM* vm, JNIEnv* env) {
      (void*)Java_com_js8call_core_JS8Engine_nativeGetTxFrameTexts},
     {"nativeGetTxFramesStarted", "(J)I",
      (void*)Java_com_js8call_core_JS8Engine_nativeGetTxFramesStarted},
+    {"nativeSetFt8Enabled", "(JZ)V",
+     (void*)Java_com_js8call_core_JS8Engine_nativeSetFt8Enabled},
+    {"nativeDebugFt8Recording", "(J[S)V",
+     (void*)Java_com_js8call_core_JS8Engine_nativeDebugFt8Recording},
     {"nativeTxMillisecondsUntilAudio", "(J)I",
      (void*)Java_com_js8call_core_JS8Engine_nativeTxMillisecondsUntilAudio},
     {"nativeSetTxReady", "(JZ)V",

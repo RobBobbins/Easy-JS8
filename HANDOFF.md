@@ -122,6 +122,21 @@ values (ViewModel keyed by window).
   CQ / Directed etc. do nothing meanwhile (`Js8ActivityViewModel.typed`). Heartbeats and replies
   show part by part too. Tested on the emulator only, not with a radio.
 
+### FT8 monitor (third session, 2026-10-19)
+
+- FT8 signals heard in the JS8 audio (receive only) appear in the Message Window:
+  `HH:MM:SS - (offset) - FT8: CQ **W1AW** FN31`, transmitting callsign bold (2nd callsign of standard /
+  nonstandard-call messages). **Settings → View → Show FT8 decodes in the Message Window**
+  (`js8cfg_show_ft8`, on by default); off = decoder not fed.
+- ft8_lib (Kārlis Goba, MIT) copied from Easy FT8 into `vendor/ft8_lib`, built into js8core-jni.
+  Core engine `EngineCallbacks.on_rx_audio` hands each audio chunk with its UTC-minute ring position
+  to `adapters/android/jni/ft8_monitor.cpp`, which assembles 15 s slots and decodes on its own thread.
+- Debug test (no radio): `adb push <15 s 12 kHz WAV> /data/local/tmp/ft8.wav`,
+  `adb shell "run-as com.easyjs8.app cp /data/local/tmp/ft8.wav files/ft8.wav"`, then
+  `adb shell am broadcast -n com.easyjs8.app/com.js8call.example.debug.DebugFt8Receiver --es file ft8.wav`
+  (RX on). Test WAVs: `E:\new-w3bguru-websites\easyft8\ft8af\app\src\main\cpp\ft8af_glue\testdata\ft8`
+  (20m_busy_test_01: 18 of 24 listed decodes). Not tested with real FT8 over a radio.
+
 ## Choices made without Rob confirming yet
 
 - APRS page buttons named **OK** / **Cancel**; APRS menu items hidden sideways.

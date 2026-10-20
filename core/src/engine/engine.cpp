@@ -171,9 +171,20 @@ public:
       callbacks_.on_log(LogLevel::Info, log_msg);
     }
 
+    int const ring_start = decode_state_.params.kin;
     for (std::size_t i = 0; i < frames; ++i) {
       auto write_index = (static_cast<std::size_t>(decode_state_.params.kin) + i) % decode_state_.samples.size();
       decode_state_.samples[write_index] = raw[i * buffer.format.channels];
+    }
+    if (callbacks_.on_rx_audio && frames > 0) {
+      int const ring_size = static_cast<int>(decode_state_.samples.size());
+      if (buffer.format.channels == 1) {
+        callbacks_.on_rx_audio(raw, frames, ring_start, ring_size);
+      } else {
+        std::vector<std::int16_t> mono(frames);
+        for (std::size_t i = 0; i < frames; ++i) mono[i] = raw[i * buffer.format.channels];
+        callbacks_.on_rx_audio(mono.data(), frames, ring_start, ring_size);
+      }
     }
     decode_state_.params.kin = (decode_state_.params.kin + static_cast<int>(frames)) %
                                static_cast<int>(decode_state_.samples.size());
