@@ -249,6 +249,16 @@ Java_com_js8call_core_JS8Engine_nativeSetTimeDriftMs(
   js8_engine_set_time_drift_ms(engine, static_cast<long long>(drift_ms));
 }
 
+JNIEXPORT void JNICALL
+Java_com_js8call_core_JS8Engine_nativeSetAutoSync(
+    JNIEnv* /* env */,
+    jobject /* thiz */,
+    jlong handle,
+    jboolean enabled) {
+  JS8Engine_Native* engine = reinterpret_cast<JS8Engine_Native*>(handle);
+  js8_engine_set_auto_sync(engine, static_cast<bool>(enabled));
+}
+
 JNIEXPORT jlong JNICALL
 Java_com_js8call_core_JS8Engine_nativeGetTimeDriftMs(
     JNIEnv* /* env */,

@@ -51,6 +51,7 @@ JNIEXPORT void JNICALL Java_com_js8call_core_JS8Engine_nativeDebugFt8Recording(J
 JNIEXPORT jint JNICALL Java_com_js8call_core_JS8Engine_nativeTxMillisecondsUntilAudio(JNIEnv*, jobject, jlong);
 JNIEXPORT void JNICALL Java_com_js8call_core_JS8Engine_nativeSetTxReady(JNIEnv*, jobject, jlong, jboolean);
 JNIEXPORT void JNICALL Java_com_js8call_core_JS8Engine_nativeSetTimeDriftMs(JNIEnv*, jobject, jlong, jlong);
+JNIEXPORT void JNICALL Java_com_js8call_core_JS8Engine_nativeSetAutoSync(JNIEnv*, jobject, jlong, jboolean);
 JNIEXPORT jlong JNICALL Java_com_js8call_core_JS8Engine_nativeGetTimeDriftMs(JNIEnv*, jobject, jlong);
 }
 
@@ -1044,6 +1045,11 @@ void js8_engine_set_time_drift_ms(JS8Engine_Native* engine, long long drift_ms) 
   engine->engine->set_time_drift_ms(drift_ms);
 }
 
+void js8_engine_set_auto_sync(JS8Engine_Native* engine, bool enabled) {
+  if (!engine || !engine->engine) return;
+  engine->engine->set_auto_sync(enabled);
+}
+
 long long js8_engine_get_time_drift_ms(JS8Engine_Native* engine) {
   if (!engine || !engine->engine) return 0;
   return engine->engine->time_drift_ms();
@@ -1105,6 +1111,8 @@ int js8_register_natives(JavaVM* vm, JNIEnv* env) {
      (void*)Java_com_js8call_core_JS8Engine_nativeSetTxReady},
     {"nativeSetTimeDriftMs", "(JJ)V",
      (void*)Java_com_js8call_core_JS8Engine_nativeSetTimeDriftMs},
+    {"nativeSetAutoSync", "(JZ)V",
+     (void*)Java_com_js8call_core_JS8Engine_nativeSetAutoSync},
     {"nativeGetTimeDriftMs", "(J)J",
      (void*)Java_com_js8call_core_JS8Engine_nativeGetTimeDriftMs},
     {"nativeIsRunning", "(J)Z", (void*)Java_com_js8call_core_JS8Engine_nativeIsRunning}

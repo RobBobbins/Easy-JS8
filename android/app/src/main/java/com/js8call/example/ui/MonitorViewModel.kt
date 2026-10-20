@@ -122,6 +122,11 @@ class MonitorViewModel(application: Application) : AndroidViewModel(application)
         _status.value = _status.value?.copy(timeDriftMs = driftMs)
     }
 
+    /** Automatic Time Drift started or stopped by the service. */
+    fun updateAutoDrift(on: Boolean) {
+        _status.value = _status.value?.copy(autoDriftOn = on)
+    }
+
     /**
      * Set the TX offset frequency in Hz.
      */

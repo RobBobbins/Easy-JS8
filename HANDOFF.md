@@ -4,8 +4,9 @@ Read this first, then `LAYOUT.md` (the layout spec and the PC values it copies; 
 this session too).
 
 **Fourth session (2026-10-20) worked on sideways, mostly PC mode** (see "Sideways, fourth session").
-**Next:** Waterfall Controls → Timing tab, then Display tab (Rob's PC captures described there);
-the wpm box upright is still to place. Nothing from the fourth session is committed yet.
+**Fifth session (2026-10-20):** Waterfall Controls → **Timing** tab built (see "Timing tab").
+**Next:** Display tab (Rob's PC capture described under the fourth session); the wpm box upright
+is still to place. Fourth session committed (7717b9d8); Timing tab committed in the fifth session.
 
 ## What this is
 
@@ -229,6 +230,28 @@ Rob's rule: **every menu has the same items in every layout; only the look diffe
   decode(s), three Set Time Drift to Now buttons, Reset Time Drift; engine has time drift), then
   Display tab (Rob's capture: Start, Bins Per Pixel, Palette, Scroll Speed, Avg N, Flatten, Smooth,
   Waterfall Gain/Zero, Display Decode Attempts, Spectrum, Filter Opacity — mostly new drawing code).
+- **Timing tab** (fifth session; WideGraph.ui timingTab / WideGraph.cpp, 3.0.3 source): third tab
+  after Control · Display (tabs now switch; Display still has no page). **Time Drift: n ms** ∧ ∨
+  (100 ms steps, ±30000), **Automatic**: **Start Automatic Time Drift** (reads **Stop Automatic
+  Time Drift**, bold, while on; not kept after restart, like the PC), **Stop After:** (on) +
+  **n decode(s)** (1–1024, greyed while running; keys `js8cfg_auto_drift_stop/after`), **Manual**:
+  Minute Start / TX End / TX Start / Reset (PC formulas, computer clock, current speed's cycle).
+  Engine: new `set_auto_sync` (engine.hpp/.cpp, JNI `nativeSetAutoSync`, `JS8Engine.setAutoSync`):
+  while on, Normal and Slow decode the last cycle of audio once a second
+  (`isEverySecondReady`, PC decodeEnqueueReadyExperiment everySecond); one decode pass takes ~2 s
+  on the emulator, so there it is every ~2 s. Service: `ACTION_SET_AUTO_DRIFT` / broadcast
+  `ACTION_AUTO_DRIFT`; Normal/Slow decodes feed the same 60-decode average, then count down.
+  **Duplicate frames** are now dropped in the service (same speed + text within half a cycle,
+  PC m_messageDupeCache) before auto-reply, relay, inbox and drift see them.
+  Rob: **Automatic time sync** (Station → Phone) is a different job (always on) — keep both.
+  Tested on the emulator: tab layout PC mode and upright, ∧, Start/Stop look, every-second
+  decode windows in the log and back to cycle windows after Stop, four Manual buttons' values.
+  Not tested: drift from real signals and the Stop After count (emulator has no JS8 audio), Swipe.
+  **Upright sizes (Rob):** on both Waterfall Controls tabs every button and field is only as wide
+  as its text (fields as wide as their longest value) and centred; group frames stay full width
+  (`Js8WaterfallControls.fitUpright`). Sideways keeps the PC's fill-the-panel widths; there
+  **Set Time Drift to Now (Minute Start)** shrinks its text to fit a narrow panel.
+  Line endings: most source files are CRLF, some LF — keep each file's own when editing.
 - Station sideways: **About** is the last tab; the tab row scrolls to the lit tab.
 - Header Offset slider: locked while a message waits or is sent (same rule as waterfall taps).
   Not tested (needs a queued message).

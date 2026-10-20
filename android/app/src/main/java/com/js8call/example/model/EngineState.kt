@@ -22,6 +22,8 @@ enum class EngineState {
     val audioDevice: String = "Unknown",
     val txOffsetHz: Float = 1500f, // Default TX offset
     val timeDriftMs: Long = 0L,
+    /** Waterfall Controls > Timing: Start Automatic Time Drift is running. */
+    val autoDriftOn: Boolean = false,
     val errorMessage: String? = null
 ) {
     val isRunning: Boolean

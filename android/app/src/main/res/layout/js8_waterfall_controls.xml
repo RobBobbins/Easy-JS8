@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Waterfall Controls: Control / Display tabs (JS8_UI/WideGraph.ui). -->
+<!-- Waterfall Controls: Control / Display / Timing tabs (JS8_UI/WideGraph.ui). -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="vertical">
@@ -31,6 +32,17 @@
             android:paddingEnd="12dp"
             android:singleLine="true"
             android:text="Display" />
+
+        <TextView
+            android:id="@+id/js8_wf_tab_timing"
+            style="@style/Js8FrameText"
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:gravity="center"
+            android:paddingStart="12dp"
+            android:paddingEnd="12dp"
+            android:singleLine="true"
+            android:text="Timing" />
     </LinearLayout>
 
     <!-- Control tab (WideGraph.ui, Rob's capture 2026-10-20): spin boxes with ∧ ∨, QSY, filter
@@ -82,7 +94,7 @@
             android:layout_height="wrap_content" android:layout_marginTop="8dp" android:text="Filter" />
         <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
             android:background="@drawable/js8_groupbox" android:orientation="vertical" android:padding="8dp">
-            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+            <LinearLayout android:id="@+id/js8_wf_filter_row" android:layout_width="match_parent" android:layout_height="wrap_content"
                 android:baselineAligned="false" android:gravity="center_vertical" android:orientation="horizontal">
                 <CheckBox android:id="@+id/js8_wf_filter_enable" style="@style/Js8FrameText"
                     android:layout_width="0dp" android:layout_height="30dp" android:layout_weight="1"
@@ -91,9 +103,9 @@
                     style="@style/Js8Button" android:layout_width="0dp" android:layout_weight="1"
                     android:layout_marginStart="8dp" android:text="Sync" />
             </LinearLayout>
-            <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+            <LinearLayout android:id="@+id/js8_wf_filter_boxes_row" android:layout_width="match_parent" android:layout_height="wrap_content"
                 android:layout_marginTop="8dp" android:baselineAligned="false" android:orientation="horizontal">
-                <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
+                <LinearLayout android:id="@+id/js8_wf_filter_center_col" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
                     android:gravity="center_horizontal" android:orientation="vertical">
                     <LinearLayout android:id="@+id/js8_wf_filter_center_box" android:layout_width="match_parent" android:layout_height="30dp"
                 android:background="@drawable/js8_spin_field" android:gravity="center_vertical" android:orientation="horizontal">
@@ -108,7 +120,7 @@
                     <com.js8call.example.js8ui.Js8KnobView android:id="@+id/js8_wf_filter_center_knob"
                         android:layout_width="64dp" android:layout_height="64dp" android:layout_marginTop="10dp" />
                 </LinearLayout>
-                <LinearLayout android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
+                <LinearLayout android:id="@+id/js8_wf_filter_width_col" android:layout_width="0dp" android:layout_height="wrap_content" android:layout_weight="1"
                     android:layout_marginStart="8dp" android:gravity="center_horizontal" android:orientation="vertical">
                     <LinearLayout android:id="@+id/js8_wf_filter_width_box" android:layout_width="match_parent" android:layout_height="30dp"
                 android:background="@drawable/js8_spin_field" android:gravity="center_vertical" android:orientation="horizontal">
@@ -124,6 +136,76 @@
                         android:layout_width="64dp" android:layout_height="64dp" android:layout_marginTop="10dp" />
                 </LinearLayout>
             </LinearLayout>
+        </LinearLayout>
+    </LinearLayout>
+
+    <!-- Timing tab (WideGraph.ui timingTab): Time Drift box, Automatic and Manual groups.
+         Wired in Js8WaterfallControls.kt. -->
+    <LinearLayout
+        android:id="@+id/js8_wf_timing_page"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="@drawable/js8_groupbox"
+        android:orientation="vertical"
+        android:padding="8dp"
+        android:visibility="gone">
+
+        <LinearLayout android:id="@+id/js8_wf_drift_box" android:layout_width="match_parent" android:layout_height="30dp"
+            android:background="@drawable/js8_spin_field" android:gravity="center_vertical" android:orientation="horizontal">
+            <TextView android:id="@+id/js8_wf_drift" style="@style/Js8FrameText" android:layout_width="0dp"
+                android:layout_height="match_parent" android:layout_weight="1" android:ellipsize="none" android:gravity="center"
+                android:paddingStart="8dp" android:singleLine="true" android:text="Time Drift: 0 ms" />
+            <TextView android:id="@+id/js8_wf_drift_up" style="@style/Js8FrameText" android:layout_width="18dp"
+                android:layout_height="match_parent" android:gravity="center" android:text="∧" />
+            <TextView android:id="@+id/js8_wf_drift_down" style="@style/Js8FrameText" android:layout_width="18dp"
+                android:layout_height="match_parent" android:layout_marginEnd="4dp" android:gravity="center" android:text="∨" />
+        </LinearLayout>
+
+        <TextView style="@style/Js8GroupTitle" android:layout_width="wrap_content"
+            android:layout_height="wrap_content" android:layout_marginTop="8dp" android:text="Automatic" />
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:background="@drawable/js8_groupbox" android:orientation="vertical" android:padding="8dp">
+            <androidx.appcompat.widget.AppCompatButton android:id="@+id/js8_wf_auto_drift"
+                style="@style/Js8Button" android:layout_width="match_parent" android:singleLine="true"
+                android:text="Start Automatic Time Drift" />
+            <LinearLayout android:id="@+id/js8_wf_auto_drift_row" android:layout_width="match_parent" android:layout_height="wrap_content"
+                android:layout_marginTop="8dp" android:baselineAligned="false" android:gravity="center_vertical"
+                android:orientation="horizontal">
+                <CheckBox android:id="@+id/js8_wf_auto_drift_stop" style="@style/Js8FrameText"
+                    android:layout_width="wrap_content" android:layout_height="30dp"
+                    android:singleLine="true" android:text="Stop After:" />
+                <LinearLayout android:id="@+id/js8_wf_auto_drift_count_box" android:layout_width="0dp" android:layout_height="30dp"
+                    android:layout_weight="1" android:layout_marginStart="4dp"
+                    android:background="@drawable/js8_spin_field" android:gravity="center_vertical" android:orientation="horizontal">
+                    <TextView android:id="@+id/js8_wf_auto_drift_count" style="@style/Js8FrameText" android:layout_width="0dp"
+                        android:layout_height="match_parent" android:layout_weight="1" android:ellipsize="none" android:gravity="center_vertical"
+                        android:paddingStart="8dp" android:singleLine="true" android:text="1 decode(s)" />
+                    <TextView android:id="@+id/js8_wf_auto_drift_count_up" style="@style/Js8FrameText" android:layout_width="18dp"
+                        android:layout_height="match_parent" android:gravity="center" android:text="∧" />
+                    <TextView android:id="@+id/js8_wf_auto_drift_count_down" style="@style/Js8FrameText" android:layout_width="18dp"
+                        android:layout_height="match_parent" android:layout_marginEnd="4dp" android:gravity="center" android:text="∨" />
+                </LinearLayout>
+            </LinearLayout>
+        </LinearLayout>
+
+        <TextView style="@style/Js8GroupTitle" android:layout_width="wrap_content"
+            android:layout_height="wrap_content" android:layout_marginTop="8dp" android:text="Manual" />
+        <LinearLayout android:layout_width="match_parent" android:layout_height="wrap_content"
+            android:background="@drawable/js8_groupbox" android:orientation="vertical" android:padding="8dp">
+            <androidx.appcompat.widget.AppCompatButton android:id="@+id/js8_wf_drift_minute"
+                style="@style/Js8Button" android:layout_width="match_parent" android:singleLine="false" android:maxLines="1"
+                app:autoSizeTextType="uniform" app:autoSizeMinTextSize="9dp" app:autoSizeMaxTextSize="14.3dp"
+                app:autoSizeStepGranularity="0.5dp"
+                android:text="Set Time Drift to Now (Minute Start)" />
+            <androidx.appcompat.widget.AppCompatButton android:id="@+id/js8_wf_drift_end"
+                style="@style/Js8Button" android:layout_width="match_parent" android:layout_marginTop="6dp"
+                android:singleLine="true" android:text="Set Time Drift to Now (TX End)" />
+            <androidx.appcompat.widget.AppCompatButton android:id="@+id/js8_wf_drift_start"
+                style="@style/Js8Button" android:layout_width="match_parent" android:layout_marginTop="6dp"
+                android:singleLine="true" android:text="Set Time Drift to Now (TX Start)" />
+            <androidx.appcompat.widget.AppCompatButton android:id="@+id/js8_wf_drift_reset"
+                style="@style/Js8Button" android:layout_width="match_parent" android:layout_marginTop="6dp"
+                android:singleLine="true" android:text="Reset Time Drift" />
         </LinearLayout>
     </LinearLayout>
 </LinearLayout>

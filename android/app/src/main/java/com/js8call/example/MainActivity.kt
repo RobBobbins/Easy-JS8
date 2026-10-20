@@ -172,6 +172,8 @@ class MainActivity : AppCompatActivity() {
                     val driftMs = intent.getLongExtra(JS8EngineService.EXTRA_TIME_DRIFT_MS, 0L)
                     monitorViewModel.updateTimeDrift(driftMs)
                 }
+                JS8EngineService.ACTION_AUTO_DRIFT ->
+                    monitorViewModel.updateAutoDrift(intent.getBooleanExtra(JS8EngineService.EXTRA_AUTO_DRIFT_ON, false))
                 JS8EngineService.ACTION_RIG_STATUS -> {
                     val connected = intent.getBooleanExtra(JS8EngineService.EXTRA_RIG_CONNECTED, false)
                     monitorViewModel.updateRigConnected(connected)
@@ -268,6 +270,7 @@ class MainActivity : AppCompatActivity() {
             addAction(JS8EngineService.ACTION_AUDIO_DEVICE_LOST)
             addAction(JS8EngineService.ACTION_RADIO_FREQUENCY)
             addAction(JS8EngineService.ACTION_TIME_DRIFT)
+            addAction(JS8EngineService.ACTION_AUTO_DRIFT)
             addAction(JS8EngineService.ACTION_RIG_STATUS)
         }
         LocalBroadcastManager.getInstance(this)

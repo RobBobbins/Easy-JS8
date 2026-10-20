@@ -145,6 +145,9 @@ public:
   virtual void set_tx_boost_enabled(bool enabled) = 0;
   virtual void set_submodes(int submodes) = 0;
   virtual void set_sync_stats(bool enabled) = 0;
+  // Waterfall Controls > Timing > Start Automatic Time Drift (PC WideGraph::isAutoSyncEnabled):
+  // Normal and Slow are decoded every second instead of once per cycle.
+  virtual void set_auto_sync(bool /*enabled*/) {}
 
   // Positive = engine clock ahead of system clock; takes effect at the next captured buffer.
   virtual void set_time_drift_ms(std::int64_t drift_ms) = 0;

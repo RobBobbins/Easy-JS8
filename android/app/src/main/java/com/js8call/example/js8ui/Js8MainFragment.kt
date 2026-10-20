@@ -200,7 +200,21 @@ class Js8MainFragment : Fragment() {
         wfControls = Js8WaterfallControls(view, prefs(), waterfall,
             offset = { monitorVm.getTxOffset().toInt() },
             setOffset = { hz -> jumpToOffset(hz) },
-            qsy = { center -> qsy(center) })
+            qsy = { center -> qsy(center) },
+            period = { progress.period },
+            setDrift = { ms ->
+                requireContext().startService(Intent(requireContext(), JS8EngineService::class.java).apply {
+                    action = JS8EngineService.ACTION_SET_TIME_DRIFT
+                    putExtra(JS8EngineService.EXTRA_TIME_DRIFT_MS, ms)
+                })
+            },
+            setAutoDrift = { on, stopAfter ->
+                requireContext().startService(Intent(requireContext(), JS8EngineService::class.java).apply {
+                    action = JS8EngineService.ACTION_SET_AUTO_DRIFT
+                    putExtra(JS8EngineService.EXTRA_AUTO_DRIFT_ON, on)
+                    putExtra(JS8EngineService.EXTRA_AUTO_DRIFT_STOP_AFTER, stopAfter)
+                })
+            })
         observe()
         if (!startupChecked) {
             startupChecked = true
@@ -1212,6 +1226,7 @@ class Js8MainFragment : Fragment() {
             renderStatus()
             offsetSlider?.let { if (it.progress != status.txOffsetHz.toInt()) it.progress = status.txOffsetHz.toInt() }
             renderOffsetBox()
+            wfControls?.setTimingState(status.timeDriftMs, status.autoDriftOn)
         }
         monitorVm.spectrum.observe(viewLifecycleOwner) { syncRuler() }
         transmitVm.txState.observe(viewLifecycleOwner) { state ->

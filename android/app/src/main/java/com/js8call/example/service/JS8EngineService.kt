@@ -366,6 +366,10 @@ class JS8EngineService : Service() {
                 driftMmaN = if (driftMs == 0L) 0 else 1
                 applyTimeDrift(driftMs)
             }
+            ACTION_SET_AUTO_DRIFT -> setAutoDrift(
+                intent.getBooleanExtra(EXTRA_AUTO_DRIFT_ON, false),
+                intent.getIntExtra(EXTRA_AUTO_DRIFT_STOP_AFTER, 0)
+            )
             ACTION_DEBUG_INJECT_DECODE -> {
                 if (BuildConfig.DEBUG) injectDecode(intent)
             }
@@ -620,11 +624,13 @@ class JS8EngineService : Service() {
                     text: String, type: Int, quality: Float, mode: Int, driftMs: Int
                 ) {
                     Log.d(TAG, "Decoded: $text (SNR: $snr dB)")
+                    if (isDuplicateFrame(text, mode)) return
                     logRxDecode(text, snr, freq, mode)
 
                     // Broadcast on main thread
                     mainHandler.post {
-                        maybeApplyTimeSync(driftMs)
+                        if (autoDriftOn && (mode == 0 || mode == 4)) applyAutoDrift(driftMs)
+                        else maybeApplyTimeSync(driftMs)
                         handleDecode(utc, snr, dt, freq, text, type, quality, mode, driftMs)
                         maybeReportToPskReporter(utc, snr, freq, text)
                     }
@@ -725,6 +731,7 @@ class JS8EngineService : Service() {
                 applyTxBoostSetting()
                 applyFt8Setting()
                 applyTimeDriftSetting()
+                engine?.setAutoSync(autoDriftOn)
 
                 if (rigControlMode == "trusdx_serial") {
                     Log.i(TAG, "TruSDX mode active: skipping microphone capture")
@@ -1920,6 +1927,50 @@ class JS8EngineService : Service() {
         driftMmaMs = (((driftMmaN - 1) * driftMmaMs) + suggestedDriftMs) / driftMmaN
         if (driftMmaN < 60) driftMmaN++
         applyTimeDrift(driftMmaMs)
+    }
+
+    // Duplicate frames (processDecodeEvent.cpp m_messageDupeCache): the same frame in the same
+    // speed within half a cycle is dropped before anything sees it. Automatic Time Drift decodes
+    // every second, so one signal is decoded several times.
+    private val frameDupeCache = mutableMapOf<String, Long>()
+
+    private fun isDuplicateFrame(text: String, mode: Int): Boolean = synchronized(frameDupeCache) {
+        val now = System.currentTimeMillis()
+        val key = "$mode:$text"
+        val last = frameDupeCache[key]
+        if (last != null && now - last < com.js8call.example.js8ui.Js8Activity.periodSec(mode) * 500L) return true
+        frameDupeCache[key] = now
+        if (frameDupeCache.size > 500) frameDupeCache.entries.removeIf { now - it.value > 120_000 }
+        false
+    }
+
+    // Waterfall Controls > Timing > Start Automatic Time Drift (WideGraph::on_autoDriftButton_toggled).
+    // Not kept after a restart, like the PC button.
+    private var autoDriftOn = false
+    private var autoDriftStopAfter = 0
+    private var autoDriftDecodesLeft = 0
+
+    private fun setAutoDrift(on: Boolean, stopAfter: Int) {
+        autoDriftOn = on
+        autoDriftStopAfter = if (on) stopAfter.coerceAtLeast(0) else 0
+        autoDriftDecodesLeft = autoDriftStopAfter
+        engine?.setAutoSync(on)
+        Log.i(TAG, "Automatic time drift ${if (on) "started (stop after $stopAfter)" else "stopped"}")
+        LocalBroadcastManager.getInstance(this)
+            .sendBroadcast(Intent(ACTION_AUTO_DRIFT).putExtra(EXTRA_AUTO_DRIFT_ON, on))
+    }
+
+    // Normal / Slow decode while Automatic Time Drift is on (processDecodeEvent.cpp driftQueue,
+    // WideGraph::notifyDriftedSignalsDecoded): averaged over up to 60 decodes, then the count.
+    private fun applyAutoDrift(suggestedDriftMs: Int) {
+        if (driftMmaN == 0) {
+            driftMmaN = 1
+            driftMmaMs = engine?.timeDriftMs() ?: 0L
+        }
+        driftMmaMs = (((driftMmaN - 1) * driftMmaMs) + suggestedDriftMs) / driftMmaN
+        if (driftMmaN < 60) driftMmaN++
+        applyTimeDrift(driftMmaMs)
+        if (autoDriftStopAfter > 0 && --autoDriftDecodesLeft <= 0) setAutoDrift(false, 0)
     }
 
     private fun applyTimeDrift(driftMs: Long) {
@@ -4359,6 +4410,12 @@ class JS8EngineService : Service() {
         const val ACTION_TIME_SYNC_ONCE = "com.js8call.example.ACTION_TIME_SYNC_ONCE"
         const val ACTION_SET_TIME_DRIFT = "com.js8call.example.ACTION_SET_TIME_DRIFT"
         const val ACTION_TIME_DRIFT = "com.js8call.example.ACTION_TIME_DRIFT"
+        /** Start / stop Automatic Time Drift (EXTRA_AUTO_DRIFT_ON, EXTRA_AUTO_DRIFT_STOP_AFTER; 0 = no stop). */
+        const val ACTION_SET_AUTO_DRIFT = "com.js8call.example.ACTION_SET_AUTO_DRIFT"
+        /** Broadcast: Automatic Time Drift started or stopped (EXTRA_AUTO_DRIFT_ON). */
+        const val ACTION_AUTO_DRIFT = "com.js8call.example.ACTION_AUTO_DRIFT"
+        const val EXTRA_AUTO_DRIFT_ON = "auto_drift_on"
+        const val EXTRA_AUTO_DRIFT_STOP_AFTER = "auto_drift_stop_after"
         const val ACTION_RIG_STATUS = "com.js8call.example.ACTION_RIG_STATUS"
         const val ACTION_DEBUG_INJECT_DECODE = "com.js8call.example.ACTION_DEBUG_INJECT_DECODE"
         const val ACTION_DEBUG_FT8_WAV = "com.js8call.example.ACTION_DEBUG_FT8_WAV"

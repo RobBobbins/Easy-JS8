@@ -290,6 +290,11 @@ class JS8Engine private constructor(
         withNativeHandle { nativeSetTimeDriftMs(it, driftMs) }
     }
 
+    /** Start Automatic Time Drift: Normal and Slow are decoded every second while on. */
+    fun setAutoSync(enabled: Boolean) {
+        withNativeHandle { nativeSetAutoSync(it, enabled) }
+    }
+
     /** Current clock drift offset in milliseconds. */
     fun timeDriftMs(): Long {
         return withNativeHandleOr(0L) { nativeGetTimeDriftMs(it) }
@@ -392,6 +397,7 @@ class JS8Engine private constructor(
     private external fun nativeSetTxReady(handle: Long, ready: Boolean)
     private external fun nativeSetTimeDriftMs(handle: Long, driftMs: Long)
     private external fun nativeGetTimeDriftMs(handle: Long): Long
+    private external fun nativeSetAutoSync(handle: Long, enabled: Boolean)
 
     /**
      * Callback interface for engine events.

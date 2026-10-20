@@ -390,6 +390,8 @@ public:
 
   void set_sync_stats(bool enabled) override { sync_stats_.store(enabled); }
 
+  void set_auto_sync(bool enabled) override { auto_sync_.store(enabled); }
+
   void set_time_drift_ms(std::int64_t drift_ms) override {
     if (time_drift_ms_.exchange(drift_ms) == drift_ms) return;
     tx_modulator_.set_clock_offset_ms(drift_ms);
@@ -418,6 +420,7 @@ public:
       int next_decode_start = -1;     // Absolute position in buffer for next decode window
       int last_decode_sample = -1;
       int next_start = 0;  // Keep for compatibility (unused now)
+      int last_every_second = -1;  // Automatic time drift: k at the last every-second decode
     };
 
     struct TxFrame {
@@ -653,6 +656,24 @@ public:
       return ready;
     }
 
+    // decodeEnqueueReadyExperiment, everySecond branch: once a second, the last cycle's worth of
+    // samples ending at k. The cycle schedule starts over when automatic drift stops.
+    bool isEverySecondReady(SubmodeSchedule& sch, int k, int* start, int* size) {
+      int const buffer_size = kJs8NtMax * kJs8RxSampleRate;
+      int const one_second = config_.sample_rate_hz ? config_.sample_rate_hz : kJs8RxSampleRate;
+      sch.current_decode_start = -1;
+      if (sch.last_every_second >= 0) {
+        int incremented = k - sch.last_every_second;
+        if (incremented < 0) incremented += buffer_size;
+        if (incremented < one_second) return false;
+      }
+      *size = sch.period_samples;
+      *start = k - sch.period_samples;
+      if (*start < 0) *start += buffer_size;
+      sch.last_every_second = k;
+      return true;
+    }
+
     void schedule_decodes() {
       if (!callbacks_.on_event) return;
 
@@ -696,9 +717,16 @@ public:
         int start = 0;
         int size = 0;
 
+        // Automatic time drift (decodeEnqueueReadyExperiment, everySecond): Normal and Slow
+        // decode the last full cycle of audio once a second, wherever the cycle starts.
+        bool const every_second = auto_sync_.load() &&
+            (sch.id == protocol::SubmodeId::A || sch.id == protocol::SubmodeId::E);
+
         // isDecodeReady() returns true when we have a complete decode window ready
         // It sets start to the absolute position in the circular buffer
-        bool ready_result = isDecodeReady(sch, k, k0, &start, &size);
+        bool ready_result = every_second ? isEverySecondReady(sch, k, &start, &size)
+                                         : isDecodeReady(sch, k, k0, &start, &size);
+        if (!every_second) sch.last_every_second = -1;
 
         // DEBUG: Log the result
         static int result_counter = 0;
@@ -1096,6 +1124,7 @@ public:
     std::deque<DecodeState> decode_queue_;
     bool decode_stop_{false};
     std::atomic<bool> sync_stats_{false};
+    std::atomic<bool> auto_sync_{false};
 
     std::thread spectrum_thread_;
     std::mutex spectrum_mutex_;
