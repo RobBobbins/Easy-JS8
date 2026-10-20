@@ -190,12 +190,14 @@ public:
                                static_cast<int>(decode_state_.samples.size());
     total_samples_ += static_cast<int>(frames);
 
-    // Emit a lightweight spectrum frame for UI consumers at a throttled rate.
+    // Waterfall spectrum like the PC's dataSink: every JS8_NSPS / 2 samples (0.258 s), an FFT of
+    // the last 16384 samples in the ring (0.732 Hz bins); the level is over the new samples only.
     if (callbacks_.on_event && frames > 0) {
-      auto const now = std::chrono::steady_clock::now();
-      if (now - last_spectrum_time_ >= kSpectrumInterval) {
-        last_spectrum_time_ = now;
-        enqueue_spectrum(raw, frames, buffer.format.channels, buffer.format.sample_rate);
+      samples_since_spectrum_ += static_cast<int>(frames);
+      int const step = kSpectrumStep * buffer.format.sample_rate / kJs8RxSampleRate;
+      if (samples_since_spectrum_ >= step) {
+        enqueue_spectrum(samples_since_spectrum_, buffer.format.sample_rate);
+        samples_since_spectrum_ = 0;
       }
     }
 
@@ -987,13 +989,12 @@ public:
                           std::size_t frames,
                           int channels,
                           int sample_rate,
-                          events::Spectrum& spec) {
+                          events::Spectrum& spec,
+                          std::size_t level_frames = 0) {
       if (!data || frames == 0 || sample_rate <= 0) return false;
 
-      // Limit FFT size for cost; keep it power of two for simplicity.
-      // Clamp to the largest power-of-two that fits in the provided frame count
-      // to avoid reading past the input buffer.
-      std::size_t max_n = std::min<std::size_t>(frames, 4096);
+      // PC dataSink: one 16384-point FFT (frames = kSpectrumFft); power of two, no larger.
+      std::size_t max_n = std::min<std::size_t>(frames, kSpectrumFft);
       std::size_t n = max_n;
       // Round down to the nearest power of two (<= max_n).
       if (n > 0) {
@@ -1008,19 +1009,21 @@ public:
         spectrum_window_.assign(n, 0.0);
         spectrum_samples_.assign(n, 0.0);
         spectrum_fft_.assign(n, std::complex<double>{});
-        for (std::size_t i = 0; i < n; ++i) {
-          spectrum_window_[i] =
-              0.5 * (1.0 - std::cos(two_pi * static_cast<double>(i) / static_cast<double>(n - 1)));
-        }
+        // The PC's dataSink applies no window
+        std::fill(spectrum_window_.begin(), spectrum_window_.end(), 1.0);
       }
 
-      // Mono mix: pick first channel.
+      // Mono mix: pick first channel. The level is over the newest level_frames samples
+      // (PC m_px: the samples since the last spectrum).
+      std::size_t const level_n = (level_frames == 0 || level_frames > n) ? n : level_frames;
       double power_sum = 0.0;
       double peak = 0.0;
       for (std::size_t i = 0; i < n; ++i) {
         auto v = static_cast<double>(data[i * channels]);
-        power_sum += v * v;
-        peak = std::max(peak, std::abs(v));
+        if (i >= n - level_n) {
+          power_sum += v * v;
+          peak = std::max(peak, std::abs(v));
+        }
         spectrum_samples_[i] = v * spectrum_window_[i];
       }
 
@@ -1052,13 +1055,14 @@ public:
         }
       }
 
-      // Resample the spectrum to the bin count expected by the UI to avoid narrow plots.
+      // Bins at the FFT's own spacing (sample_rate / n: 0.732 Hz, the PC's df3), JS8_NSMAX of
+      // them (0-5000 Hz), as the PC's spectrum.
       constexpr std::size_t kTargetBins = JS8_NSMAX;
       spec.bins.resize(kTargetBins);
       double scale = 1.0 / static_cast<double>(n * n);
       std::size_t source_bins = n / 2;
       double source_bin_hz = static_cast<double>(sample_rate) / static_cast<double>(n);
-      double target_bin_hz = (static_cast<double>(sample_rate) / 2.0) / static_cast<double>(kTargetBins);
+      double target_bin_hz = source_bin_hz;
 
       for (std::size_t i = 0; i < kTargetBins; ++i) {
         double freq = static_cast<double>(i) * target_bin_hz;
@@ -1076,7 +1080,7 @@ public:
 
       // Display axis: reflect the actual bin spacing of the resampled spectrum.
       spec.bin_hz = static_cast<float>(target_bin_hz);
-      spec.power_db = power_sum > 0.0 ? static_cast<float>(10.0 * std::log10(power_sum / n)) : 0.0f;
+      spec.power_db = power_sum > 0.0 ? static_cast<float>(10.0 * std::log10(power_sum / level_n)) : 0.0f;
       spec.peak_db = peak > 0.0 ? static_cast<float>(20.0 * std::log10(peak)) : 0.0f;
       return true;
     }
@@ -1109,8 +1113,10 @@ public:
     std::atomic<bool> tx_active_{false};
     bool tx_output_started_{false};
     std::atomic<bool> tx_ready_{true};
-    static constexpr auto kSpectrumInterval = std::chrono::milliseconds(100);
-    std::chrono::steady_clock::time_point last_spectrum_time_{};
+    /** dataSink: nfft3 = 16384, a new spectrum every JS8_NSPS / 2 = 3096 samples. */
+    static constexpr std::size_t kSpectrumFft = 16384;
+    static constexpr int kSpectrumStep = 6192 / 2;
+    int samples_since_spectrum_{0};
     std::size_t spectrum_n_{0};
     std::vector<double> spectrum_window_;
     std::vector<double> spectrum_samples_;
@@ -1132,6 +1138,8 @@ public:
     struct SpectrumTask {
       std::vector<std::int16_t> samples;
       std::size_t frames = 0;
+      /** The newest samples the level (power / peak) is measured over. */
+      std::size_t level_frames = 0;
       int channels = 1;
       int sample_rate = 0;
     };
@@ -1242,22 +1250,27 @@ public:
       decode_cv_.notify_one();
     }
 
-    void enqueue_spectrum(const std::int16_t* data,
-                          std::size_t frames,
-                          int channels,
-                          int sample_rate) {
-      if (!data || frames == 0 || sample_rate <= 0) return;
-      std::size_t const max_frames = std::min<std::size_t>(frames, 4096);
+    /** The last kSpectrumFft samples of the ring, ending at kin (audio thread). */
+    void enqueue_spectrum(int level_frames, int sample_rate) {
+      if (sample_rate <= 0) return;
+      auto const& ring = decode_state_.samples;
+      auto const size = ring.size();
+      if (size < kSpectrumFft) return;
       SpectrumTask task;
-      task.frames = max_frames;
+      task.frames = kSpectrumFft;
       task.channels = 1;
       task.sample_rate = sample_rate;
-      task.samples.resize(max_frames);
-      for (std::size_t i = 0; i < max_frames; ++i) {
-        task.samples[i] = data[i * channels];
+      task.level_frames = std::clamp<std::size_t>(static_cast<std::size_t>(level_frames), 1, kSpectrumFft);
+      task.samples.resize(kSpectrumFft);
+      std::size_t const end = static_cast<std::size_t>(decode_state_.params.kin);
+      std::size_t start = (end + size - kSpectrumFft) % size;
+      for (std::size_t i = 0; i < kSpectrumFft; ++i) {
+        task.samples[i] = ring[(start + i) % size];
       }
       {
         std::lock_guard<std::mutex> lock(spectrum_mutex_);
+        // Keep only the newest one if the worker falls behind
+        spectrum_queue_.clear();
         spectrum_queue_.push_back(std::move(task));
       }
       spectrum_cv_.notify_one();
@@ -1319,7 +1332,8 @@ public:
                              task.frames,
                              task.channels,
                              task.sample_rate,
-                             spec)) {
+                             spec,
+                             task.level_frames)) {
           emit_event(spectrum_event_);
         }
       }

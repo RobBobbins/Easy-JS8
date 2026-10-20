@@ -4,10 +4,11 @@ Read this first, then `LAYOUT.md` (the layout spec and the PC values it copies; 
 this session too).
 
 **Fourth session (2026-10-20) worked on sideways, mostly PC mode** (see "Sideways, fourth session").
-**Fifth session (2026-10-20):** Waterfall Controls → **Timing** tab built (see "Timing tab").
-**Next:** Rob to decide on the engine's waterfall detail (see "Engine spectrum detail" below); the
-wpm box upright is still to place. Committed: fourth session 7717b9d8, Timing tab 71a831f2, Display
-first part 7d421c12; Display bigger group not committed yet.
+**Fifth session (2026-10-20):** Waterfall Controls → **Timing** and **Display** tabs built (see
+"Timing tab", "Display tab"), engine waterfall detail fixed ("Engine spectrum detail").
+**Next:** the wpm box upright is still to place. Committed: fourth session 7717b9d8, Timing tab
+71a831f2, Display first part 7d421c12, Display bigger group 1b4c3056; engine waterfall detail not
+committed yet.
 
 ## What this is
 
@@ -92,7 +93,7 @@ values (ViewModel keyed by window).
 - Offset dial drawn the PC way (`CPlotter::drawDials`): left edge at the offset, width = mode
   bandwidth (Slow 25, Normal 50, Fast 80, JS8 40 160 Hz), 2 px red outline, faint checker fill.
 - Tap the waterfall **or its frequency scale** to set the offset (whole Hz), also with RX off
-  (0–3000 Hz scale until the spectrum arrives). No 500 Hz floor.
+  (the scale follows Display > Start / Bins Per Pixel, also with RX off). No 500 Hz floor.
 - Taps are ignored while a message is queued or sending, unless **Allow Tx frequency changes
   while transmitting** is checked (PC `changeFreq`).
 - Status bar mode label (JS8 Normal…) and cycle counter (n/15, n/10…) follow the speed.
@@ -227,10 +228,7 @@ Rob's rule: **every menu has the same items in every layout; only the look diffe
   yellow edge lines. Call Activity menu gets **Center filter at …Hz** while the filter is on.
   Keys `js8cfg_wf_center`, `js8cfg_filter_enabled/center/width`. Waterfall Controls first width now
   340 dp (filter row fits). Tested: layout, Width ∧, Sync. Not tested: knobs, Enable Filter off, QSY.
-  **Next:** Timing tab (Rob's capture: Time Drift ∧ ∨, Start Automatic Time Drift, Stop After n
-  decode(s), three Set Time Drift to Now buttons, Reset Time Drift; engine has time drift), then
-  Display tab (Rob's capture: Start, Bins Per Pixel, Palette, Scroll Speed, Avg N, Flatten, Smooth,
-  Waterfall Gain/Zero, Display Decode Attempts, Spectrum, Filter Opacity — mostly new drawing code).
+  Timing and Display tabs: built in the fifth session (below).
 - **Timing tab** (fifth session; WideGraph.ui timingTab / WideGraph.cpp, 3.0.3 source): third tab
   after Control · Display (tabs now switch; Display still has no page). **Time Drift: n ms** ∧ ∨
   (100 ms steps, ±30000), **Automatic**: **Start Automatic Time Drift** (reads **Stop Automatic
@@ -252,7 +250,8 @@ Rob's rule: **every menu has the same items in every layout; only the look diffe
   as its text (fields as wide as their longest value) and centred; group frames stay full width
   (`Js8WaterfallControls.fitUpright`). Sideways keeps the PC's fill-the-panel widths; there
   **Set Time Drift to Now (Minute Start)** shrinks its text to fit a narrow panel.
-  Line endings: most source files are CRLF, some LF — keep each file's own when editing.
+  Line endings: most source files are CRLF, some LF — keep each file's own when editing (Python
+  writes from Git Bash turned CRLF files into LF once; check `git diff --stat` before committing).
 - **Display tab, first part** (fifth session; WideGraph.ui displayTab, CPlotter.cpp, WideGraph.cpp
   dataSink, Flatten.cpp): **Size** Start (100 Hz steps, 0-5000, 500) and Bins Per Pixel (1-1000),
   **Palette** (the PC's 29 .pal files in `android/app/src/main/assets/palettes`, PC interpolation;
@@ -293,11 +292,12 @@ Rob's rule: **every menu has the same items in every layout; only the look diffe
   yellow decode-start ticks, Designer insert / edit / delete / export / import (file round trip).
   Not tested: Avg N change, red / cyan brackets (no JS8 signals on the emulator), Cumulative's
   level against the PC (emulator input nearly silent, rms 1.7), sideways, Swipe.
-- **Engine spectrum detail (found, not changed):** the engine's waterfall FFT uses one audio buffer:
-  `compute_spectrum` takes min(frames, 4096) rounded down to a power of two; the emulator delivers
-  384 frames, so 256-point FFTs = 47 Hz per bin (PC: 16384 points, 0.73 Hz), interpolated onto
-  the display. That is why the phone waterfall shows wide soft stripes. Fix would collect samples
-  across buffers in the engine. Real S22 buffer size unknown.
+- **Engine spectrum detail (fixed, fifth session):** the engine's waterfall FFT used one audio
+  buffer (emulator: 384 frames -> 256-point FFT, 47 Hz per bin). Now like the PC's dataSink: every
+  3096 samples (JS8_NSPS / 2, 0.258 s) a 16384-point FFT of the last 16384 samples in the ring,
+  no window, bins at 0.732 Hz (JS8_NSMAX of them, 0-5000 Hz); the level (powerDb, peak) is over the
+  new samples only, so the level meter updates ~4 times a second (was 10). Seen on S22: sharp
+  lines where there were 47 Hz-wide stripes. Not tested with JS8 signals or on a real phone.
 - Station sideways: **About** is the last tab; the tab row scrolls to the lit tab.
 - Header Offset slider: locked while a message waits or is sent (same rule as waterfall taps).
   Not tested (needs a queued message).
@@ -354,8 +354,8 @@ Station window sideways = PC tabs, no About tab.
   is unused. **Keep decoded messages after restart** (Phone) does nothing visible.
 - Saved but not used: autoreply allow/block lists, PTT method, split, notifications, UI fonts,
   frequency schedule, Test CAT / Test PTT.
-- Waterfall Controls → Display tab; waterfall shows 0–3000 Hz (PC ~650–1400 Hz), which is why
-  the offset dial is only ~4 dp wide on the phone.
+- Waterfall Controls → Display tab built; still untested with real JS8 signals: decode brackets,
+  Cumulative level, Avg N. Sideways / Swipe Display tab not checked.
 - Halt / TUNE / transmit / SWL blocking not tested with a radio — test on a dummy load first.
 - Swipe Activity screen: Status Bar wider than screen (progress bar scrolls into view).
 

@@ -170,7 +170,7 @@ Call / RX / All Activity, Decoded messages), Control, Help. Upright has no ⋮ a
   (Slow 25, Normal 50, Fast 80, JS8 40 160, JS8 60 250 Hz), 2 px red outline, white
   alpha-75 checker fill, full waterfall height. Shown with RX off too.
 - Tap the waterfall or its frequency scale: offset = whole Hz under the finger
-  (CPlotter::mouseReleaseEvent). With RX off the scale is 0–3000 Hz. Ignored while a message is
+  (CPlotter::mouseReleaseEvent). The scale follows Display > Start / Bins Per Pixel. Ignored while a message is
   queued or sending, unless Station → Behavior → **Allow Tx frequency changes while transmitting**.
 
 ## Colors (from styles.h, Windows branch)
