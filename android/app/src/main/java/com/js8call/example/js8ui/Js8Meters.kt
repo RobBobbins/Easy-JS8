@@ -30,21 +30,25 @@ class Js8LevelMeterView @JvmOverloads constructor(context: Context, attrs: Attri
     private val bar = Paint().apply { color = ContextCompat.getColor(context, R.color.js8_green) }
 
     override fun onDraw(canvas: Canvas) {
+        // Laid out for an 87 dp column; a narrower one (upright, 58 dp) scales the scale, bar and
+        // label positions with it, and the text a little (85 %)
+        val s = (width / dp(87f)).coerceAtMost(1f)
+        text.textSize = resources.getDimension(R.dimen.js8_text) * (if (s < 1f) 0.85f else 1f)
         val top = dp(12f)
         val bottom = height - dp(30f)
-        val axisX = dp(50f)
+        val axisX = dp(50f) * s
         val span = bottom - top
         canvas.drawLine(axisX, top, axisX, bottom, line)
         for (db in 0..90 step 10) {
             val y = bottom - span * db / 90f
             val major = db % 20 == 10
-            canvas.drawLine(axisX - dp(if (major) 6f else 3f), y, axisX, y, line)
-            if (major) canvas.drawText("$db", axisX - dp(8f), y + text.textSize * 0.35f, text)
+            canvas.drawLine(axisX - dp(if (major) 6f else 3f) * s, y, axisX, y, line)
+            if (major) canvas.drawText("$db", axisX - dp(8f) * s, y + text.textSize * 0.35f, text)
         }
-        canvas.drawText("0 dB", axisX + dp(18f), height - dp(8f), text)
+        canvas.drawText("0 dB", axisX + dp(18f) * s, height - dp(8f), text)
         if (levelDb > 0f) {
             val y = bottom - span * levelDb / 90f
-            canvas.drawRect(axisX + dp(6f), y, axisX + dp(22f), bottom, bar)
+            canvas.drawRect(axisX + dp(6f) * s, y, axisX + dp(22f) * s, bottom, bar)
         }
     }
 }

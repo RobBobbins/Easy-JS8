@@ -182,6 +182,11 @@ values (ViewModel keyed by window).
 - Settings window field widths (upright): **Frequency:** dropdown 200 dp, **Custom frequency
   (MHz):** 120 dp, **Offset:** 120 dp including ▲▼, each left-aligned under its label. Speed
   box, checkboxes, Clear buttons unchanged; Station pages keep full-width boxes.
+  Rob raised it again 2026-10-20 ("the text is big and we have runaway fields again").
+- Settings window text (proposed 2026-10-20, Rob not answered yet): 12 dp instead of 14.3 dp (the
+  PC's 9 pt Segoe UI in this app's sizing, about 16 % smaller), headings (Operation, Mode,
+  Frequency, Offset, View) reduced by the same amount; Settings window only, Station unchanged
+  unless Rob says otherwise.
 
 ### Sideways, fourth session (2026-10-20)
 
@@ -297,6 +302,9 @@ Rob's rule: **every menu has the same items in every layout; only the look diffe
   no window, bins at 0.732 Hz (JS8_NSMAX of them, 0-5000 Hz); the level (powerDb, peak) is over the
   new samples only, so the level meter updates ~4 times a second (was 10). Seen on S22: sharp
   lines where there were 47 Hz-wide stripes. Not tested with JS8 signals or on a real phone.
+- Upright only (Rob): CAT + level meter column 58 dp (was 87, 33 % narrower; set in
+  `Js8MainFragment`); `Js8LevelMeterView` scales its scale, bar and label with the width, text 85 %.
+  Upright waterfall now 500-~1,740 Hz. Sideways unchanged.
 - Station sideways: **About** is the last tab; the tab row scrolls to the lit tab.
 - Header Offset slider: locked while a message waits or is sent (same rule as waterfall taps).
   Not tested (needs a queued message).

@@ -211,6 +211,12 @@ class Js8MainFragment : Fragment() {
         waterfall = view.findViewById(R.id.js8_waterfall)
         ruler = view.findViewById(R.id.js8_ruler)
         levelMeter = view.findViewById(R.id.js8_level_meter)
+        // Upright: CAT + level meter column 33 % narrower, 87 -> 58 dp (Rob, 2026-10-20)
+        if (resources.configuration.orientation != Configuration.ORIENTATION_LANDSCAPE) {
+            (levelMeter.parent as? View)?.let { col ->
+                col.layoutParams = col.layoutParams.apply { width = (58 * resources.displayMetrics.density).toInt() }
+            }
+        }
 
         setUpSwipe(view)
         splitters = view.findViewById<android.widget.FrameLayout?>(R.id.js8_pc_window)?.let { Js8PcSplitters(it, prefs()) }
