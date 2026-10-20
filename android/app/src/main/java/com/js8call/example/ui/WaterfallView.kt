@@ -93,6 +93,20 @@ class WaterfallView @JvmOverloads constructor(
 
     var onDisplayChanged: (() -> Unit)? = null
 
+    /** Current speed's cycle, for the Cumulative spectrum. */
+    fun setCyclePeriod(seconds: Int) {
+        renderer?.setCyclePeriod(seconds)
+    }
+
+    /** Display Decode Attempts (UI_Constructor::processDecodeEvent). */
+    fun drawDecodeLine(color: Int, fa: Float, fb: Float) {
+        renderer?.drawDecodeLine(color, fa, fb)
+    }
+
+    fun drawHorizontalLine(color: Int, xDp: Int, widthDp: Int) {
+        renderer?.drawHorizontalLine(color, xDp, widthDp)
+    }
+
     init {
         isClickable = true
     }

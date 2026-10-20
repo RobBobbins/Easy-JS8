@@ -52,6 +52,7 @@ JNIEXPORT jint JNICALL Java_com_js8call_core_JS8Engine_nativeTxMillisecondsUntil
 JNIEXPORT void JNICALL Java_com_js8call_core_JS8Engine_nativeSetTxReady(JNIEnv*, jobject, jlong, jboolean);
 JNIEXPORT void JNICALL Java_com_js8call_core_JS8Engine_nativeSetTimeDriftMs(JNIEnv*, jobject, jlong, jlong);
 JNIEXPORT void JNICALL Java_com_js8call_core_JS8Engine_nativeSetAutoSync(JNIEnv*, jobject, jlong, jboolean);
+JNIEXPORT void JNICALL Java_com_js8call_core_JS8Engine_nativeSetSyncStats(JNIEnv*, jobject, jlong, jboolean);
 JNIEXPORT jlong JNICALL Java_com_js8call_core_JS8Engine_nativeGetTimeDriftMs(JNIEnv*, jobject, jlong);
 }
 
@@ -486,6 +487,15 @@ static void event_callback(JS8Engine_Native* native, js8core::events::Variant co
     jmethodID method = env->GetMethodID(handler_class, "onDecodeStarted", "(I)V");
     if (method) {
       env->CallVoidMethod(native->callback_handler, method, decode_started->submodes);
+    }
+  } else if (auto* sync = std::get_if<js8core::events::SyncState>(&event)) {
+    // Display Decode Attempts: onSyncState(kind 0 candidate / 1 decoded, mode, freq, dt, candidate)
+    jmethodID method = env->GetMethodID(handler_class, "onSyncState", "(IIFFI)V");
+    if (method) {
+      bool const decoded = sync->kind == js8core::events::SyncState::Kind::Decoded;
+      env->CallVoidMethod(native->callback_handler, method,
+                         decoded ? 1 : 0, sync->mode, sync->frequency, sync->dt,
+                         decoded ? 0 : sync->sync.candidate);
     }
   } else if (auto* decode_finished = std::get_if<js8core::events::DecodeFinished>(&event)) {
     // Call onDecodeFinished(int count)
@@ -1045,6 +1055,11 @@ void js8_engine_set_time_drift_ms(JS8Engine_Native* engine, long long drift_ms) 
   engine->engine->set_time_drift_ms(drift_ms);
 }
 
+void js8_engine_set_sync_stats(JS8Engine_Native* engine, bool enabled) {
+  if (!engine || !engine->engine) return;
+  engine->engine->set_sync_stats(enabled);
+}
+
 void js8_engine_set_auto_sync(JS8Engine_Native* engine, bool enabled) {
   if (!engine || !engine->engine) return;
   engine->engine->set_auto_sync(enabled);
@@ -1111,6 +1126,8 @@ int js8_register_natives(JavaVM* vm, JNIEnv* env) {
      (void*)Java_com_js8call_core_JS8Engine_nativeSetTxReady},
     {"nativeSetTimeDriftMs", "(JJ)V",
      (void*)Java_com_js8call_core_JS8Engine_nativeSetTimeDriftMs},
+    {"nativeSetSyncStats", "(JZ)V",
+     (void*)Java_com_js8call_core_JS8Engine_nativeSetSyncStats},
     {"nativeSetAutoSync", "(JZ)V",
      (void*)Java_com_js8call_core_JS8Engine_nativeSetAutoSync},
     {"nativeGetTimeDriftMs", "(J)J",

@@ -290,6 +290,11 @@ class JS8Engine private constructor(
         withNativeHandle { nativeSetTimeDriftMs(it, driftMs) }
     }
 
+    /** Display Decode Attempts: the decoder reports each sync candidate (onSyncState). */
+    fun setSyncStats(enabled: Boolean) {
+        withNativeHandle { nativeSetSyncStats(it, enabled) }
+    }
+
     /** Start Automatic Time Drift: Normal and Slow are decoded every second while on. */
     fun setAutoSync(enabled: Boolean) {
         withNativeHandle { nativeSetAutoSync(it, enabled) }
@@ -398,6 +403,7 @@ class JS8Engine private constructor(
     private external fun nativeSetTimeDriftMs(handle: Long, driftMs: Long)
     private external fun nativeGetTimeDriftMs(handle: Long): Long
     private external fun nativeSetAutoSync(handle: Long, enabled: Boolean)
+    private external fun nativeSetSyncStats(handle: Long, enabled: Boolean)
 
     /**
      * Callback interface for engine events.
@@ -433,6 +439,12 @@ class JS8Engine private constructor(
          * Called when decode cycle starts.
          */
         fun onDecodeStarted(submodes: Int)
+
+        /**
+         * Display Decode Attempts (setSyncStats): one sync candidate (kind 0, quality [candidate])
+         * or a decode (kind 1) at [freq] Hz, [dt] s, in speed [mode].
+         */
+        fun onSyncState(kind: Int, mode: Int, freq: Float, dt: Float, candidate: Int) {}
 
         /**
          * FT8 signal decoded by the FT8 monitor (setFt8Enabled). slotUtcMs = start of its

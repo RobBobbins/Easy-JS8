@@ -105,6 +105,31 @@ class Js8MainFragment : Fragment() {
     private var selectedCall: String? = null
     /** Waterfall Controls > Control tab (PC and Swipe; upright hides its Offset box). */
     private var wfControls: Js8WaterfallControls? = null
+
+    // Waterfall Controls > Display > Adjust... > Import... / Export... (WF.cpp import_palette /
+    // export_palette): a .pal file chosen with the phone's file picker
+    private var paletteImported: ((List<Int>) -> Unit)? = null
+    private var paletteToExport: String? = null
+    private val importPaletteFile = registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri == null) return@registerForActivityResult
+        try {
+            val text = requireContext().contentResolver.openInputStream(uri)?.bufferedReader()?.use { it.readText() }.orEmpty()
+            paletteImported?.invoke(com.js8call.example.ui.WaterfallPalettes.parse(text))
+        } catch (e: Exception) {
+            android.app.AlertDialog.Builder(requireContext()).setTitle("Import Failed")
+                .setMessage("Error opening waterfall palette file: ${e.message}").setPositiveButton("OK", null).show()
+        }
+    }
+    private val exportPaletteFile = registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
+        val text = paletteToExport ?: return@registerForActivityResult
+        if (uri == null) return@registerForActivityResult
+        try {
+            requireContext().contentResolver.openOutputStream(uri)?.bufferedWriter()?.use { it.write(text) }
+        } catch (e: Exception) {
+            android.app.AlertDialog.Builder(requireContext()).setTitle("Export Failed")
+                .setMessage("Error writing waterfall palette file: ${e.message}").setPositiveButton("OK", null).show()
+        }
+    }
     /** PC mode: the draggable dividers (null in the other layouts). */
     private var splitters: Js8PcSplitters? = null
     /** Something changed since the lists were last drawn (PC m_rxDisplayDirty). */
@@ -214,7 +239,9 @@ class Js8MainFragment : Fragment() {
                     putExtra(JS8EngineService.EXTRA_AUTO_DRIFT_ON, on)
                     putExtra(JS8EngineService.EXTRA_AUTO_DRIFT_STOP_AFTER, stopAfter)
                 })
-            })
+            },
+            importPalette = { onLoaded -> paletteImported = onLoaded; importPaletteFile.launch(arrayOf("*/*")) },
+            exportPalette = { text -> paletteToExport = text; exportPaletteFile.launch("palette.pal") })
         observe()
         if (!startupChecked) {
             startupChecked = true
@@ -401,6 +428,7 @@ class Js8MainFragment : Fragment() {
         waterfall.bandwidthHz = Js8Activity.bandwidthHz(submode)
         view?.findViewById<TextView?>(R.id.js8_status_mode)?.text = Js8Activity.modeLabel(submode)
         progress.period = Js8Activity.periodSeconds(submode)
+        waterfall.setCyclePeriod(progress.period)
         requestTextStats()
     }
 
@@ -1186,6 +1214,32 @@ class Js8MainFragment : Fragment() {
         ruler.onOffsetChanged = tapOffset
         waterfall.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ -> syncRuler() }
         waterfall.onDisplayChanged = { syncRuler() }
+        // Display Decode Attempts (UI_Constructor::processDecodeEvent): yellow tick when a decode
+        // starts; red bracket for a decode; candidates within 2 s by sync quality
+        val attempts = object : com.js8call.example.service.DecodeAttempts.Listener {
+            override fun onDecodeStarted() {
+                if (view != null) waterfall.drawHorizontalLine(Color.YELLOW, 0, 5)
+            }
+
+            override fun onSyncState(kind: Int, mode: Int, freq: Float, dt: Float, candidate: Int) {
+                if (view == null) return
+                val color = when {
+                    kind == 1 -> Color.RED
+                    kotlin.math.abs(dt * 1000) > 2000 -> return
+                    candidate < 10 -> Color.rgb(0, 128, 128) // Qt::darkCyan
+                    candidate <= 15 -> Color.CYAN
+                    candidate <= 21 -> Color.WHITE
+                    else -> return
+                }
+                waterfall.drawDecodeLine(color, freq, freq + Js8Activity.bandwidthHz(mode))
+            }
+        }
+        com.js8call.example.service.DecodeAttempts.listener = attempts
+        viewLifecycleOwner.lifecycle.addObserver(object : androidx.lifecycle.DefaultLifecycleObserver {
+            override fun onDestroy(owner: androidx.lifecycle.LifecycleOwner) {
+                if (com.js8call.example.service.DecodeAttempts.listener === attempts) com.js8call.example.service.DecodeAttempts.listener = null
+            }
+        })
     }
 
     /**

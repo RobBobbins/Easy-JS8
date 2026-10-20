@@ -11,6 +11,8 @@ import android.graphics.Color
 object WaterfallPalettes {
 
     const val DEFAULT = "Default"
+    /** WideGraph.cpp user_defined: the Palette Designer's colours. */
+    const val USER_DEFINED = "User Defined"
     private const val DIR = "palettes"
     private const val POINTS = 256
 
@@ -34,6 +36,21 @@ object WaterfallPalettes {
     } catch (e: Exception) {
         fallback()
     }
+
+    /** A .pal file's text (PC import: one r;g;b per line). */
+    fun parse(text: String): List<Int> = text.lines().mapNotNull { line ->
+        val items = line.split(';')
+        if (items.size != 3) return@mapNotNull null
+        val (r, g, b) = items.map { it.trim().toIntOrNull() ?: return@mapNotNull null }
+        Color.rgb(r.coerceIn(0, 255), g.coerceIn(0, 255), b.coerceIn(0, 255))
+    }
+
+    /** PC export: r;g;b per line. */
+    fun format(colours: List<Int>): String =
+        colours.joinToString("") { "${Color.red(it)};${Color.green(it)};${Color.blue(it)}\n" }
+
+    /** 256 colours from the Palette Designer's list. */
+    fun fromList(colours: List<Int>): IntArray = interpolate(colours)
 
     /** Default.pal. */
     fun fallback(): IntArray = interpolate(listOf(

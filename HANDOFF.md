@@ -5,9 +5,9 @@ this session too).
 
 **Fourth session (2026-10-20) worked on sideways, mostly PC mode** (see "Sideways, fourth session").
 **Fifth session (2026-10-20):** Waterfall Controls → **Timing** tab built (see "Timing tab").
-**Next:** Display tab, bigger group (Avg N, Current / Cumulative / Linear Avg, Smooth, Spectrum,
-Display Decode Attempts, Adjust...); the wpm box upright is still to place. Fourth session committed
-(7717b9d8); Timing tab committed (71a831f2); Display tab first part not committed yet.
+**Next:** Rob to decide on the engine's waterfall detail (see "Engine spectrum detail" below); the
+wpm box upright is still to place. Committed: fourth session 7717b9d8, Timing tab 71a831f2, Display
+first part 7d421c12; Display bigger group not committed yet.
 
 ## What this is
 
@@ -269,6 +269,35 @@ Rob's rule: **every menu has the same items in every layout; only the look diffe
   Upright: fit to text, centred; Gain / Zero rows 260 dp. Tested on S22 upright: layout, Start,
   Palette (Linrad), Gain, saved values, no crash with Flatten; PC mode: layout and range.
   Not tested: Flatten off, Zero, Scroll Speed changes, Opacity changes, Swipe, real radio audio.
+- **Display tab, bigger group** (fifth session): **Avg N** (1-50; lines average N spectra, scroll
+  slows N times, Scaler1D uses it), **Current / Cumulative / Linear Avg** list and **Smooth** (1-7,
+  greyed unless Linear Avg), **Display Decode Attempts** (engine `set_sync_stats` via JNI
+  `nativeSetSyncStats`, new callback `onSyncState`, service `ACTION_SET_SYNC_STATS`, in-process
+  `service/DecodeAttempts.kt`; yellow tick per decode start, red bracket per decode, darkCyan / cyan
+  / white candidates within 2 s, PC processDecodeEvent), **Spectrum** group Height (0-100 %, 5 %
+  steps) / Gain / Zero (Scaler2D; bottom of the plot, Current green, Cumulative cyan = this cycle's
+  average, Linear Avg yellow = dataSink flat1 + smo). **Adjust...** = Palette Designer: colour list
+  (tap = Select Color window: R/G/B sliders + HTML code, in place of QColorDialog; press and hold =
+  Delete / Insert ... / Insert after ...), Import... / Export... (.pal via the phone's file picker,
+  PC format r;g;b), OK selects **User Defined** (last in the Palette list; `js8cfg_wf_user_palette`).
+  Palette group corrected to the PC's layout: list above Adjust... (was side by side).
+  Designer laid out as wf_palette_design_dialog.ui (Rob): 219 x 209 dp, colour table on the left with
+  row numbers and grid lines, buttons in a column on the right (Import..., Export..., OK, Cancel,
+  the Qt vertical Windows order; not confirmed on Rob's PC).
+  Palette and Current lists are drop-downs (Rob): under the box, as wide as it, 8 rows then scroll,
+  entry in use highlighted, a tap elsewhere closes (`Js8WaterfallDisplay.dropDown`). Station /
+  Settings windows still use list windows.
+  Engine spectra are put on the PC's 0.732 Hz grid first (`WaterfallRenderer.updateSpectrum`), so the
+  PC's arithmetic runs as is; power scaled x10 for the waterfall, x0.01 for Cumulative (sample scale).
+  Tested on S22 upright: layout, Height 30 % with Current, Cumulative, Linear Avg (Smooth enables),
+  yellow decode-start ticks, Designer insert / edit / delete / export / import (file round trip).
+  Not tested: Avg N change, red / cyan brackets (no JS8 signals on the emulator), Cumulative's
+  level against the PC (emulator input nearly silent, rms 1.7), sideways, Swipe.
+- **Engine spectrum detail (found, not changed):** the engine's waterfall FFT uses one audio buffer:
+  `compute_spectrum` takes min(frames, 4096) rounded down to a power of two; the emulator delivers
+  384 frames, so 256-point FFTs = 47 Hz per bin (PC: 16384 points, 0.73 Hz), interpolated onto
+  the display. That is why the phone waterfall shows wide soft stripes. Fix would collect samples
+  across buffers in the engine. Real S22 buffer size unknown.
 - Station sideways: **About** is the last tab; the tab row scrolls to the lit tab.
 - Header Offset slider: locked while a message waits or is sent (same rule as waterfall taps).
   Not tested (needs a queued message).

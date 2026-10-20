@@ -366,6 +366,10 @@ class JS8EngineService : Service() {
                 driftMmaN = if (driftMs == 0L) 0 else 1
                 applyTimeDrift(driftMs)
             }
+            ACTION_SET_SYNC_STATS -> {
+                syncStatsOn = intent.getBooleanExtra(EXTRA_SYNC_STATS_ON, false)
+                engine?.setSyncStats(syncStatsOn)
+            }
             ACTION_SET_AUTO_DRIFT -> setAutoDrift(
                 intent.getBooleanExtra(EXTRA_AUTO_DRIFT_ON, false),
                 intent.getIntExtra(EXTRA_AUTO_DRIFT_STOP_AFTER, 0)
@@ -654,7 +658,13 @@ class JS8EngineService : Service() {
                     Log.d(TAG, "Decode started: submodes=$submodes")
                     mainHandler.post {
                         broadcastDecodeStarted(submodes)
+                        if (syncStatsOn) DecodeAttempts.listener?.onDecodeStarted()
                     }
+                }
+
+                override fun onSyncState(kind: Int, mode: Int, freq: Float, dt: Float, candidate: Int) {
+                    if (!syncStatsOn) return
+                    mainHandler.post { DecodeAttempts.listener?.onSyncState(kind, mode, freq, dt, candidate) }
                 }
 
                 override fun onDecodeFinished(count: Int) {
@@ -732,6 +742,7 @@ class JS8EngineService : Service() {
                 applyFt8Setting()
                 applyTimeDriftSetting()
                 engine?.setAutoSync(autoDriftOn)
+                engine?.setSyncStats(syncStatsOn)
 
                 if (rigControlMode == "trusdx_serial") {
                     Log.i(TAG, "TruSDX mode active: skipping microphone capture")
@@ -1943,6 +1954,9 @@ class JS8EngineService : Service() {
         if (frameDupeCache.size > 500) frameDupeCache.entries.removeIf { now - it.value > 120_000 }
         false
     }
+
+    // Waterfall Controls > Display > Display Decode Attempts (decoder syncStats)
+    private var syncStatsOn = false
 
     // Waterfall Controls > Timing > Start Automatic Time Drift (WideGraph::on_autoDriftButton_toggled).
     // Not kept after a restart, like the PC button.
@@ -4416,6 +4430,9 @@ class JS8EngineService : Service() {
         const val ACTION_AUTO_DRIFT = "com.js8call.example.ACTION_AUTO_DRIFT"
         const val EXTRA_AUTO_DRIFT_ON = "auto_drift_on"
         const val EXTRA_AUTO_DRIFT_STOP_AFTER = "auto_drift_stop_after"
+        /** Display Decode Attempts on / off (EXTRA_SYNC_STATS_ON). */
+        const val ACTION_SET_SYNC_STATS = "com.js8call.example.ACTION_SET_SYNC_STATS"
+        const val EXTRA_SYNC_STATS_ON = "sync_stats_on"
         const val ACTION_RIG_STATUS = "com.js8call.example.ACTION_RIG_STATUS"
         const val ACTION_DEBUG_INJECT_DECODE = "com.js8call.example.ACTION_DEBUG_INJECT_DECODE"
         const val ACTION_DEBUG_FT8_WAV = "com.js8call.example.ACTION_DEBUG_FT8_WAV"

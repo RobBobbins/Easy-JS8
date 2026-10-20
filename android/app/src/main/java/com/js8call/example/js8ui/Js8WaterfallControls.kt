@@ -40,7 +40,11 @@ class Js8WaterfallControls(
     /** Timing: new time drift in ms (WideGraph::want_new_drift). */
     private val setDrift: (Long) -> Unit,
     /** Timing: Start / Stop Automatic Time Drift; stop after n decodes, 0 = keep going. */
-    private val setAutoDrift: (Boolean, Int) -> Unit
+    private val setAutoDrift: (Boolean, Int) -> Unit,
+    /** Display > Adjust... > Import...: pick a .pal file. */
+    private val importPalette: ((List<Int>) -> Unit) -> Unit = {},
+    /** Display > Adjust... > Export...: save a .pal file. */
+    private val exportPalette: (String) -> Unit = {}
 ) {
     companion object {
         const val KEY_CENTER = "js8cfg_wf_center"
@@ -100,7 +104,8 @@ class Js8WaterfallControls(
         v<View>(R.id.js8_wf_filter_sync)?.setOnClickListener { setFilterCenter(offset()) }
         setUpTabs()
         setUpTiming()
-        Js8WaterfallDisplay(root, prefs, waterfall) { up, down, onStep -> stepper(up, down, onStep) }
+        Js8WaterfallDisplay(root, prefs, waterfall, { up, down, onStep -> stepper(up, down, onStep) },
+            importPalette, exportPalette)
         fitUpright()
         renderAll()
     }
@@ -168,19 +173,29 @@ class Js8WaterfallControls(
         }
         listOf(R.id.js8_wf_drift_minute, R.id.js8_wf_drift_end, R.id.js8_wf_drift_start, R.id.js8_wf_drift_reset)
             .forEach { button(it) }
-        // Display tab; the two sliders get a fixed 260 dp row, centred
+        // Display tab; the four sliders get a fixed 260 dp row, centred
         field(R.id.js8_wf_start_box, R.id.js8_wf_start, "Start: $CENTER_MAX Hz")
         field(R.id.js8_wf_bpp_box, R.id.js8_wf_bpp, "Bins Per Pixel: 1000")
-        centerRow(R.id.js8_wf_palette_row)
-        wrap(R.id.js8_wf_palette)
-        v<TextView>(R.id.js8_wf_palette)?.let { t ->
-            val longest = com.js8call.example.ui.WaterfallPalettes.names(root.context).maxByOrNull { t.paint.measureText(it) } ?: "Default"
-            t.minWidth = Math.ceil(t.paint.measureText("$longest  ▾").toDouble()).toInt() + t.paddingStart + t.paddingEnd
+        fun dropDown(id: Int, entries: List<String>) {
+            wrap(id)
+            v<TextView>(id)?.let { t ->
+                val longest = entries.maxByOrNull { t.paint.measureText(it) } ?: ""
+                t.minWidth = Math.ceil(t.paint.measureText("$longest  ▾").toDouble()).toInt() + t.paddingStart + t.paddingEnd
+            }
         }
+        dropDown(R.id.js8_wf_palette, com.js8call.example.ui.WaterfallPalettes.names(root.context) +
+            com.js8call.example.ui.WaterfallPalettes.USER_DEFINED)
         button(R.id.js8_wf_palette_adjust)
         field(R.id.js8_wf_fps_box, R.id.js8_wf_fps, "Scroll Speed: 100 fps")
+        centerRow(R.id.js8_wf_avg_row)
+        field(R.id.js8_wf_avg_box, R.id.js8_wf_avg, "Avg N: 50")
         wrap(R.id.js8_wf_flatten)
-        listOf(R.id.js8_wf_gain_row, R.id.js8_wf_zero_row).forEach { id ->
+        dropDown(R.id.js8_wf_spectrum, listOf("Current", "Cumulative", "Linear Avg"))
+        field(R.id.js8_wf_smooth_box, R.id.js8_wf_smooth, "Smooth:  7")
+        wrap(R.id.js8_wf_decode_attempts)
+        centerRow(R.id.js8_wf_height_row)
+        field(R.id.js8_wf_height_box, R.id.js8_wf_height, "100 %")
+        listOf(R.id.js8_wf_gain_row, R.id.js8_wf_zero_row, R.id.js8_wf_gain2d_row, R.id.js8_wf_zero2d_row).forEach { id ->
             v<View>(id)?.let { row ->
                 (row.layoutParams as? LinearLayout.LayoutParams)?.let { lp ->
                     lp.width = (260 * dp).toInt(); lp.gravity = Gravity.CENTER_HORIZONTAL; row.layoutParams = lp
