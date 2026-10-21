@@ -1,0 +1,78 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- FT8Call layout header, right box (Rob, 2026-10-20; FT8Call v0.4.2): our six buttons as small
+     boxes, 2 x 3, on black. Same buttons and order as js8_header_buttons_pc.xml. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="190dp"
+    android:layout_height="match_parent"
+    android:background="@drawable/js8_ft8call_box"
+    android:gravity="center"
+    android:orientation="vertical">
+
+    <LinearLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:baselineAligned="false"
+        android:orientation="horizontal">
+
+        <androidx.appcompat.widget.AppCompatButton
+            android:id="@+id/js8_btn_rx"
+            style="@style/Js8HeaderToggleGreen"
+            android:layout_width="56dp"
+            android:layout_height="22dp"
+            android:text="RX"
+            android:textSize="11dp" />
+
+        <androidx.appcompat.widget.AppCompatButton
+            android:id="@+id/js8_btn_tx"
+            style="@style/Js8HeaderToggleGreen"
+            android:layout_width="56dp"
+            android:layout_height="22dp"
+            android:layout_marginStart="6dp"
+            android:text="TX"
+            android:textSize="11dp" />
+
+        <androidx.appcompat.widget.AppCompatButton
+            android:id="@+id/js8_btn_mode"
+            style="@style/Js8HeaderModeButton"
+            android:layout_width="56dp"
+            android:layout_height="22dp"
+            android:layout_marginStart="6dp"
+            android:text="Settings"
+            android:textSize="11dp" />
+    </LinearLayout>
+
+    <LinearLayout
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="12dp"
+        android:baselineAligned="false"
+        android:orientation="horizontal">
+
+        <androidx.appcompat.widget.AppCompatButton
+            android:id="@+id/js8_btn_spot"
+            style="@style/Js8HeaderToggleBlue"
+            android:layout_width="56dp"
+            android:layout_height="22dp"
+            android:text="SPOT"
+            android:textSize="11dp"
+            android:textStyle="bold" />
+
+        <androidx.appcompat.widget.AppCompatButton
+            android:id="@+id/js8_btn_log"
+            style="@style/Js8HeaderToggleBlue"
+            android:layout_width="56dp"
+            android:layout_height="22dp"
+            android:layout_marginStart="6dp"
+            android:text="LOG"
+            android:textSize="11dp" />
+
+        <androidx.appcompat.widget.AppCompatButton
+            android:id="@+id/js8_btn_tune"
+            style="@style/Js8HeaderToggleBlue"
+            android:layout_width="56dp"
+            android:layout_height="22dp"
+            android:layout_marginStart="6dp"
+            android:text="TUNE"
+            android:textSize="11dp" />
+    </LinearLayout>
+</LinearLayout>

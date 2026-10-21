@@ -62,6 +62,16 @@
         <item name="android:textStyle">bold</item>
     </style>
 
+    <!-- FT8Call layout buttons row: FT8Call's flat grey buttons (Rob, 2026-10-20) -->
+    <style name="Js8ButtonFt8Call" parent="Js8Button">
+        <item name="android:background">@drawable/js8_btn_ft8call</item>
+    </style>
+
+    <!-- FT8Call layout header text: white on the black boxes -->
+    <style name="Js8Ft8CallHeaderText" parent="Js8Text">
+        <item name="android:textColor">@color/js8_ft8call_header_text</item>
+    </style>
+
     <style name="Js8StatusLabel" parent="Js8Text">
         <item name="android:layout_height">22dp</item>
         <item name="android:gravity">center</item>

@@ -1,0 +1,43 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- FT8Call layout header, left box (Rob, 2026-10-20; FT8Call v0.4.2): band over the dial frequency
+     over the offset, white on black. The offset is changed on the waterfall or in Waterfall Controls. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="124dp"
+    android:layout_height="match_parent"
+    android:background="@drawable/js8_ft8call_box"
+    android:gravity="center_horizontal"
+    android:orientation="vertical"
+    android:paddingTop="12dp">
+
+    <!-- Band of the dial frequency (FT8Call's band list) -->
+    <TextView
+        android:id="@+id/js8_band_label"
+        style="@style/Js8Text"
+        android:layout_width="96dp"
+        android:layout_height="19dp"
+        android:background="@color/js8_ft8call_band_bg"
+        android:gravity="center_vertical"
+        android:paddingStart="5dp"
+        android:text="20m"
+        android:textSize="12dp" />
+
+    <TextView
+        android:id="@+id/js8_freq_display"
+        style="@style/Js8Ft8CallHeaderText"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="7dp"
+        android:text="14.078 000"
+        android:textSize="19dp" />
+
+    <TextView
+        android:id="@+id/js8_offset_value"
+        style="@style/Js8Ft8CallHeaderText"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="5dp"
+        android:text="1500 Hz"
+        android:textColor="@color/js8_ft8call_header_dim"
+        android:textSize="11dp"
+        android:textStyle="italic" />
+</LinearLayout>

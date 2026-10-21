@@ -173,6 +173,8 @@ object Js8SettingsSchema {
 
     /** Station > SWL (Listening only): no callsign needed, nothing is transmitted (Easy JS8 only). */
     const val SWL_KEY = "js8cfg_swl"
+    /** Station page holding Sideways layout, listed only sideways. */
+    const val LAYOUT_PAGE = "Layout"
 
     /**
      * Settings window (header Settings button): settings for operating the program
@@ -397,6 +399,12 @@ object Js8SettingsSchema {
                 check("js8cfg_pwr_band_tune", "Tune", false)
             ))
         )),
+        // Sideways layout on its own page after Audio, shown only sideways (Rob, 2026-10-21; was on UI)
+        Section(LAYOUT_PAGE, null, listOf(
+            Group(null, listOf(
+                choice(Js8MainFragment.PREF_LANDSCAPE_LAYOUT, "Sideways layout:", "pc", listOf("PC" to "pc", "Swipe" to "swipe", "FT8Call" to "ft8call"))
+            ))
+        )),
         Section("Reporting", null, listOf(
             Group("Logging", listOf(
                 text("js8cfg_op_call", "Operator Callsign (if different than Station Callsign):", upper = true)
@@ -469,7 +477,6 @@ object Js8SettingsSchema {
         // Settings JS8Android has that the PC window does not
         Section("Phone", null, listOf(
             Group("Easy JS8", listOf(
-                choice(Js8MainFragment.PREF_LANDSCAPE_LAYOUT, "Sideways layout:", "pc", listOf("PC" to "pc", "Swipe" to "swipe")),
                 check("tx_boost_enabled", "Transmit audio boost", false),
                 check("keep_screen_on", "Keep screen on", false),
                 check("persist_decodes", "Keep decoded messages after restart", false),

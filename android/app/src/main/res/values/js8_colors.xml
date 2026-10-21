@@ -50,4 +50,16 @@
     <color name="js8_cfg_group_border">#A0A0A0</color>
     <color name="js8_cfg_tab_border">#C0C0C0</color>
     <color name="js8_cfg_placeholder">#8A8A8A</color>
+
+    <!-- FT8Call layout (sideways, Rob 2026-10-20), from FT8Call v0.4.2: black header boxes, flat grey buttons -->
+    <color name="js8_ft8call_header_bg">#000000</color>
+    <color name="js8_ft8call_header_border">#5A5A5A</color>
+    <color name="js8_ft8call_header_text">#FFFFFF</color>
+    <color name="js8_ft8call_header_dim">#C8C8C8</color>
+    <color name="js8_ft8call_band_bg">#FFFFFF</color>
+    <color name="js8_ft8call_button">#E1E1E1</color>
+    <color name="js8_ft8call_button_pressed">#C4D9EE</color>
+    <color name="js8_ft8call_button_border">#ADADAD</color>
+    <color name="js8_ft8call_button_disabled">#F4F4F4</color>
+    <color name="js8_ft8call_button_border_disabled">#D6D6D6</color>
 </resources>

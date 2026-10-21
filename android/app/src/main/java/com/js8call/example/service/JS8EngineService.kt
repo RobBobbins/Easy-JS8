@@ -3133,8 +3133,11 @@ class JS8EngineService : Service() {
             putExtra(EXTRA_TX_FRAME_TEXT, texts[index])
             putExtra(EXTRA_TX_FRAME_INDEX, index)
             putExtra(EXTRA_TX_FRAME_COUNT, texts.size)
-            // PC setCharsSent(m_totalTxMessage.length()): text of the parts sent so far, this one included
-            putExtra(EXTRA_TX_FRAME_CHARS_SENT, texts.take(index + 1).sumOf { it.length })
+            // PC setCharsSent(m_totalTxMessage.length()): text of the parts sent so far, this one included,
+            // without the "CALLSIGN: " the first part starts with, which is not in the Typing Box (Rob,
+            // 2026-10-21: the strike-out ran 8 characters ahead and crossed out short messages at once)
+            val added = Regex("^[A-Z0-9/]+: ").find(texts[0])?.value?.length ?: 0
+            putExtra(EXTRA_TX_FRAME_CHARS_SENT, (texts.take(index + 1).sumOf { it.length } - added).coerceAtLeast(0))
             putExtra(EXTRA_TX_OFFSET_HZ, lastTxFrequencyHz)
         }
         LocalBroadcastManager.getInstance(this).sendBroadcast(intent)

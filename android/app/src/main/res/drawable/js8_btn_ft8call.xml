@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- FT8Call layout buttons (Rob, 2026-10-20): FT8Call v0.4.2's flat grey buttons, square corners -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_enabled="false" android:drawable="@drawable/js8_shape_ft8call_disabled" />
+    <item android:state_pressed="true" android:drawable="@drawable/js8_shape_ft8call_pressed" />
+    <item android:drawable="@drawable/js8_shape_ft8call" />
+</selector>

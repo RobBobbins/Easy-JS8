@@ -22,7 +22,7 @@ older description below (PC mode, Swipe layout, Menu page, Settings tabs).
 | Phone held | Layout | Behaviour |
 |---|---|---|
 | Upright (portrait) | **Vertical mode** (always) | Sections stacked, one long page, scrolls up/down. No pinch zoom. |
-| Sideways (landscape) | **PC** or **Swipe**, chosen by the **Sideways layout** setting (default PC) | see below |
+| Sideways (landscape) | **PC**, **Swipe** or **FT8Call**, chosen by the **Sideways layout** setting on the sideways Station > **Layout** page (default PC) | see below |
 
 App name **Easy JS8**, app ID `com.easyjs8.app` (installs next to JS8Android).
 
@@ -107,8 +107,22 @@ Copy of JS8Call **File → Settings** (JS8_UI/Configuration.ui, defaults from Co
   list; ← Back on the list works like Cancel. Sub-tabs (General: Station, Behavior, Networking &
   Autoreply; Radio: CAT Control, Rig Options; UI: Band & Call Activity, Messages, Composition)
   are headings on their page. Label above its box.
-- **Sideways** (2026-10-20): no tabs. ← Back + page name on one line; page list 3 across; a page's
+- **Sideways** (2026-10-20): no tabs. Top row: ← Back at the left, the list's title or the page
+  name (About: "About Easy JS8") centred on the screen (2026-10-21); page list 3 across; a page's
   framed groups in two columns, label above its box; tables full width.
+  **Radio** page (2026-10-21, Rob: "use the space"): first row Rig | PTT Method | Mode | Split
+  Operation (Split moved up, Rob), then three to a row in page order (`renderThreeAcross`), each box as wide as what it holds ("huge gaps" inside the
+  boxes); the Rig list fits the longest rig name; a box with a checkbox (Advanced) takes the rest of
+  its row; right of Tx delay, the label **Hold PTT between frames** (shortened, Rob) level with
+  "Tx delay:" and its checkbox under it, level with the value. In each row every box has the same top and bottom
+  (Rob: "make the heights the same, no crowding"); spacing inside the boxes as on other pages (a
+  tighter try was "jammed"). A sub-tab heading (CAT Control, Rig Options) over its first box. Gaps
+  between boxes unchanged (Rob: not the problem).
+  **Audio** page (2026-10-21, Rob: "tidy up audio"): same packed layout. Modulation Soundcard with
+  Input | Input channel and Output | Output channel side by side; Notification Soundcard with
+  Remember power settings by band under it in the second column; Modulation keeps its own height,
+  ending under Output channel (Rob: "as short as the last fields in it").
+  Other pages still two columns, normal padding.
 - **OK** / **Cancel** pinned to the bottom in both. Turning the phone keeps the window open and
   keeps unsaved changes.
 - General → Station Details: My Callsign, **SWL (Listening only)**, My Maidenhead Grid Locator,
@@ -117,7 +131,9 @@ Copy of JS8Call **File → Settings** (JS8_UI/Configuration.ui, defaults from Co
 - PC-only settings hidden: TCP/UDP API, WSJT-X, N3FJP, N1MM, Save Directory, PTT command,
   Application stylesheet / font, Check for software updates.
 - Extra **Phone** page at the end for JS8Android settings with no PC equivalent
-  (Sideways layout, Transmit audio boost, Keep screen on, Keep decoded messages, Automatic time sync).
+  (Transmit audio boost, Keep screen on, Keep decoded messages, Automatic time sync).
+- **Sideways layout** (PC / Swipe / FT8Call) is on its own **Layout** page, listed only sideways,
+  after Audio (first column, second row of the page list) (Rob, 2026-10-21; was on Phone, then UI).
 - Settings JS8Android already had keep their stored keys (callsign, grid, my_groups, my_info,
   my_status, rig_*, transmit_mode, heartbeat_interval, autoreply_enabled, relay_enabled,
   psk_reporter, aprs_is, log_messages_to_file, custom_frequency_mhz, last_audio_device_id,
@@ -135,6 +151,27 @@ waterfall top). Sizes are kept; Reset Window Sizes puts them back.
 Pinch to zoom (up to 4x), two fingers to move, one finger moves on empty areas,
 double-tap an empty area to toggle fitted / 2x. Text is redrawn at each zoom (sharp).
 Menu bar items open the Menu page.
+
+## FT8Call layout (sideways, setting "FT8Call")
+
+Added 2026-10-20 (Rob: "match the FT8Call look as close as possible", "close, it doesn't need to be
+perfect"), copied from Rob's screenshot of FT8Call v0.4.2-devel. PC mode's window, positions, ids,
+dividers, zoom and menus (same generator, `build-env/gen_pc_layout.py` -> `fragment_js8_ft8call.xml`,
+root tagged `ft8call`); only the look changes. Our buttons and features, not FT8Call's.
+
+- Header: three black boxes. Left (`js8_freq_block_ft8call`): band (from the dial frequency),
+  frequency, offset in small italics; no offset slider (offset set on the waterfall / Waterfall
+  Controls). Middle (`js8_call_clock_block_ft8call`): callsign, date, time, **Next Beacon: N s**
+  (HB countdown, empty while the HB timer is off). Right (`js8_header_buttons_ft8call`): our six
+  buttons 2 x 3, 56 x 22 dp, 11 dp text.
+- Buttons row: FT8Call's flat grey buttons (`Js8ButtonFt8Call`), all the same width across the row,
+  with and without HB (`Js8MainFragment.layoutPcButtons`); the STATUS / Saved gap is kept for the
+  divider grab spot.
+- Message Window text bold italic.
+- Status bar (`js8_status_bar_ft8call`): Receiving | JS8 Normal | Last Tx (plain, not filled yet) |
+  long progress bar | wpm. Freq and Auto Reply are hidden.
+- Unchanged from PC mode (Rob): waterfall, CAT / level meter, Waterfall Controls, gain slider,
+  Band / Call Activity column headers, row colours (CQ green, your callsign red - same as FT8Call).
 
 ## Swipe layout (sideways, setting "Swipe")
 

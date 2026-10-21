@@ -206,19 +206,19 @@ class Js8SettingsFragment : Fragment() {
             setBackgroundColor(color(R.color.js8_frame_bg))
         }
         // Station: ← Back at the top (a page returns to the list; the list works like Cancel)
-        // (Rob, 2026-10-19). Sideways, also in Swipe's Station screen, the page name sits beside
-        // it in place of the PC tabs (Rob, 2026-10-20)
-        if (station && (!embedded || sideways)) root.addView(LinearLayout(requireContext()).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.CENTER_VERTICAL
+        // (Rob, 2026-10-19). Sideways, also in Swipe's Station screen, the list's title or the
+        // page name sits in the middle of that row, centred on the screen (Rob, 2026-10-21)
+        if (station && (!embedded || sideways)) root.addView(FrameLayout(requireContext()).apply {
+            if (sideways) addView(label("", size = 1.15f, bold = true).also {
+                titleView = it
+                it.gravity = Gravity.CENTER
+            }, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, px(40)))
             addView(label("← Back", size = 1.15f, bold = true).apply {
                 setPadding(px(12), 0, px(12), 0)
                 minHeight = px(40)
                 gravity = Gravity.CENTER_VERTICAL
                 setOnClickListener { stationBack() }
-            })
-            if (sideways) addView(label("", size = 1.15f, bold = true).also { titleView = it },
-                LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginEnd = px(12) })
+            }, FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         })
         else if (!embedded) {
             // Settings window: ← Back (works like Cancel) at the left, ⚙ opening Station at the
@@ -387,16 +387,15 @@ class Js8SettingsFragment : Fragment() {
      * that page (Rob, 2026-10-19: one long list was too much).
      */
     /** Station's pages (the PC's tab names) with About last (Rob, 2026-10-19: Settings > gear > Station > About). */
-    private fun stationPages() = sections.map { it.tab }.distinct() + ABOUT_PAGE
+    // The Layout page (Sideways layout) is listed only sideways (Rob, 2026-10-21)
+    private fun stationPages() = sections.map { it.tab }.distinct().filter { sideways || it != Js8SettingsSchema.LAYOUT_PAGE } + ABOUT_PAGE
 
     private fun renderStationPage() {
         val pages = stationPages()
         val page = vm.page?.takeIf { it in pages }
         val col = column().apply { setPadding(px(10), px(4), px(10), px(16)) }
-        // Sideways: the list's title sits beside ← Back, centred; a page's name goes under it
-        // (Rob, 2026-10-20)
-        titleView?.text = if (page == null) "Station Settings" else ""
-        titleView?.gravity = Gravity.CENTER_HORIZONTAL
+        // Sideways: the list's title or the page's name in the top row, centred (Rob, 2026-10-21)
+        titleView?.text = if (page == ABOUT_PAGE) "About Easy JS8" else page ?: "Station Settings"
         fun pageButton(name: String) = LinearLayout(requireContext()).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -437,9 +436,10 @@ class Js8SettingsFragment : Fragment() {
         } else if (page == ABOUT_PAGE) {
             renderAbout(col)
         } else if (sideways) {
-            // 10 dp above and below the page name (Rob, 2026-10-20)
-            col.addView(label(page, size = 1.2f, bold = true).apply { setPadding(0, px(10), 0, px(10)) })
-            renderSidewaysPage(col, sections.filter { it.tab == page && hasVisible(it.items) })
+            // The page name is in the top row (titleView). Radio: three boxes to a row (Rob, 2026-10-21)
+            val secs = sections.filter { it.tab == page && hasVisible(it.items) }
+            columns = if (page in THREE_ACROSS_PAGES) 3 else 2
+            if (columns == 3) renderThreeAcross(col, secs) else renderSidewaysPage(col, secs)
         } else {
             col.addView(label(page, size = 1.2f, bold = true).apply { setPadding(0, px(10), 0, px(6)) })
             for (s in sections.filter { it.tab == page }) {
@@ -459,7 +459,7 @@ class Js8SettingsFragment : Fragment() {
                 setLinkTextColor(color(R.color.js8_blue))
                 android.text.util.Linkify.addLinks(this, android.text.util.Linkify.WEB_URLS) // tap opens the browser
             })
-        line("About Easy JS8", size = 1.2f, bold = true, top = 10)
+        if (!sideways) line("About Easy JS8", size = 1.2f, bold = true, top = 10) // sideways: in the top row
         line("by VA3OSO")
         line("Version ${BuildConfig.VERSION_NAME} (build ${BuildConfig.VERSION_CODE})")
         line("Built ${BuildConfig.BUILD_DATE}")
@@ -514,6 +514,9 @@ class Js8SettingsFragment : Fragment() {
 
     private val HEADED = "headed"
 
+    /** Radio page sideways: shorter labels for checkboxes beside a spin box (Rob, 2026-10-21). */
+    private val SHORT_CHECK_LABELS = mapOf("js8cfg_hold_ptt" to "Hold PTT between frames")
+
     private val WIDE_SPECIALS = setOf("frequencies_table", "schedule_table", "saved_messages", "notifications_table", "diagnostics_text")
 
     /**
@@ -523,7 +526,101 @@ class Js8SettingsFragment : Fragment() {
      * take the full width.
      */
     /** Sideways Station: width of one of the two columns (window less 10 dp each side and the 16 dp gap). */
-    private val colWidth get() = ((resources.displayMetrics.widthPixels - px(36)) / 2).coerceAtLeast(px(200))
+    /** Sideways Station: boxes per row on the page shown (2, or 3 on [THREE_ACROSS_PAGES]). */
+    private var columns = 2
+    // Radio, then Audio ("tidy up audio", Rob 2026-10-21)
+    private val THREE_ACROSS_PAGES = setOf("Radio", "Audio")
+    /** Packed pages: a field and the one named here sit side by side (Audio: device beside its channel). */
+    /** Packed pages: these boxes go under the box before them, not beside it (Rob, 2026-10-21). */
+    private val STACK_UNDER_PREVIOUS = setOf("Remember power settings by band")
+    private val SIDE_BY_SIDE = mapOf("last_audio_device_id" to "js8cfg_input_channel", "js8cfg_output_device" to "js8cfg_output_channel")
+    private val colWidth get() = if (columns == 3) ((resources.displayMetrics.widthPixels - px(20) - 2 * px(THREE_GAP)) / 3)
+        else ((resources.displayMetrics.widthPixels - px(36)) / 2).coerceAtLeast(px(200))
+    private val THREE_GAP = 20
+    /** Radio page sideways: boxes as wide as what they hold, the same height across a row (Rob, 2026-10-21). */
+    private val packed get() = station && sideways && columns == 3
+
+    /**
+     * Sideways Radio page (Rob, 2026-10-21: "use the space", "4 in row one is way too crowded"):
+     * boxes three to a row in page order, each as wide as what it holds ("huge gaps" inside the
+     * boxes); a box with a checkbox's wrapping text takes the rest of its row. A sub-tab's heading sits
+     * over its first box, level with the tops of earlier boxes in the row; its other boxes in that
+     * row are lowered to match. Tables keep the full width. The first row holds four, with Split
+     * Operation moved up beside Mode (Rob, 2026-10-21: "move the split box to the top row").
+     */
+    private fun renderThreeAcross(col: LinearLayout, secs: List<Section>) {
+        class Cell(val view: View, val heading: String?, val section: Section, val fill: Boolean) {
+            /** Boxes stacked under this one in the same column (Audio: Remember power settings by band). */
+            val under = mutableListOf<View>()
+        }
+        val row = mutableListOf<Cell>()
+        var rows = 0
+        fun heading(text: String) = label(text, size = 1.1f, bold = true).apply { setPadding(0, 0, 0, px(2)) }
+        fun endRow() {
+            if (row.isEmpty()) return
+            val line = LinearLayout(requireContext()).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false }
+            // Every box in the row starts under the row's heading line and ends at the tallest box's bottom
+            val rowHeading = row.firstNotNullOfOrNull { it.heading }
+            // Beside a stacked column the boxes keep their own height (Audio: Modulation Soundcard ends
+            // under Output channel, Rob 2026-10-21); otherwise every box stretches to the tallest
+            val stacked = row.any { it.under.isNotEmpty() }
+            row.forEachIndexed { i, c ->
+                val cell = column()
+                when {
+                    c.heading != null -> cell.addView(heading(c.heading))
+                    rowHeading != null -> cell.addView(heading(rowHeading).apply { visibility = View.INVISIBLE })
+                }
+                cell.addView(c.view)
+                // A stacked column keeps its boxes' own heights
+                c.under.forEach { v ->
+                    cell.addView(v)
+                    (v.layoutParams as? LinearLayout.LayoutParams)?.let { lp -> lp.topMargin += px(14); v.layoutParams = lp }
+                }
+                if (!stacked) (c.view.layoutParams as? LinearLayout.LayoutParams)?.let { lp ->
+                    lp.height = 0; lp.weight = 1f; c.view.layoutParams = lp
+                    (c.view as? FrameLayout)?.getChildAt(0)?.let { box ->
+                        box.layoutParams = box.layoutParams.apply { height = ViewGroup.LayoutParams.MATCH_PARENT }
+                    }
+                }
+                line.addView(cell, (if (c.fill) LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT, 1f)
+                    else LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.MATCH_PARENT)).apply {
+                    if (i > 0) marginStart = px(THREE_GAP)
+                })
+            }
+            col.addView(line, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                bottomMargin = px(14)
+            })
+            row.clear()
+            rows++
+        }
+        for (s in secs) {
+            var first = true
+            // Split Operation before Transmit Audio Source, so it reaches the first row
+            val items = s.items.toMutableList()
+            val split = items.indexOfFirst { it is RadioItem && it.field.key == "js8cfg_split" }
+            val audio = items.indexOfFirst { it is RadioItem && it.field.key == "js8cfg_tx_audio_source" }
+            if (split > audio && audio >= 0) items.add(audio, items.removeAt(split))
+            for (item in items) {
+                val v = itemView(item) ?: continue
+                if (isWide(item)) {
+                    endRow()
+                    if (first) s.subTab?.let { col.addView(heading(it)) }
+                    col.addView(v)
+                } else if (item is Group && item.title in STACK_UNDER_PREVIOUS && row.isNotEmpty()) {
+                    row.last().under.add(v)
+                } else {
+                    row.add(Cell(v, if (first) s.subTab else null, s, hasCheck(item)))
+                    if (row.size == (if (rows == 0) 4 else 3)) endRow()
+                }
+                first = false
+            }
+        }
+        endRow()
+    }
+
+    // Only a long checkbox label (Hold PTT) widens its box; Transmit / Tune keep theirs narrow
+    private fun hasCheck(item: Item): Boolean = item is Field && item.kind == Kind.CHECK && textWidth(item.label) > px(200) ||
+        item is Group && item.items.any { hasCheck(it) }
 
     private fun renderSidewaysPage(col: LinearLayout, secs: List<Section>) {
         var cols: Pair<LinearLayout, LinearLayout>? = null
@@ -540,8 +637,8 @@ class Js8SettingsFragment : Fragment() {
             target.addView(v)
             heights[i] += v.measuredHeight + px(14)
         }
-        // No space above a heading straight under the page name: that gap is the name's
-        fun heading(text: String, top: Boolean = col.childCount > 1) = label(text, size = 1.1f, bold = true).apply {
+        // No space above a heading at the top of the page
+        fun heading(text: String, top: Boolean = col.childCount > 0) = label(text, size = 1.1f, bold = true).apply {
             setPadding(0, px(if (top) 10 else 0), 0, px(2))
         }
         for (s in secs) {
@@ -577,6 +674,42 @@ class Js8SettingsFragment : Fragment() {
                 continue
             }
             if (grid != null && item === grid) continue
+            // Radio page: a checkbox right after a spin box sits beside its ▲▼ (Advanced: Tx delay, Hold PTT),
+            // laid out like the spin box: its label level with "Tx delay:", the box under it level with the
+            // value (Rob, 2026-10-21), label shortened to "Hold PTT between frames" (Rob)
+            val next = items.getOrNull(items.indexOf(item) + 1)
+            if (packed && item is Field && item.kind == Kind.SPIN && next is Field && next.kind == Kind.CHECK && next.visible(draft)) {
+                val box = checkBox(next).apply { text = ""; minHeight = 0; minimumHeight = 0 }
+                parent.addView(LinearLayout(requireContext()).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    addView(fieldRow(item))
+                    addView(column().apply {
+                        setPadding(0, px(4), 0, px(4))
+                        addView(label(SHORT_CHECK_LABELS[next.key] ?: next.label).apply {
+                            if (!box.isEnabled) alpha = 0.5f
+                            setOnClickListener { if (box.isEnabled) box.toggle() }
+                        })
+                        // the checkbox's square starts ~6 dp into its view: pulled left to line up with the label
+                        addView(box, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, px(34)).apply { topMargin = px(4); marginStart = -px(6) })
+                    }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginStart = px(16) })
+                })
+                continue
+            }
+            if (packed && item is Field && item.kind == Kind.CHECK && items.getOrNull(items.indexOf(item) - 1).let {
+                    it is Field && it.kind == Kind.SPIN && it.visible(draft) }) continue
+            // Packed pages: pairs side by side, two by two in the box (Audio: Input | Input channel, Output | Output channel)
+            val partner = (item as? Field)?.let { f -> SIDE_BY_SIDE[f.key]?.let { k -> items.firstOrNull { it is Field && it.key == k } } } as? Field
+            if (packed && item is Field && item.visible(draft) && partner != null && partner.visible(draft)) {
+                parent.addView(LinearLayout(requireContext()).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    addView(fieldRow(item))
+                    addView(fieldRow(partner), LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
+                        ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginStart = px(16) })
+                })
+                continue
+            }
+            if (packed && item is Field && SIDE_BY_SIDE.entries.any { (a, b) -> b == item.key &&
+                    items.any { it is Field && it.key == a && it.visible(draft) } }) continue
             itemView(item)?.let { parent.addView(it) }
         }
     }
@@ -633,10 +766,13 @@ class Js8SettingsFragment : Fragment() {
         val box = column().apply {
             setBackgroundResource(R.drawable.js8_cfg_group)
             setPadding(px(10), px(if (title != null) 16 else 10), px(10), px(10))
+            // Radio page: at least as wide as the title on its top edge
+            if (packed && title != null) minimumWidth = textWidth(title) + px(36)
         }
         fill(box)
         frame.addView(box, FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
-            topMargin = px(if (title != null) 9 else 0)
+            // Radio page: a box without a title starts level with titled boxes' frame lines
+            topMargin = px(if (title != null || packed) 9 else 0)
         })
         if (title != null) frame.addView(label(title).apply {
             setBackgroundColor(Color.TRANSPARENT)
@@ -698,7 +834,9 @@ class Js8SettingsFragment : Fragment() {
             else -> return null
         }.maxOf { textWidth(it) }
         val extra = px(22) + (if (f.kind == Kind.SPIN) px(28) else 0) + (if (f.required) px(22) else 0) // warning mark 18 dp + 4 dp gap
-        return (longest + extra).coerceAtMost(colWidth)
+        // Three to a row: the box also fits inside its group's frame
+        // Radio page: up to half the page, so the longest rig name shows in full
+        return (longest + extra).coerceAtMost(if (packed) (resources.displayMetrics.widthPixels - px(20)) / 2 else colWidth)
     }
 
     /** Short free-text boxes and the longest value each is expected to hold. */

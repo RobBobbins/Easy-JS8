@@ -143,7 +143,7 @@ class Js8MainFragment : Fragment() {
     private var messageWindowShown: String? = null
 
     private val ui = Handler(Looper.getMainLooper())
-    private val clockFormat = SimpleDateFormat("yyyy MMM dd HH:mm:ss", Locale.US).apply {
+    private var clockFormat = SimpleDateFormat("yyyy MMM dd HH:mm:ss", Locale.US).apply {
         timeZone = TimeZone.getTimeZone("UTC")
     }
     private val tick = object : Runnable {
@@ -155,6 +155,7 @@ class Js8MainFragment : Fragment() {
             // ages ("now", "15s", "2m") move on every 5 seconds even without new decodes
             if (activityDirty || (now / 1000) % 5 == 0L) renderActivity()
             renderHbLabel(now)
+            renderNextBeacon(now)
             renderCqLabel(now)
             ui.postDelayed(this, 1000 - now % 1000)
         }
@@ -167,6 +168,7 @@ class Js8MainFragment : Fragment() {
         val layout = when {
             !landscape -> R.layout.fragment_js8_main
             sideways == "swipe" -> R.layout.fragment_js8_swipe
+            sideways == "ft8call" -> R.layout.fragment_js8_ft8call
             else -> R.layout.fragment_js8_pc
         }
         return inflater.inflate(layout, container, false)
@@ -197,6 +199,12 @@ class Js8MainFragment : Fragment() {
         callActivity = view.findViewById(R.id.js8_call_activity)
         inbox = view.findViewById(R.id.js8_inbox_table)
         messageWindow = view.findViewById(R.id.js8_message_window)
+        // FT8Call layout: date over time in the black header, Message Window text bold italic (FT8Call v0.4.2)
+        val ft8call = isFt8CallLayout(view)
+        clockFormat = SimpleDateFormat(if (ft8call) "yyyy MMM dd\nHH:mm:ss" else "yyyy MMM dd HH:mm:ss", Locale.US).apply {
+            timeZone = TimeZone.getTimeZone("UTC")
+        }
+        if (ft8call) messageWindow.setTypeface(messageWindow.typeface, android.graphics.Typeface.BOLD_ITALIC)
         typingBox = view.findViewById(R.id.js8_typing_box)
         statusState = view.findViewById(R.id.js8_status_state)
         statusFreq = view.findViewById(R.id.js8_status_freq)
@@ -228,6 +236,8 @@ class Js8MainFragment : Fragment() {
         setUpTables()
         setUpHeader()
         setUpButtons(view)
+        // FT8Call layout: equal buttons and the divider spot in the STATUS / Saved gap from the start
+        if (ft8call) layoutPcButtons(hbShown())
         // Saved > APRS page OK and Message Inbox screen Reply: the line goes in the Typing Box, not sent
         parentFragmentManager.setFragmentResultListener(Js8AprsFragment.RESULT_KEY, viewLifecycleOwner) { _, result ->
             result.getString(Js8AprsFragment.RESULT_TEXT)?.let { addMessageText(it, send = false) }
@@ -839,6 +849,9 @@ class Js8MainFragment : Fragment() {
 
     private fun renderFrequency() {
         freqDisplay?.text = formatMhz(dialHz)
+        // FT8Call layout: the band above the frequency
+        view?.findViewById<TextView?>(R.id.js8_band_label)?.text =
+            com.js8call.example.util.BandUtils.bandLabelForFrequencyHz(dialHz)
         val offset = monitorVm.getTxOffset().toLong()
         statusFreq.text = "Freq: ${formatMhz(dialHz + offset)}"
     }
@@ -1032,12 +1045,26 @@ class Js8MainFragment : Fragment() {
         menu.setOnMenuItemClickListener { item ->
             when {
                 item.itemId == 9999 -> openStation() // Saved Messages are in Station
+                // APRS GRID sends at once like a saved message, with the grid from Station (Rob, 2026-10-21)
+                aprs.getOrNull(item.itemId - 10000)?.second == Js8AprsFragment.FORM_GRID -> sendAprsGrid()
                 item.itemId >= 10000 -> openAprs(aprs[item.itemId - 10000].second)
                 else -> addMessageText(macro(saved[item.itemId]), send = true)
             }
             true
         }
         menu.show()
+    }
+
+    /** Saved > APRS GRID: "@APRSIS GRID" + My Maidenhead Grid Locator, sent like a saved message. */
+    private fun sendAprsGrid() {
+        val grid = prefs().getString("grid", "").orEmpty().trim().uppercase(Locale.US)
+        if (!Js8Grid.isValid(grid)) {
+            AlertDialog.Builder(requireContext())
+                .setMessage("Set your grid in Station first (General > My Maidenhead Grid Locator).")
+                .setPositiveButton(android.R.string.ok, null).show()
+            return
+        }
+        addMessageText("@APRSIS GRID $grid", send = true)
     }
 
     /** Saved > APRS page; its OK puts the line in the Typing Box without sending (Rob, 2026-10-19). */
@@ -1297,6 +1324,23 @@ class Js8MainFragment : Fragment() {
             lp.marginStart to lp.width
         }.also { pcButtonsOriginal = it }
         val dp = resources.displayMetrics.density
+        if (isFt8CallLayout(v)) {
+            // FT8Call layout: every shown button the same width across the row (FT8Call v0.4.2),
+            // the STATUS / Saved gap kept for the divider's grab spot (gen_pc_layout.py, same numbers)
+            val shown = if (withHb) buttons else buttons.drop(1)
+            val gap = 6f
+            val splitGap = 31f
+            val w = (1047f - (shown.size - 2) * gap - splitGap) / shown.size
+            val status = shown.indexOf(v.findViewById<View>(R.id.js8_btn_status))
+            shown.forEachIndexed { i, b ->
+                val lp = b.layoutParams as ViewGroup.MarginLayoutParams
+                lp.marginStart = ((15f + i * (w + gap) + (if (i > status) splitGap - gap else 0f)) * dp).toInt()
+                lp.width = (w * dp).toInt()
+                b.layoutParams = lp
+            }
+            splitters?.setButtonGap(15f + status * (w + gap) + w, 15f + (status + 1) * (w + gap) + splitGap - gap)
+            return
+        }
         // The divider's grab spot follows the STATUS / Saved gap
         val wHb = (1062f - 15f - 9 * 8f - 31f) / 11f
         if (withHb) splitters?.setButtonGap(15f + 5 * (wHb + 8f) + wHb, 15f + 6 * (wHb + 8f) + 23f)
@@ -1331,6 +1375,20 @@ class Js8MainFragment : Fragment() {
             lp.weight = if (withHb) w else 1f
             b.layoutParams = lp
         }
+    }
+
+    /** The FT8Call layout (fragment_js8_ft8call): PC mode's window, FT8Call's look. */
+    private fun isFt8CallLayout(v: View? = view) = v?.findViewById<View?>(R.id.js8_pc_window)?.tag == "ft8call"
+
+    /** FT8Call layout header: "Next Beacon: 247 s" while the HB timer runs, empty when it is off. */
+    private fun renderNextBeacon(now: Long) {
+        val label = view?.findViewById<TextView?>(R.id.js8_next_beacon) ?: return
+        val timer = com.js8call.example.service.HeartbeatTimer
+        val text = if (timer.on && timer.nextMs > 0) {
+            val secs = Math.round((timer.nextMs - now) / 1000.0)
+            if (secs > 0) "Next Beacon: $secs s" else "Next Beacon: now"
+        } else ""
+        if (label.text.toString() != text) label.text = text
     }
 
     /** The upright page (fragment_js8_main), not PC mode or Swipe. */

@@ -1,0 +1,38 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- FT8Call layout header, middle box (Rob, 2026-10-20; FT8Call v0.4.2): callsign, date, time
+     (js8_clock, two lines) and Next Beacon (the HB countdown, empty while HB is off), white on black. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="727dp"
+    android:layout_height="match_parent"
+    android:background="@drawable/js8_ft8call_box"
+    android:gravity="center"
+    android:orientation="vertical">
+
+    <TextView
+        android:id="@+id/js8_callsign"
+        style="@style/Js8Ft8CallHeaderText"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:text="NOCALL"
+        android:textSize="13dp" />
+
+    <TextView
+        android:id="@+id/js8_clock"
+        style="@style/Js8Ft8CallHeaderText"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="7dp"
+        android:gravity="center"
+        android:lineSpacingExtra="1dp"
+        android:text="2026 Oct 19\n12:45:18"
+        android:textSize="12dp" />
+
+    <TextView
+        android:id="@+id/js8_next_beacon"
+        style="@style/Js8Ft8CallHeaderText"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="7dp"
+        android:textColor="@color/js8_ft8call_header_dim"
+        android:textSize="10dp" />
+</LinearLayout>

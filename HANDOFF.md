@@ -10,6 +10,19 @@ this session too).
 **Seventh session (2026-10-20):** the PC's API, WSJT-X, N3FJP and N1MM (Station > Reporting), see "API and logging";
 then LOG (Log QSO page), the mailbox (messages held for other stations) and Export Options, see "LOG, mailbox, export";
 then the HB button, see "HB button".
+**Eighth session (2026-10-20):** new sideways layout **FT8Call** (Station > Layout > Sideways layout:
+PC / Swipe / FT8Call), PC mode restyled to look like FT8Call v0.4.2, see LAYOUT.md "FT8Call layout".
+Tested on S22: header, buttons with HB, CQ rows, status bar. Not tested: Next Beacon countdown
+(HB timer not started), the drag spots and zoom in this layout, phone light mode.
+Then (2026-10-21): Sideways layout moved from Station > Phone to UI, then to its own Station > Layout page
+(listed only sideways, after Audio; upright list not looked at);
+sideways Station page names moved into the top row beside ← Back, centred on the screen. Checked on
+S22 sideways: page list, UI, Phone, About. Upright Station not looked at (code path unchanged).
+Station > Radio sideways: Rig | PTT Method | Mode | Split Operation, then Transmit Audio Source |
+Advanced (with a rig picked the first row is Rig | CAT Control | PTT Method | Mode, not looked at; with a rig picked, CAT Control joins row 1), boxes sized to what they
+hold, same height across each row (see LAYOUT.md). Checked with Rig None and Hamlib NET (then Cancel).
+Station > Audio sideways packed the same way (see LAYOUT.md); checked in Swipe's Station screen only
+(scrolls a little there; PC / FT8Call mode not looked at). Rob has not said whether other Station pages should get the same.
 **Next:** the wpm box upright is still to place. Committed: fourth session 7717b9d8, Timing tab
 71a831f2, Display first part 7d421c12, Display bigger group 1b4c3056, engine waterfall detail d265512c.
 
@@ -521,6 +534,16 @@ APK: `android/app/build/outputs/apk/debug/app-debug.apk`. Details: `build-env/bu
 - AVD **S22** (1080×2340, 480 dpi) = `emulator-5554`. Another emulator **EasyFT8**
   (`emulator-5556`) belongs to another project — never touch it. Scripts use `-s emulator-5554`.
 - Start it: `C:\Users\Robert\AppData\Local\Android\Sdk\emulator\emulator.exe -avd S22`
+- **S22-Fresh** (made 2026-10-21): S22's settings, no data, for brand-new-install tests. Start with
+  `emulator.exe -avd S22-Fresh -no-snapshot -port 5600` (= `emulator-5600`), close with `adb -s emulator-5600 emu kill`.
+  First test: a fresh install opens Station Settings; Station Status shows IDLE <MYIDLE> VERSION <MYVERSION>
+  and the first OK saves it.
+- Saved > **APRS GRID** (2026-10-21, Rob): no page any more; sends "@APRSIS GRID <saved grid>" like a saved
+  message (alert if no valid grid). Tested on S22-Fresh: "VE3TST: @APRSIS GRID CM87WK91" in the Message Window.
+  Open question: on S22-Fresh RX was off after the first Station OK and again after an app restart.
+- Typing Box strike-out (2026-10-21, Rob): the count left out the "CALLSIGN: " the first part starts with, so it
+  ran 8 characters ahead (short messages crossed out at once). Fixed in JS8EngineService.broadcastTxFrame.
+  Checked on S22-Fresh: APRS GRID part 1 strikes "@APRSIS GRID", part 2 "CM87WK91"; Message Window part by part.
 - `build-env/test/run.sh <name> install` installs, launches, saves `build-env/test/out/<name>.png`.
   `ROT=1 run.sh <name>` = sideways first (`ROT=0` upright). Rob may rotate the window by hand,
   so always pass ROT.
