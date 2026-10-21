@@ -73,6 +73,8 @@ class Js8MainFragment : Fragment() {
         private var swipePage = 1
         /** checkStartupWarnings runs once per app start, not on each rotation. */
         private var startupChecked = false
+        /** RX / TX set from Receiver / Transmitter off at startup once per app start, not on each rotation. */
+        private var startupRxTxDone = false
         /** When each callsign was first selected: the QSO start time for Log QSO (m_callSelectedTime). */
         private val callSelectedTime = mutableMapOf<String, Long>()
     }
@@ -234,8 +236,19 @@ class Js8MainFragment : Fragment() {
         setUpSwipe(view)
         splitters = view.findViewById<android.widget.FrameLayout?>(R.id.js8_pc_window)?.let { Js8PcSplitters(it, prefs()) }
         setUpTables()
+        // PC onRigStateChanged when the rig first comes online: RX on unless "Receiver (RX) off at startup",
+        // TX on unless "Transmitter (TX) off at startup" (Rob, 2026-10-21: RX was off after every fresh start)
+        val firstStart = !startupRxTxDone
+        if (firstStart) {
+            startupRxTxDone = true
+            prefs().edit().putBoolean("js8cfg_tx_enabled", !boolPref("js8cfg_transmit_off", false)).apply()
+        }
         setUpHeader()
         setUpButtons(view)
+        if (firstStart && !boolPref("js8cfg_monitor_off", false)) view.post {
+            val running = monitorVm.status.value?.state.let { it == EngineState.RUNNING || it == EngineState.STARTING }
+            if (isAdded && !running) startMonitoring()
+        }
         // FT8Call layout: equal buttons and the divider spot in the STATUS / Saved gap from the start
         if (ft8call) layoutPcButtons(hbShown())
         // Saved > APRS page OK and Message Inbox screen Reply: the line goes in the Typing Box, not sent

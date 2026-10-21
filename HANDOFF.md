@@ -540,7 +540,11 @@ APK: `android/app/build/outputs/apk/debug/app-debug.apk`. Details: `build-env/bu
   and the first OK saves it.
 - Saved > **APRS GRID** (2026-10-21, Rob): no page any more; sends "@APRSIS GRID <saved grid>" like a saved
   message (alert if no valid grid). Tested on S22-Fresh: "VE3TST: @APRSIS GRID CM87WK91" in the Message Window.
-  Open question: on S22-Fresh RX was off after the first Station OK and again after an app restart.
+- RX / TX at startup (2026-10-21): Receiver (RX) off at startup and Transmitter (TX) off at startup were never
+  read, so RX stayed off after every fresh start. Now once per app start (Js8MainFragment, startupRxTxDone), as the
+  PC (mainwindow.cpp 7761): RX starts unless RX off is ticked, TX is set on / off from TX off. Checked on S22-Fresh
+  (both cases) and S22 (Rob closed and reopened: RX came on). Runs once per app process: closing in a way that
+  leaves the process running (back button?) would skip it; not tested.
 - Typing Box strike-out (2026-10-21, Rob): the count left out the "CALLSIGN: " the first part starts with, so it
   ran 8 characters ahead (short messages crossed out at once). Fixed in JS8EngineService.broadcastTxFrame.
   Checked on S22-Fresh: APRS GRID part 1 strikes "@APRSIS GRID", part 2 "CM87WK91"; Message Window part by part.
