@@ -1,4 +1,4 @@
-# Easy JS8<br><sub>by VA3OSO</sub>
+# Easy JS8<br><sub>by VA3OSO and Claude</sub>
 
 Easy JS8 is a fork of JS8Android with added features and a new screen layout.
 
