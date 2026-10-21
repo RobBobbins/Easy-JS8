@@ -29,7 +29,6 @@ import android.view.ViewGroup
 import android.widget.CheckBox
 import android.widget.EditText
 import android.widget.FrameLayout
-import android.widget.HorizontalScrollView
 import android.widget.LinearLayout
 import android.widget.RadioButton
 import android.widget.RadioGroup
@@ -147,7 +146,7 @@ class Js8SettingsViewModel(app: Application) : AndroidViewModel(app) {
 /**
  * The JS8Call Settings window.
  * Upright: one list, sections one after another, label above its box.
- * Sideways: the PC window, tabs across the top, label beside its box.
+ * Sideways: the same without tabs, framed groups in two columns side by side (Rob, 2026-10-20).
  * OK and Cancel are pinned to the bottom in both.
  */
 class Js8SettingsFragment : Fragment() {
@@ -157,7 +156,7 @@ class Js8SettingsFragment : Fragment() {
         const val ARG_EMBEDDED = "embedded"
         /** "station" (default: Menu > File > Station…, Swipe screen 5) or "settings" (header Settings). */
         const val ARG_WINDOW = "window"
-        /** Station: last page of the list (upright) or last tab (sideways), not a settings section. */
+        /** Station: last page of the list, not a settings section. */
         const val ABOUT_PAGE = "About"
         /** Station: page to open on (PC mode menu bar Help opens About). */
         const val ARG_PAGE = "page"
@@ -179,7 +178,10 @@ class Js8SettingsFragment : Fragment() {
     private val requiredBoxes = mutableListOf<TextView>()
     private val dp get() = resources.displayMetrics.density
     private val font by lazy { ResourcesCompat.getFont(requireContext(), R.font.selawik) }
-    private val textPx get() = resources.getDimension(R.dimen.js8_text)
+    /** Sideways Station: page name beside ← Back. */
+    private var titleView: TextView? = null
+    // Settings window: 12 dp, the PC's 9 pt Segoe UI (Rob, 2026-10-20); Station keeps 14.3 dp
+    private val textPx get() = resources.getDimension(R.dimen.js8_text) * (if (!station) 12f / 14.3f else 1f)
     private fun color(id: Int) = ContextCompat.getColor(requireContext(), id)
     private fun px(v: Int) = (v * dp).toInt()
 
@@ -203,19 +205,25 @@ class Js8SettingsFragment : Fragment() {
             orientation = LinearLayout.VERTICAL
             setBackgroundColor(color(R.color.js8_frame_bg))
         }
-        if (!embedded) {
-            // Station upright: ← Back at the top (a page returns to the list; the list works like
-            // Cancel). Sideways: the PC window's title (Rob, 2026-10-19)
-            if (station && !sideways) root.addView(label("← Back", size = 1.15f, bold = true).apply {
+        // Station: ← Back at the top (a page returns to the list; the list works like Cancel)
+        // (Rob, 2026-10-19). Sideways, also in Swipe's Station screen, the page name sits beside
+        // it in place of the PC tabs (Rob, 2026-10-20)
+        if (station && (!embedded || sideways)) root.addView(LinearLayout(requireContext()).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            addView(label("← Back", size = 1.15f, bold = true).apply {
                 setPadding(px(12), 0, px(12), 0)
                 minHeight = px(40)
                 gravity = Gravity.CENTER_VERTICAL
                 setOnClickListener { stationBack() }
             })
-            else if (station) root.addView(label("Station", size = 1.15f).apply { setPadding(px(12), px(8), px(12), px(4)) })
+            if (sideways) addView(label("", size = 1.15f, bold = true).also { titleView = it },
+                LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginEnd = px(12) })
+        })
+        else if (!embedded) {
             // Settings window: ← Back (works like Cancel) at the left, ⚙ opening Station at the
             // right (Rob, 2026-10-19)
-            else root.addView(LinearLayout(requireContext()).apply {
+            root.addView(LinearLayout(requireContext()).apply {
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
                 addView(label("← Back", size = 1.15f, bold = true).apply {
@@ -259,7 +267,7 @@ class Js8SettingsFragment : Fragment() {
                 object : androidx.activity.OnBackPressedCallback(true) {
                     override fun handleOnBackPressed() {
                         when {
-                            !sideways && vm.page != null -> { vm.page = null; render() } // page -> list
+                            vm.page != null -> { vm.page = null; render() } // page -> list
                             stationIncomplete() -> showStationRequired()
                             else -> findNavController().popBackStack()
                         }
@@ -340,7 +348,8 @@ class Js8SettingsFragment : Fragment() {
             }
         }
         draft.values[Js8SettingsSchema.SAVED_MESSAGES_KEY]?.let { e.putString(Js8SettingsSchema.SAVED_MESSAGES_KEY, it) }
-        draft.values.filterKeys { it.startsWith("js8cfg_notify_") || it.startsWith("js8cfg_ui_") || it == "js8cfg_pills" }
+        draft.values.filterKeys { it.startsWith("js8cfg_notify_") || it.startsWith("js8cfg_ui_") || it == "js8cfg_pills" ||
+            it == com.js8call.example.api.Js8Api.KEY_WSJTX_INTERFACES }
             .forEach { (k, v) -> e.putString(k, v) }
         e.apply()
         clearDraft()
@@ -370,11 +379,7 @@ class Js8SettingsFragment : Fragment() {
     private fun render() {
         content.removeAllViews()
         requiredBoxes.clear()
-        when {
-            sideways -> renderTabs()
-            station -> renderStationPage()
-            else -> renderList()
-        }
+        if (station) renderStationPage() else renderList()
     }
 
     /**
@@ -388,30 +393,53 @@ class Js8SettingsFragment : Fragment() {
         val pages = stationPages()
         val page = vm.page?.takeIf { it in pages }
         val col = column().apply { setPadding(px(10), px(4), px(10), px(16)) }
-        if (page == null) {
+        // Sideways: the list's title sits beside ← Back, centred; a page's name goes under it
+        // (Rob, 2026-10-20)
+        titleView?.text = if (page == null) "Station Settings" else ""
+        titleView?.gravity = Gravity.CENTER_HORIZONTAL
+        fun pageButton(name: String) = LinearLayout(requireContext()).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.CENTER_VERTICAL
+            minimumHeight = px(40)
+            setPadding(px(12), 0, px(12), 0)
+            setBackgroundResource(R.drawable.js8_cfg_field)
+            addView(label(name, size = 1.1f), LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            addView(label("›", size = 1.4f))
+            setOnClickListener { vm.page = name; render() }
+        }
+        if (page == null && sideways) {
+            // 3 across, so all pages show without scrolling; 180 dp each, centred (Rob, 2026-10-20)
+            pages.chunked(3).forEach { three ->
+                col.addView(LinearLayout(requireContext()).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    for (i in 0 until 3) addView(three.getOrNull(i)?.let { pageButton(it) } ?: View(requireContext()),
+                        LinearLayout.LayoutParams(px(180), ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                            marginStart = px(if (i == 0) 0 else 4); marginEnd = px(if (i == 2) 0 else 4)
+                        })
+                }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                    gravity = Gravity.CENTER_HORIZONTAL
+                    bottomMargin = px(6)
+                })
+            }
+        } else if (page == null) {
             // Title centred over the page list (Rob, 2026-10-19)
             col.addView(label("Station Settings", size = 1.2f, bold = true).apply {
                 setPadding(0, px(10), 0, px(10))
                 gravity = Gravity.CENTER_HORIZONTAL
             }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
             pages.forEach { name ->
-                col.addView(LinearLayout(requireContext()).apply {
-                    orientation = LinearLayout.HORIZONTAL
-                    gravity = Gravity.CENTER_VERTICAL
-                    // 280 dp wide, centred, 40 dp tall: all pages fit upright (Rob, 2026-10-19)
-                    minimumHeight = px(40)
-                    setPadding(px(12), 0, px(12), 0)
-                    setBackgroundResource(R.drawable.js8_cfg_field)
-                    addView(label(name, size = 1.1f), LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-                    addView(label("›", size = 1.4f))
-                    setOnClickListener { vm.page = name; render() }
-                }, LinearLayout.LayoutParams(px(280), ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                // 280 dp wide, centred, 40 dp tall: all pages fit upright (Rob, 2026-10-19)
+                col.addView(pageButton(name), LinearLayout.LayoutParams(px(280), ViewGroup.LayoutParams.WRAP_CONTENT).apply {
                     gravity = Gravity.CENTER_HORIZONTAL
                     bottomMargin = px(6)
                 })
             }
         } else if (page == ABOUT_PAGE) {
             renderAbout(col)
+        } else if (sideways) {
+            // 10 dp above and below the page name (Rob, 2026-10-20)
+            col.addView(label(page, size = 1.2f, bold = true).apply { setPadding(0, px(10), 0, px(10)) })
+            renderSidewaysPage(col, sections.filter { it.tab == page && hasVisible(it.items) })
         } else {
             col.addView(label(page, size = 1.2f, bold = true).apply { setPadding(0, px(10), 0, px(6)) })
             for (s in sections.filter { it.tab == page }) {
@@ -451,88 +479,116 @@ class Js8SettingsFragment : Fragment() {
 
     private fun sectionTitle(s: Section) = if (s.subTab != null) "${s.tab} – ${s.subTab}" else s.tab
 
-    /** Upright: every section one after another. */
+    /**
+     * Upright: every section one after another. Sideways: Operation and Mode on the left, the
+     * rest on the right (Rob, 2026-10-20).
+     */
     private fun renderList() {
         val col = column().apply { setPadding(px(10), px(4), px(10), px(16)) }
-        for (s in sections) {
-            col.addView(label(sectionTitle(s), size = 1.2f, bold = true).apply { setPadding(0, px(18), 0, px(6)) })
-            renderItems(col, s.items)
+        fun section(parent: LinearLayout, s: Section) {
+            parent.addView(label(sectionTitle(s), size = 1.2f, bold = true).apply { setPadding(0, px(18), 0, px(6)) })
+            renderItems(parent, s.items)
         }
+        if (sideways) {
+            val (left, right) = twoColumns(col)
+            sections.take(2).forEach { section(left, it) }
+            sections.drop(2).forEach { section(right, it) }
+        } else for (s in sections) section(col, s)
         content.addView(ScrollView(requireContext()).apply { addView(col) })
     }
 
-    /** Sideways: PC window with main tabs and sub-tabs. */
-    private fun renderTabs() {
-        // Station has an About tab too: the same pages as upright (Rob, 2026-10-20)
-        val tabs = if (station) stationPages() else sections.map { it.tab }.distinct()
-        vm.tab = vm.tab.coerceIn(0, tabs.lastIndex)
-        val tabName = tabs[vm.tab]
-        val inTab = sections.filter { it.tab == tabName }
-        val head = inTab.firstOrNull { it.subTab == null }
-        val subs = inTab.filter { it.subTab != null }
-        vm.subTab = vm.subTab.coerceIn(0, (subs.size - 1).coerceAtLeast(0))
-
-        val outer = column().apply { setPadding(px(10), px(4), px(10), 0) }
-        outer.addView(tabStrip(tabs, vm.tab) { i -> vm.tab = i; vm.subTab = 0; render() })
-
-        val pane = column().apply {
-            setBackgroundResource(R.drawable.js8_cfg_pane)
-            setPadding(px(10), px(10), px(10), px(10))
-        }
-        val scroll = ScrollView(requireContext())
-        val inner = column()
-        scroll.addView(inner)
-        if (tabName == ABOUT_PAGE) renderAbout(inner)
-        head?.let { renderItems(inner, it.items) }
-        if (subs.isNotEmpty()) {
-            inner.addView(tabStrip(subs.map { it.subTab!! }, vm.subTab) { i -> vm.subTab = i; render() })
-            val subPane = column().apply {
-                setBackgroundColor(color(R.color.js8_frame_bg))
-                setPadding(px(10), px(10), px(10), px(10))
-            }
-            renderItems(subPane, subs[vm.subTab].items)
-            inner.addView(subPane)
-        }
-        pane.addView(scroll, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
-        outer.addView(pane, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
-        content.addView(outer)
+    /** Two columns side by side, half the width each, tops level. */
+    private fun twoColumns(parent: LinearLayout): Pair<LinearLayout, LinearLayout> {
+        val row = LinearLayout(requireContext()).apply { orientation = LinearLayout.HORIZONTAL; isBaselineAligned = false }
+        val left = column()
+        val right = column()
+        row.addView(left, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginEnd = px(8) })
+        row.addView(right, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f).apply { marginStart = px(8) })
+        parent.addView(row, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        return left to right
     }
 
-    private fun tabStrip(names: List<String>, selected: Int, onPick: (Int) -> Unit): View {
-        val row = LinearLayout(requireContext()).apply { orientation = LinearLayout.HORIZONTAL }
-        names.forEachIndexed { i, n ->
-            row.addView(label(n).apply {
-                setBackgroundResource(R.drawable.js8_cfg_tab)
-                isSelected = i == selected
-                gravity = Gravity.CENTER
-                setPadding(px(14), 0, px(14), 0)
-                setOnClickListener { onPick(i) }
-            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, px(30)).apply { marginEnd = px(3) })
+    /** Tables (frequencies, schedule, saved messages, notifications, diagnostics) keep the full width. */
+    private fun isWide(item: Item): Boolean = item is Special && item.id in WIDE_SPECIALS ||
+        item is Group && item.items.any { isWide(it) }
+
+    private val HEADED = "headed"
+
+    private val WIDE_SPECIALS = setOf("frequencies_table", "schedule_table", "saved_messages", "notifications_table", "diagnostics_text")
+
+    /**
+     * Sideways Station page (Rob, 2026-10-20: no tabs, use the width): each sub-tab's heading,
+     * then its framed groups in two columns, each group into the shorter column. A sub-tab with
+     * one group shares the columns with its neighbours, its heading on top of the group. Tables
+     * take the full width.
+     */
+    /** Sideways Station: width of one of the two columns (window less 10 dp each side and the 16 dp gap). */
+    private val colWidth get() = ((resources.displayMetrics.widthPixels - px(36)) / 2).coerceAtLeast(px(200))
+
+    private fun renderSidewaysPage(col: LinearLayout, secs: List<Section>) {
+        var cols: Pair<LinearLayout, LinearLayout>? = null
+        val heights = intArrayOf(0, 0)
+        fun flush() { cols = null; heights.fill(0) }
+        fun place(v: View) {
+            val c = cols ?: twoColumns(col).also { cols = it }
+            v.measure(View.MeasureSpec.makeMeasureSpec(colWidth, View.MeasureSpec.EXACTLY),
+                View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED))
+            val i = if (heights[1] < heights[0]) 1 else 0
+            val target = if (i == 0) c.first else c.second
+            // A heading on its group: space above it only under another group, so both columns' tops line up
+            if (v.tag == HEADED && target.childCount > 0) v.setPadding(0, px(10), 0, 0)
+            target.addView(v)
+            heights[i] += v.measuredHeight + px(14)
         }
-        return HorizontalScrollView(requireContext()).apply {
-            isHorizontalScrollBarEnabled = false
-            addView(row)
-            // The lit tab is always in view (About is past the right edge on a phone)
-            post {
-                val tab = row.getChildAt(selected) ?: return@post
-                if (tab.right > scrollX + width || tab.left < scrollX) scrollTo(tab.right - width, 0)
+        // No space above a heading straight under the page name: that gap is the name's
+        fun heading(text: String, top: Boolean = col.childCount > 1) = label(text, size = 1.1f, bold = true).apply {
+            setPadding(0, px(if (top) 10 else 0), 0, px(2))
+        }
+        for (s in secs) {
+            val views = s.items.mapNotNull { item -> itemView(item)?.let { item to it } }
+            if (views.size == 1 && !isWide(views[0].first)) {
+                val v = views[0].second
+                place(if (s.subTab == null) v else column().apply { tag = HEADED; addView(heading(s.subTab, top = false)); addView(v) })
+            } else {
+                flush()
+                s.subTab?.let { col.addView(heading(it)) }
+                for ((item, v) in views) if (isWide(item)) { flush(); col.addView(v) } else place(v)
+                flush()
             }
         }
     }
 
     private fun renderItems(parent: LinearLayout, items: List<Item>) {
+        // Sideways Station: My Callsign and My Maidenhead Grid Locator side by side, SWL under
+        // them (Rob, 2026-10-20)
+        val fields = items.filterIsInstance<Field>()
+        val call = fields.firstOrNull { it.key == "callsign" }.takeIf { station && sideways }
+        // Only when both fit in the column with the grid's label on one line (narrower phones stack them)
+        val grid = fields.firstOrNull { it.key == "grid" }?.takeIf { g -> call != null &&
+            (compactWidth(call) ?: colWidth) + px(8) + maxOf(textWidth(g.label) + px(6), compactWidth(g) ?: colWidth) <= colWidth - px(20) }
         for (item in items) {
-            when (item) {
-                is Group -> if (item.visible(draft) && hasVisible(item.items)) {
-                    parent.addView(groupBox(item.title) { box -> renderItems(box, item.items) })
-                }
-                is RadioItem -> parent.addView(radioGroup(item))
-                is Field -> if (item.visible(draft)) parent.addView(fieldRow(item))
-                is ButtonRow -> parent.addView(buttonRow(item))
-                is Note -> parent.addView(label(item.text).apply { setPadding(0, px(4), 0, px(4)) })
-                is Special -> parent.addView(special(item.id))
+            if (call != null && grid != null && item === call) {
+                parent.addView(LinearLayout(requireContext()).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    addView(fieldRow(call))
+                    addView(fieldRow(grid), LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
+                        ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginStart = px(8) })
+                })
+                continue
             }
+            if (grid != null && item === grid) continue
+            itemView(item)?.let { parent.addView(it) }
         }
+    }
+
+    private fun itemView(item: Item): View? = when (item) {
+        is Group -> if (item.visible(draft) && hasVisible(item.items)) groupBox(item.title) { box -> renderItems(box, item.items) } else null
+        is RadioItem -> radioGroup(item)
+        is Field -> if (item.visible(draft)) fieldRow(item) else null
+        is ButtonRow -> buttonRow(item)
+        is Note -> label(item.text).apply { setPadding(0, px(4), 0, px(4)) }
+        is Special -> special(item.id)
+        else -> null
     }
 
     /** A box with nothing visible inside is left out (e.g. CAT Control while Rig is None). */
@@ -598,7 +654,7 @@ class Js8SettingsFragment : Fragment() {
     /** Group titles sit on the window color (the area inside the PC pages is the frame color). */
     private fun currentBackground() = color(R.color.js8_frame_bg)
 
-    /** Label + control. Sideways: label beside the box. Upright: label above it. */
+    /** Label + control, label above the box (sideways too since 2026-10-20). */
     private fun fieldRow(f: Field): View {
         if (f.kind == Kind.CHECK) return checkBox(f)
         val control = when (f.kind) {
@@ -608,20 +664,54 @@ class Js8SettingsFragment : Fragment() {
             else -> View(requireContext())
         }
         val row = LinearLayout(requireContext()).apply {
-            orientation = if (sideways) LinearLayout.HORIZONTAL else LinearLayout.VERTICAL
-            gravity = if (sideways) Gravity.CENTER_VERTICAL else Gravity.NO_GRAVITY
+            orientation = LinearLayout.VERTICAL
             setPadding(0, px(4), 0, px(4))
         }
-        val lab = label(f.label).apply { if (!f.enabled) alpha = 0.5f }
-        if (sideways) {
-            row.addView(lab, LinearLayout.LayoutParams(px(260), ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginEnd = px(8) })
-            row.addView(control, LinearLayout.LayoutParams(0, px(32), 1f))
-        } else {
-            row.addView(lab)
-            row.addView(control, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, px(34)).apply { topMargin = px(4) })
+        // As wide as its text, not the box below it (side by side the row is only the box's width)
+        row.addView(label(f.label).apply { if (!f.enabled) alpha = 0.5f },
+            LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        // Settings window: boxes sized to their values, left under the label (Rob, 2026-10-20:
+        // "runaway fields"); Station boxes fill their page upright; sideways only messages, groups
+        // and callsign lists fill their column, the rest are as wide as their longest value
+        val width = when {
+            station && sideways -> compactWidth(f) ?: ViewGroup.LayoutParams.MATCH_PARENT
+            station -> ViewGroup.LayoutParams.MATCH_PARENT
+            f.kind == Kind.CHOICE -> px(200)
+            else -> px(120) // Custom frequency (MHz), Offset with its ▲▼
         }
+        row.addView(control, LinearLayout.LayoutParams(width, px(34)).apply { topMargin = px(4) })
         return row
     }
+
+    /** Width of [text] in the settings font, in px. */
+    private fun textWidth(text: String) = android.graphics.Paint().apply { typeface = font; textSize = textPx }.measureText(text).toInt()
+
+    /**
+     * Sideways Station box width: the longest value it can show, plus padding (and ▲▼ or the
+     * warning mark), at most the column. Null = fill the column (free text: messages, lists).
+     */
+    private fun compactWidth(f: Field): Int? {
+        val longest = when (f.kind) {
+            Kind.SPIN -> listOf(spinText(f, f.min.toString()), spinText(f, f.max.toString()))
+            Kind.CHOICE, Kind.AUDIO_INPUT -> choices(f).map { "${it.first}  ▾" }
+            Kind.TEXT -> listOfNotNull(SHORT_TEXT[f.key] ?: return null)
+            else -> return null
+        }.maxOf { textWidth(it) }
+        val extra = px(22) + (if (f.kind == Kind.SPIN) px(28) else 0) + (if (f.required) px(22) else 0) // warning mark 18 dp + 4 dp gap
+        return (longest + extra).coerceAtMost(colWidth)
+    }
+
+    /** Short free-text boxes and the longest value each is expected to hold. */
+    private val SHORT_TEXT = mapOf(
+        "callsign" to "VA3OSO/MM", "js8cfg_op_call" to "VA3OSO/MM", "grid" to "FN03HP45KL22",
+        "js8cfg_eot" to "♢♢♢♢", "js8cfg_mfi" to "……………", "rigctld_host" to "192.168.100.100",
+        "rigctld_port" to "65535", "qmx_cat_baud" to "115200", "js8cfg_aprs_server" to "rotate.aprs2.net",
+        com.js8call.example.api.Js8Api.KEY_UDP_SERVER to "192.168.100.100",
+        com.js8call.example.api.Js8Api.KEY_TCP_SERVER to "192.168.100.100",
+        com.js8call.example.api.Js8Api.KEY_WSJTX_SERVER to "192.168.100.100",
+        com.js8call.example.api.Js8Api.KEY_N3FJP_SERVER to "192.168.100.100",
+        com.js8call.example.api.Js8Api.KEY_N1MM_SERVER to "192.168.100.100"
+    )
 
     private fun styledField(v: TextView) = v.apply {
         setBackgroundResource(R.drawable.js8_cfg_field)
@@ -755,9 +845,8 @@ class Js8SettingsFragment : Fragment() {
     }
 
     private fun radioGroup(item: RadioItem): View = groupBox(item.title) { box ->
-        val rg = RadioGroup(requireContext()).apply {
-            orientation = if (sideways && !item.vertical) RadioGroup.HORIZONTAL else RadioGroup.VERTICAL
-        }
+        // One option per line in every layout: side by side overran a sideways column (2026-10-20)
+        val rg = RadioGroup(requireContext()).apply { orientation = RadioGroup.VERTICAL }
         val cur = draft.get(item.field)
         item.options.forEach { (lab, value) ->
             rg.addView(RadioButton(requireContext()).apply {
@@ -770,7 +859,6 @@ class Js8SettingsFragment : Fragment() {
                 isChecked = value == cur
                 setOnCheckedChangeListener { _, c -> if (c) draft.set(item.field, value) }
                 if (value in item.disabled) { isEnabled = false; alpha = 0.5f }
-                if (sideways && !item.vertical) setPadding(0, 0, px(16), 0)
             })
         }
         box.addView(rg)
@@ -816,6 +904,8 @@ class Js8SettingsFragment : Fragment() {
                 activityVm().changed(); toast("All Activity cleared")
             }
             "test_cat", "test_ptt" -> toast("Test CAT / Test PTT are not built yet")
+            // Settings > Log > Export Log...: the Export Options page
+            "export_log" -> findNavController().navigate(R.id.navigation_js8_export)
             "diag_run" -> { vm.diagnostics = diagnostics(); render() }
             "diag_copy" -> {
                 val cm = requireContext().getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
@@ -832,14 +922,15 @@ class Js8SettingsFragment : Fragment() {
         val row = LinearLayout(requireContext()).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
-            // Sideways the row sits under the box, past the 260 dp label column
-            setPadding(if (sideways) px(268) else 0, px(2), 0, px(6))
+            setPadding(0, px(2), 0, px(6))
         }
         val found = styledField(TextView(requireContext())).apply { text = vm.gpsText.value }
         gpsBox = found
         row.addView(button("Acquire GPS") { acquireGps() },
             LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, px(28)))
-        row.addView(found, LinearLayout.LayoutParams(0, px(28), 1f).apply { marginStart = px(8); marginEnd = px(8) })
+        // Sideways the found-grid box is only as wide as "No position" (Rob, 2026-10-20)
+        row.addView(found, (if (sideways) LinearLayout.LayoutParams(textWidth("No position") + px(24), px(28))
+            else LinearLayout.LayoutParams(0, px(28), 1f)).apply { marginStart = px(8); marginEnd = px(8) })
         row.addView(button("Set") { vm.gpsGrid?.let { gridBox?.setText(it) } },
             LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, px(28)))
         return row
@@ -875,6 +966,7 @@ class Js8SettingsFragment : Fragment() {
         ), emptyList(), 110)
         "saved_messages" -> savedMessages()
         "notifications_table" -> notifications()
+        "wsjtx_interfaces" -> wsjtxInterfaces()
         "ui_band_call" -> colorButtons(listOf(
             "Table Background" to "table_bg", "Foreground Color" to "table_fg", "Font" to "table_font",
             "Primary Highlight Background" to "primary_bg", "Secondary Highlight Background" to "secondary_bg",
@@ -956,6 +1048,36 @@ class Js8SettingsFragment : Fragment() {
         }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, px(30)))
         col.addView(addRow)
         col.addView(list)
+        return col
+    }
+
+    /**
+     * Reporting > API > Outgoing interfaces: (PC CheckableItemComboBox, load_network_interfaces):
+     * the phone's network interfaces that are up, one checkbox each; none chosen = the loopback one.
+     * Used only when the WSJT-X Server is a multicast address.
+     */
+    private fun wsjtxInterfaces(): View {
+        val key = com.js8call.example.api.Js8Api.KEY_WSJTX_INTERFACES
+        val col = column().apply { setPadding(0, px(4), 0, px(4)) }
+        col.addView(label("Outgoing interfaces:"))
+        val all = com.js8call.example.api.Js8Api.multicastInterfaces()
+        val stored = (draft.values[key] ?: draft.prefs.getString(key, "")).orEmpty()
+            .split(',').map { it.trim() }.filter { it.isNotEmpty() }.toMutableSet()
+        if (stored.isEmpty()) all.filter { it.second.startsWith("lo") }.forEach { stored += it.second }
+        all.forEach { (name, id) ->
+            col.addView(CheckBox(requireContext()).apply {
+                text = if (name == id) name else "$name ($id)"
+                typeface = font
+                setTextSize(TypedValue.COMPLEX_UNIT_PX, textPx)
+                setTextColor(color(R.color.js8_frame_text))
+                CompoundButtonCompat.setButtonTintList(this, android.content.res.ColorStateList.valueOf(color(R.color.js8_cfg_group_border)))
+                isChecked = id in stored
+                setOnCheckedChangeListener { _, c ->
+                    if (c) stored += id else stored -= id
+                    draft.values[key] = all.map { it.second }.filter { it in stored }.joinToString(",")
+                }
+            })
+        }
         return col
     }
 

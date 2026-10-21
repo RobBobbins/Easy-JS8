@@ -142,6 +142,9 @@ public:
   // and how many of them have been handed to the modulator. Empty / 0 for TUNE and single frames.
   virtual std::vector<std::pair<std::string, int>> tx_message_frames() { return {}; }
   virtual int tx_frames_started() { return 0; }
+  // Tone numbers of the frame last handed to the modulator (PC emitTones / API TX.FRAME).
+  // Empty for TUNE and before the first frame.
+  virtual std::vector<int> tx_current_tones() { return {}; }
   virtual void set_tx_boost_enabled(bool enabled) = 0;
   virtual void set_submodes(int submodes) = 0;
   virtual void set_sync_stats(bool enabled) = 0;

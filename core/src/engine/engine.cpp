@@ -373,6 +373,11 @@ public:
     return tx_frames_started_;
   }
 
+  std::vector<int> tx_current_tones() override {
+    std::lock_guard<std::mutex> lock(tx_mutex_);
+    return tx_settings_.tuning ? std::vector<int>{} : tx_current_tones_;
+  }
+
   void set_tx_ready(bool ready) override {
     tx_ready_.store(ready);
   }
@@ -961,6 +966,7 @@ public:
       TxFrame frame = std::move(tx_queue_.front());
       tx_queue_.pop_front();
       if (!tx_message_frames_.empty()) ++tx_frames_started_;
+      tx_current_tones_.assign(frame.tones.begin(), frame.tones.end());
 
       tx_modulator_.start(frame.tones,
                           sm->symbol_samples,
@@ -1104,6 +1110,8 @@ public:
     // Parts of the message being sent (frame, bits) and how many reached the modulator
     std::vector<std::pair<std::string, int>> tx_message_frames_;
     int tx_frames_started_ = 0;
+    // Tones of the frame on air (API TX.FRAME)
+    std::vector<int> tx_current_tones_;
     TxSettings tx_settings_{};
     tx::Modulator tx_modulator_;
     dsp::Resampler tx_resampler_;

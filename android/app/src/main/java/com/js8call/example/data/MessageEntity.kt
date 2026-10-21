@@ -22,7 +22,7 @@ data class MessageEntity(
     /** Callsign or @GROUP that identifies the conversation */
     val conversationId: String,
 
-    /** 0 = incoming, 1 = outgoing */
+    /** 0 = incoming, 1 = outgoing, 2 = held for another station */
     val direction: Int,
 
     /** The actual sender callsign (for group messages, different from conversationId) */
@@ -52,6 +52,8 @@ data class MessageEntity(
     companion object {
         const val DIRECTION_INCOMING = 0
         const val DIRECTION_OUTGOING = 1
+        /** Easy JS8: held for another station to collect (the PC's inbox STORE, Js8Mailbox). */
+        const val DIRECTION_HELD = 2
 
         const val STATUS_PENDING = 0
         const val STATUS_SENT = 1

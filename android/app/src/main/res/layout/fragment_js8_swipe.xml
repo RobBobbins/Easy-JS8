@@ -107,6 +107,10 @@
                 android:baselineAligned="false"
                 android:orientation="horizontal">
 
+                <!-- HB (PC hbMacroButton): only while HB is on (Rob, 2026-10-20) -->
+                <androidx.appcompat.widget.AppCompatButton android:id="@+id/js8_btn_hb"
+                    style="@style/Js8Button" android:layout_width="0dp" android:layout_weight="1"
+                    android:layout_marginEnd="5dp" android:visibility="gone" android:text="HB" />
                 <androidx.appcompat.widget.AppCompatButton android:id="@+id/js8_btn_cq"
                     style="@style/Js8Button" android:layout_width="0dp" android:layout_weight="1"
                     android:text="CQ" />

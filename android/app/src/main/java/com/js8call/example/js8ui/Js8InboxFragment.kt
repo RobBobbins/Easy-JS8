@@ -48,6 +48,12 @@ class Js8InboxFragment : Fragment() {
                 if (!m.isRead) viewLifecycleOwner.lifecycleScope.launch { repository.markMessageAsRead(m.id) }
             }
         }
+        table.onRowLongClick = { row, anchor ->
+            Js8Inbox.showMessageMenu(anchor) {
+                viewLifecycleOwner.lifecycleScope.launch { repository.deleteMessage(row.id.toLong()) }
+                message.text = ""
+            }
+        }
         view.findViewById<View>(R.id.js8_inbox_reply).setOnClickListener {
             val m = messages.firstOrNull { it.id.toString() == table.selectedRowId } ?: return@setOnClickListener
             parentFragmentManager.setFragmentResult(Js8AprsFragment.RESULT_KEY,

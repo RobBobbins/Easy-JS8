@@ -42,6 +42,18 @@
             app:argType="string" />
     </fragment>
 
+    <!-- LOG button, PC mode Log menu, Call Activity > Log...: the PC's Log QSO window -->
+    <fragment
+        android:id="@+id/navigation_js8_log"
+        android:name="com.js8call.example.js8ui.Js8LogFragment"
+        android:label="Log QSO" />
+
+    <!-- Settings > Log > Export Log...: Export Options -->
+    <fragment
+        android:id="@+id/navigation_js8_export"
+        android:name="com.js8call.example.js8ui.Js8ExportFragment"
+        android:label="Export Options" />
+
     <!-- PC mode View > Inbox: the Message Inbox as its own screen -->
     <fragment
         android:id="@+id/navigation_js8_inbox"

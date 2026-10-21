@@ -6,6 +6,10 @@ this session too).
 **Fourth session (2026-10-20) worked on sideways, mostly PC mode** (see "Sideways, fourth session").
 **Fifth session (2026-10-20):** Waterfall Controls → **Timing** and **Display** tabs built (see
 "Timing tab", "Display tab"), engine waterfall detail fixed ("Engine spectrum detail").
+**Sixth session:** Settings window 12 dp text, narrower boxes; sideways Station and Settings without tabs, two columns (see "Settings window sizes").
+**Seventh session (2026-10-20):** the PC's API, WSJT-X, N3FJP and N1MM (Station > Reporting), see "API and logging";
+then LOG (Log QSO page), the mailbox (messages held for other stations) and Export Options, see "LOG, mailbox, export";
+then the HB button, see "HB button".
 **Next:** the wpm box upright is still to place. Committed: fourth session 7717b9d8, Timing tab
 71a831f2, Display first part 7d421c12, Display bigger group 1b4c3056, engine waterfall detail d265512c.
 
@@ -64,8 +68,8 @@ values (ViewModel keyed by window).
   File → Settings window. Upright: **← Back** at the top, opens on a **list of pages**
   (General, Radio, Audio, Reporting, Frequencies, Saved Messages, Notifications, UI, Diagnostics,
   Phone); tap one to see only it; ← Back / phone back returns to the list; ← Back on the list = Cancel.
-  Bottom: **OK** / **Cancel** (PC's). Sideways: the PC window with tabs (unchanged).
-  PC-only settings hidden (TCP/UDP API, WSJT-X, N3FJP, N1MM, Save Directory, PTT command,
+  Bottom: **OK** / **Cancel** (PC's). Sideways: no tabs since the sixth session (see "Settings window sizes").
+  PC-only settings hidden (Save Directory, PTT command,
   app stylesheet/font, check for updates).
 - The ⋮ Menu page is gone upright. Its useful items went to Settings; the three JS8Android
   screens and About were dropped (still reachable sideways via the Menu page).
@@ -148,8 +152,8 @@ values (ViewModel keyed by window).
 - **Press and hold a callsign** in Call Activity (all layouts) = the PC's right-click menu
   (`UI_Constructor.cpp` tableWidgetCalls customContextMenuRequested), `Js8MainFragment.showCallMenu`:
   Jump to <offset>Hz · Jump to <speed> speed (only if different and sendable) · Jump to <n> ms
-  time drift · Log... (greyed, LOG not built) · Show Message Inbox... (scrolls to Inbox; greyed
-  without messages from them) · Store Message... (greyed: engine can't hold messages for others)
+  time drift · Log... (opens Log QSO; greyed for groups) · Show Message Inbox... (scrolls to Inbox; greyed
+  without messages from or held for them) · Store Message... (seventh session: held for them)
   · Saved Messages › · Directed to CALL... › · Relay via CALL... (`CALL>` at Typing Box start) ·
   Deselect · Add New Station or Group... · Remove This Station/Group · Block This Station
   (`js8cfg_rx_blocklist`) · Clear Entire List · Clear All Lists. "Center filter" never shown
@@ -177,16 +181,31 @@ values (ViewModel keyed by window).
   sentence. Features listed are only what Easy JS8 has over JS8Android (JS8Call has no phone
   app, so it isn't the comparison). Names only, no descriptions.
 
-### Waiting for Rob's yes
+### Settings window sizes (sixth session, 2026-10-20, Rob said yes)
 
-- Settings window field widths (upright): **Frequency:** dropdown 200 dp, **Custom frequency
-  (MHz):** 120 dp, **Offset:** 120 dp including ▲▼, each left-aligned under its label. Speed
-  box, checkboxes, Clear buttons unchanged; Station pages keep full-width boxes.
-  Rob raised it again 2026-10-20 ("the text is big and we have runaway fields again").
-- Settings window text (proposed 2026-10-20, Rob not answered yet): 12 dp instead of 14.3 dp (the
-  PC's 9 pt Segoe UI in this app's sizing, about 16 % smaller), headings (Operation, Mode,
-  Frequency, Offset, View) reduced by the same amount; Settings window only, Station unchanged
-  unless Rob says otherwise.
+- Upright Settings window only (`Js8SettingsFragment` textPx / fieldRow): **Frequency:** dropdown
+  200 dp, **Custom frequency (MHz):** 120 dp, **Offset:** 120 dp including ▲▼, each left-aligned
+  under its label. All text 12 dp instead of 14.3 dp (the PC's 9 pt Segoe UI; headings, ← Back,
+  Save / Cancel, Clear buttons scale with it). Speed lines now fit on one line each.
+  Station window unchanged. Checked on S22 upright.
+- **Sideways, both windows, no tabs** (Rob: "ditch all the tabs", "sit stuff beside each other,
+  just not too cramped"): label above box everywhere, radio options one per line.
+  Station: **← Back** + **Station Settings** on one line over the page list (3 across x 4 rows, 180 dp each, centred, all
+  fit); on a page the page name is under ← Back (10 dp above and below, Rob); a page shows each
+  sub-tab heading, then its framed groups in two columns, each into the shorter column
+  (`renderSidewaysPage`); a sub-tab with one group shares the columns, its heading on the group;
+  tables (frequencies, schedule, saved messages, notifications, diagnostics) full width. Text 14.3 dp.
+  Boxes (Rob: "lots of fields can be compacted"): only free text fills its column (Station
+  Messages, Callsign Groups, callsign lists); the rest are as wide as their longest value
+  (`compactWidth`: spin min/max, longest choice, `SHORT_TEXT` samples for callsign, grid, EOT/MFI,
+  host/port/baud, APRS server, operator call). GPS found-grid box as wide as "No position".
+  Upright Station boxes stay full width.
+  **My Callsign:** and **My Maidenhead Grid Locator:** side by side (8 dp gap), SWL and the Acquire GPS
+  row under them; only when both fit with the grid label on one line (narrower phones stack them).
+  Field labels are now as wide as their text (were fill-parent, which squeezed a side-by-side label).
+  Settings: Operation + Mode left, Frequency + Offset + View right, 12 dp, 200/120/120 dp boxes.
+  Checked on S22 PC mode: list, every page, Settings window. **Swipe** (embedded Station screen,
+  gets ← Back too) not checked.
 
 ### Sideways, fourth session (2026-10-20)
 
@@ -305,7 +324,7 @@ Rob's rule: **every menu has the same items in every layout; only the look diffe
 - Upright only (Rob): CAT + level meter column 58 dp (was 87, 33 % narrower; set in
   `Js8MainFragment`); `Js8LevelMeterView` scales its scale, bar and label with the width, text 85 %.
   Upright waterfall now 500-~1,740 Hz. Sideways unchanged.
-- Station sideways: **About** is the last tab; the tab row scrolls to the lit tab.
+- Station sideways: tabs replaced by the page list in the sixth session (see "Settings window sizes").
 - Header Offset slider: locked while a message waits or is sent (same rule as waterfall taps).
   Not tested (needs a queued message).
 - Still open: header ▲▼ beside the frequency do nothing (no code behind them).
@@ -333,6 +352,125 @@ Already working sideways: FT8 decodes, part-by-part sending, press-and-hold call
 smaller menus, smooth lists, Message Window fix; the progress bar has rounded ends there too.
 Station window sideways = PC tabs, no About tab.
 
+### API and logging (seventh session, 2026-10-20, Rob: "include all the desktop features")
+
+- Station > **Reporting**, after Network Services, PC order and names (Configuration.ui groupBox_4,
+  N3FJP Logger, N1MM Logger): **API** group (Allow setting station information..., UDP Server
+  Hostname / Enable UDP Server API / UDP Server Port / Accept UDP Requests, TCP Server Hostname /
+  Enable TCP Server API / TCP Server Port / Accept TCP Requests / TCP Max Connections, WSJT-X Server /
+  Enable WSJT-X UDP Server API / WSJT-X Server Port / Multicast TTL / Accept UDP Requests,
+  **Outgoing interfaces:** one checkbox per network interface, none = lo), **N3FJP Logger**, **N1MM
+  Logger**. PC defaults: all off, 127.0.0.1, ports 2242 / 2442 / 2237 / 1100 / 2333, max 1, TTL 1.
+  Keys `js8cfg_udp_*`, `js8cfg_tcp_*`, `js8cfg_wsjtx_*`, `js8cfg_n3fjp_*`, `js8cfg_n1mm_*`,
+  `js8cfg_api_dynamic_info` (constants in `api/Js8Api.kt`).
+- Code: `api/ApiMessage.kt` (JSON, sorted keys, _ID rules of Message.cpp), `api/Js8Api.kt` (UDP client
+  with PING every 15 s, TCP server one JSON per line, replies only to the asking client or _ID <= 0,
+  events, `logQso` for LOG), `api/Js8ApiCommands.kt` (every command of 3.0.3 networkMessage.cpp),
+  `api/WsjtxClient.kt` (binary WSJT-X: Heartbeat, Status, Decode, QSOLogged, LoggedADIF, Close).
+  Started by MainActivity and JS8EngineService; MainActivity = `Js8Api.Host` (send queue, depth),
+  Js8MainFragment = `Js8Api.Controller` (Typing Box, TUNE, Halt, offset, filter, redraw).
+- Events: RX.ACTIVITY and RX.DIRECTED per frame (service, commands incl. CQ / HEARTBEAT, not free
+  text), RX.SPOT with each PSK Reporter spot, RIG.PTT on / off per frame, TX.FRAME (tones: new engine
+  `tx_current_tones`, JNI `nativeGetTxFrameTones`), STATION.STATUS on decode start / end, RX on / off,
+  TX, offset, dial, speed, selection; RIG.FREQ on a band change; STATION.CLOSING when the app closes.
+- The API's grid / info / status (STATION.SET_GRID etc., only with Allow setting ... checked, not kept
+  after restart, like the PC) are used on air: `Js8Api.myGrid/myInfo/myStatus` in the service and
+  `Js8Macros`. Station still shows the saved values.
+- Differences from the PC: no autoreply confirmation in Easy JS8, so STATION.AUTOREPLY_CONFIRM_*
+  never fire; INBOX.STORE_MESSAGE answers ID -1 (can't hold messages for others); STATION.SET_HB_TIMER
+  = Settings > HB (no HB button); MODE.SET_SPEED ignores JS8 60; WSJT-X starts / stops when the box
+  changes (PC needs a restart). Copied from the PC as is: WSJT-X FreeText / Location requests are sent
+  on as API messages, Reply / HaltTx do nothing.
+- N3FJP / N1MM / LOG.QSO / WSJT-X QSOLogged wait for the LOG window (`Js8Api.logQso`). Debug test:
+  `adb shell am broadcast -n com.easyjs8.app/com.js8call.example.debug.DebugLogQsoReceiver --es call W1AW`.
+- Tested on S22 from the PC (scratchpad script, UDP to 10.0.2.2, TCP via `adb forward tcp:2442 tcp:2442`):
+  PING, STATION.STATUS, RX.ACTIVITY, RX.DIRECTED, RIG.PTT, TX.FRAME, WSJT-X Heartbeat / Status / Decode /
+  QSOLogged / LoggedADIF (all fields parse), N1MM, N3FJP, about 30 TCP commands and a UDP request, screen
+  follows (Typing Box, speed, offset, filter, groups, TUNE, Halt). Settings page upright and PC mode.
+  **JTAlert on Rob's PC listens on 2237**: the emulator's WSJT-X test ran on 2239 after the first 2 min.
+  Not tested: a real API program, a real phone, multicast, screen off, Swipe.
+- Seen while testing, not API: "CQ CQ API TEST" went out as "@ALLCALL CQ CQ" (the words after
+  CQ CQ dropped). Not looked into.
+
+### LOG, mailbox, export (seventh session, 2026-10-20, Rob said LETS GO)
+
+- **Log QSO page** (`js8ui/Js8LogFragment.kt`, nav `navigation_js8_log`; LogQSO.ui fields in order:
+  Operator Callsign, Contact Callsign, Start + Now, End + Now, Mode, Band, Signal Report Sent / Received,
+  Grid, Name, Comments, Retain Comments, Additional Fields + Add New Field (ADIF name typed or picked from
+  the ▾ list), **Add to Log** / **Cancel**). Opened by **LOG** (all layouts), PC mode menu bar **Log**,
+  Call Activity **Log...**. Filled like on_logQSOButton_clicked: call = selection (not groups), grid from
+  Call Activity, report sent = their SNR, start = when the call was first selected, freq = dial + offset;
+  same call again before logging keeps what was typed. Dates typed as yyyy-MM-dd HH:mm:ss UTC (no picker).
+- Add to Log (`data/Js8LogBook.kt`): `js8call_log.adi` (PC QSOToADIF, header "JS8Call ADIF Export<eoh>")
+  and `js8call.log` (comma line) in the app's files folder; Call Activity ✓ / Name / Comment (and grid
+  when none heard) from the log; selection cleared; `Js8Api.logQso` -> LOG.QSO, N1MM, N3FJP, WSJT-X.
+- **Mailbox** (`data/Js8Mailbox.kt`, service `handleMailboxCommand`): held messages are rows in the message
+  database with direction 2 (HELD), status 0 held / 1 collected; the row id is the MSG ID on air. Group
+  messages held 2 days, who collected them in prefs `js8mailbox_group_delivered_<id>`. Heard "MSG TO:CALL
+  text" for me / my group: held for CALL, ACK (only if Station > **Disable message relay** is unchecked;
+  Easy JS8's default is checked, the PC's unchecked). @APRSIS MSG TO: me -> my Inbox from APRS. QUERY MSGS
+  -> "YES MSG ID n [+k]" / "NO"; QUERY MSG n -> "MSG text FROM x [NEXT MSG ID ...]", then collected (marked
+  when queued; the PC marks after sending). HB ACK gets "MSG ID n". Replies only with AUTO (Easy JS8's
+  rule for all automatic replies). Relayed (A>B) requests answered to the sender only. Before this,
+  "MSG TO:" was wrongly put in my own Inbox.
+- Inbox (upright strip and Message Inbox screen) lists held messages (To = the other station) until
+  collected; **press and hold a row = Delete**. Call Activity **Store Message...** = "Store this message
+  locally for CALL:". API INBOX.GET_MESSAGES includes STORE, INBOX.STORE_MESSAGE holds and returns the id.
+- **Export Options** (`js8ui/Js8ExportFragment.kt`, nav `navigation_js8_export`): Settings window > **Log**
+  section > **Export Log...**. Checkboxes Log (js8call_log.adi) [ticked], Log (js8call.log), Message Inbox
+  (`js8call_inbox.txt`: "date, from, to, message" per line). **Export...** = phone folder picker, opens on the
+  last folder (`js8cfg_export_folder`). Android 11+ refuses the storage top and the Download folder itself;
+  Documents, a folder inside Download, Drive, SD card work. A file already there is not replaced: Android
+  saves "name (1)".
+- Page widgets shared in `js8ui/Js8Page.kt` (same look as the APRS pages).
+- Tested on S22 upright: Log QSO filled and saved (ADIF + CSV checked byte for byte, extra field STATE),
+  ✓ and Name shown, selection cleared; PC mode Log menu opens the page; MSG TO held + ACK, QUERY MSGS YES /
+  NO, QUERY MSG 3 sent and collected, Store Message..., Inbox shows held, Delete; Export of all three files
+  to Documents. Not tested: HB ACK with MSG ID (needs HB + ACK on), group messages, @APRSIS, Swipe,
+  a real radio.
+- **Found while testing (old JS8Android transmit queue, not fixed):** a reply queued while a multi-part
+  message is going out makes the queue start the current message again (it was sent twice). MainActivity
+  `processNextTxIfIdle` only waits while TRANSMITTING; between parts the state is QUEUED.
+
+### HB button (seventh session, 2026-10-20, Rob said LETS GO)
+
+- PC hbMacroButton `js8_btn_hb`, first in the button row in every layout, shown while Settings > HB is on
+  and the speed is Normal / Fast / Slow (prepareHeartbeatMode). Greyed while transmitting and with SWL.
+  - Upright (Rob): HB, CQ, SNR, INFO ~47 dp, REPLY ~59 dp, STATUS ~71 dp (weights 0.8 / 1 / 1.2,
+    `layoutUprightButtons`); without HB the row is as before.
+  - PC mode: 11 buttons ~86 dp each, STATUS / Saved gap kept (Rob's capture); the divider grab spot
+    follows the gap (`Js8PcSplitters.setButtonGap`). Generated by `build-env/gen_pc_layout.py`.
+  - Swipe: one row of 11, STATUS text shrinks to fit.
+- Tap: with On demand one heartbeat (ACTION_SEND_HB); with a repeat time the timer on / off (lit, label
+  "HB (seconds)", "HB + ACK" when AUTO + ACK). Press and hold = buildHeartbeatMenu: Start / Stop
+  Heartbeat Timer (with a repeat time), On demand / 10 / 15 / 30 / 60 / Custom (1-1440 min), Send
+  Heartbeat Now. Choosing a time starts the timer, On demand stops it.
+- One setting (Rob): the menu's time is Station > Heartbeat interval (`heartbeat_interval`).
+- Timer state `service/HeartbeatTimer.kt` (not kept after restart, like the PC); the service's timed
+  heartbeats need Settings > HB and the timer (before: HB + an interval started them by themselves).
+  ACTION_HB_TIMER; API STATION.SET_HB_TIMER / HB_TIMER_ACTIVE use it.
+- PC rule (Rob): sending no longer sets the interval to Disabled (JS8Android disableHeartbeat removed);
+  a one-off CQ stops the HB timer. Starting the timer deselects when Pause heartbeat transmissions while
+  in a QSO is checked.
+- Tested on S22: upright row, menu, 10 minutes -> interval 10, timer started, heartbeat sent at the next
+  slot and the next planned 10 min later, CQ stopped the timer and kept the interval; PC mode and Swipe
+  rows. PC's lit colour for HB not checked (Easy JS8 keeps the same blue, lit = isActivated).
+
+### CQ button repeat (seventh session, 2026-10-20, Rob said LETS GO)
+
+- PC cqMacroButton: tap = one CQ (sendCQ: stops the CQ and HB timers, CQ Message into the Typing Box,
+  sent when Immediately transmit ... is on); with a repeat time tap = CQ timer on / off (lit, "CQ (seconds)",
+  starting it always deselects). Press and hold = buildCQMenu: Start / Stop CQ Timer (with a time),
+  On demand / 1 / 5 / 10 / 15 / Custom, Send CQ Now. Greyed while transmitting.
+- Repeat time `js8cfg_cq_interval` (PC CQInterval, kept); timer `service/HeartbeatTimer.kt` CqTimer, not kept
+  after restart. The service times it (ACTION_CQ_TIMER, slot aligned like heartbeats) and calls
+  `CqTimer.fire` = the main screen's sendCQ(true) (always sends); with no main screen it queues the CQ
+  Message itself. HB and CQ menus share `showRepeatMenu`.
+- Tested on S22 upright: menu, 1 minute -> CQ sent at the next slot and again 1 minute later, tap stopped
+  the timer and kept the time, Start CQ Timer shown with a time, back to On demand.
+- Countdown upright (Rob): only the seconds while counting ("570", "now"), PC mode and Swipe keep
+  "HB (570)" / "CQ (570)". Checked on S22 upright with both timers running.
+
 ## Choices made without Rob confirming yet
 
 - APRS page buttons named **OK** / **Cancel**; APRS menu items hidden sideways.
@@ -354,7 +492,7 @@ Station window sideways = PC tabs, no About tab.
 - Sideways (PC and Swipe) not updated for any of this session's window changes; Swipe tab 5
   still says **Settings** but shows Station.
 - Header **Offset** slider (sideways) is not blocked while a message waits (PC blocks it).
-- LOG button (Log QSO window); ✓ / Name / Comment columns stay empty until there is a log.
+- Log menu items Erase ALL.TXT / Erase js8call_log.adi not built (Rob: maybe later, Settings > Log).
 - CQ button repeat menu (PC right-click: repeat every 1/5/10/15 min, Send CQ Now) not built.
 - PC keeps Call Activity and Message Window text across restarts unless **Reset the Band
   Activity, Call Activity, and RX history at startup**; Easy JS8 starts empty and that checkbox

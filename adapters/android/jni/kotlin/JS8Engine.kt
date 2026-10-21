@@ -268,6 +268,11 @@ class JS8Engine private constructor(
         withNativeHandle { nativeDebugFt8Recording(it, samples) }
     }
 
+    /** Tone numbers of the frame on air (API TX.FRAME); empty for TUNE and when nothing is sent. */
+    fun txFrameTones(): IntArray {
+        return withNativeHandleOr(IntArray(0)) { nativeGetTxFrameTones(it) }
+    }
+
     /** How many parts of the message being sent have started (the one on air is this minus 1). */
     fun txFramesStarted(): Int {
         return withNativeHandleOr(0) { nativeGetTxFramesStarted(it) }
@@ -396,6 +401,7 @@ class JS8Engine private constructor(
     private external fun nativeIsTransmittingAudio(handle: Long): Boolean
     private external fun nativeGetTxFrameTexts(handle: Long): Array<String>
     private external fun nativeGetTxFramesStarted(handle: Long): Int
+    private external fun nativeGetTxFrameTones(handle: Long): IntArray
     private external fun nativeSetFt8Enabled(handle: Long, enabled: Boolean)
     private external fun nativeDebugFt8Recording(handle: Long, samples: ShortArray)
     private external fun nativeTxMillisecondsUntilAudio(handle: Long): Int

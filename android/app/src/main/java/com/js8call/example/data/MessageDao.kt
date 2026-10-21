@@ -41,6 +41,9 @@ interface MessageDao {
     @Query("SELECT * FROM messages ORDER BY timestamp DESC")
     fun getAllMessages(): LiveData<List<MessageEntity>>
 
+    @Query("SELECT * FROM messages ORDER BY timestamp DESC")
+    suspend fun getAllMessagesSync(): List<MessageEntity>
+
     // ========== Message Status Updates ==========
 
     @Query("UPDATE messages SET status = :status WHERE id = :messageId")

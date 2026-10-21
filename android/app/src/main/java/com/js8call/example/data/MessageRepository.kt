@@ -45,6 +45,12 @@ class MessageRepository(context: Context) {
         return messageDao.getAllMessages()
     }
 
+    suspend fun getAllMessagesSync(): List<MessageEntity> {
+        return withContext(Dispatchers.IO) {
+            messageDao.getAllMessagesSync()
+        }
+    }
+
     // ========== Insert/Update ==========
 
     suspend fun insertMessage(message: MessageEntity): Long {

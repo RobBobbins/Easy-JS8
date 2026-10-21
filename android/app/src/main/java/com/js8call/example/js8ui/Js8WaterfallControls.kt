@@ -322,6 +322,17 @@ class Js8WaterfallControls(
 
     val filterEnabled get() = filterOn
 
+    /** API RX.SET_FILTER / RX.SET_FILTER_ENABLED (WideGraph setFilterCenter / Width / Enabled). */
+    fun setFilter(center: Int?, width: Int?, enabled: Boolean?) {
+        center?.let { filterCenter = it.coerceIn(FILTER_CENTER_MIN, FILTER_CENTER_MAX) }
+        width?.let { filterWidth = it.coerceIn(FILTER_WIDTH_MIN, FILTER_WIDTH_MAX) }
+        enabled?.let { filterOn = it }
+        prefs.edit().putInt(KEY_FILTER_CENTER, filterCenter).putInt(KEY_FILTER_WIDTH, filterWidth)
+            .putBoolean(KEY_FILTER_ENABLED, filterOn).apply()
+        v<CheckBox>(R.id.js8_wf_filter_enable)?.let { if (it.isChecked != filterOn) it.isChecked = filterOn }
+        renderAll()
+    }
+
     private fun renderAll() {
         v<TextView>(R.id.js8_wf_center)?.text = "Center: $center Hz"
         v<TextView>(R.id.js8_wf_filter_center)?.text = "Center: $filterCenter Hz"

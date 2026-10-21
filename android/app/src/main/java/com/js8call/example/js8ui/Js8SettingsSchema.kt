@@ -5,6 +5,7 @@ import android.content.SharedPreferences
 import com.js8call.core.BluetoothSerialPortCatalog
 import com.js8call.core.HamlibRigCatalog
 import com.js8call.core.UsbSerialPortCatalog
+import com.js8call.example.api.Js8Api
 
 /**
  * Every setting of the JS8Call 3.0.3 Settings window (JS8_UI/Configuration.ui), in its tab order,
@@ -12,8 +13,9 @@ import com.js8call.core.UsbSerialPortCatalog
  * JS8Android's stored key, so the engine reads them as before. The rest are stored under
  * "js8cfg_*" keys.
  *
- * PC-only settings are left out on purpose (Rob, 2026-10-19): API / WSJT-X / N3FJP / N1MM,
- * Save Directory, PTT command, Application stylesheet / font, Check for software updates.
+ * PC-only settings are left out on purpose (Rob, 2026-10-19): Save Directory, PTT command,
+ * Application stylesheet / font, Check for software updates. API / WSJT-X / N3FJP / N1MM came
+ * back on 2026-10-20 (Rob: "include all the desktop features"), Reporting tab, see api/Js8Api.
  */
 object Js8SettingsSchema {
 
@@ -214,6 +216,10 @@ object Js8SettingsSchema {
             ButtonRow(listOf("Clear Call Activity" to "clear_call")),
             ButtonRow(listOf("Clear RX Activity" to "clear_rx")),
             ButtonRow(listOf("Clear All Activity" to "clear_all"))
+        )),
+        // From the PC's Log menu (Rob, 2026-10-20): Export Log... opens Export Options
+        Section("Log", null, listOf(
+            ButtonRow(listOf("Export Log..." to "export_log"))
         ))
     )
 
@@ -402,6 +408,35 @@ object Js8SettingsSchema {
                 check("js8cfg_aprs_relay", "Enable relaying inbound APRS messages to Heard List stations", false),
                 text("js8cfg_aprs_server", "APRS Server:", "rotate.aprs2.net"),
                 spin("js8cfg_aprs_port", "APRS Server Port:", 14580, 0.0, 65534.0)
+            )),
+            // Configuration.ui groupBox_4 "API", its grid row by row (label, box, then the checkbox beside it)
+            Group("API", listOf(
+                check(Js8Api.KEY_DYNAMIC_INFO, "Allow setting station information (Grid, Info, Status, etc) from the APIs", false),
+                text(Js8Api.KEY_UDP_SERVER, "UDP Server Hostname:", "127.0.0.1"),
+                check(Js8Api.KEY_UDP_ENABLED, "Enable UDP Server API", false),
+                spin(Js8Api.KEY_UDP_PORT, "UDP Server Port:", 2242, 0.0, 65535.0),
+                check(Js8Api.KEY_UDP_ACCEPT, "Accept UDP Requests", false),
+                text(Js8Api.KEY_TCP_SERVER, "TCP Server Hostname:", "127.0.0.1"),
+                check(Js8Api.KEY_TCP_ENABLED, "Enable TCP Server API", false),
+                spin(Js8Api.KEY_TCP_PORT, "TCP Server Port:", 2442, 0.0, 65534.0),
+                check(Js8Api.KEY_TCP_ACCEPT, "Accept TCP Requests", false),
+                spin(Js8Api.KEY_TCP_MAX, "TCP Max Connections:", 1, 1.0, 100.0),
+                text(Js8Api.KEY_WSJTX_SERVER, "WSJT-X Server:", "127.0.0.1"),
+                check(Js8Api.KEY_WSJTX_ENABLED, "Enable WSJT-X UDP Server API", false),
+                spin(Js8Api.KEY_WSJTX_PORT, "WSJT-X Server Port:", 2237, 0.0, 65534.0),
+                spin(Js8Api.KEY_WSJTX_TTL, "Multicast TTL:", 1, 1.0, 255.0),
+                check(Js8Api.KEY_WSJTX_ACCEPT, "Accept UDP Requests", false),
+                Special("wsjtx_interfaces") // Outgoing interfaces: (PC CheckableItemComboBox)
+            )),
+            Group("N3FJP Logger", listOf(
+                check(Js8Api.KEY_N3FJP_ENABLED, "Enable sending logged contacts to N3FJP logging software", false),
+                text(Js8Api.KEY_N3FJP_SERVER, "N3FJP Server:", "127.0.0.1"),
+                spin(Js8Api.KEY_N3FJP_PORT, "N3FJP Server Port:", 1100, 0.0, 65535.0)
+            )),
+            Group("N1MM Logger", listOf(
+                check(Js8Api.KEY_N1MM_ENABLED, "Enable sending logged contacts to N1MM logging software", false),
+                text(Js8Api.KEY_N1MM_SERVER, "N1MM Server:", "127.0.0.1"),
+                spin(Js8Api.KEY_N1MM_PORT, "N1MM Server Port:", 2333, 0.0, 65535.0)
             ))
         )),
         Section("Frequencies", null, listOf(

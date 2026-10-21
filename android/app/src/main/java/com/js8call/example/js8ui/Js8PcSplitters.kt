@@ -93,6 +93,16 @@ class Js8PcSplitters(private val window: FrameLayout, private val prefs: SharedP
     }
 
     /** View > Reset Window Sizes (PC actionReset_Window_Sizes). */
+    /** The STATUS / Saved gap moves right while the HB button shows (Js8MainFragment). */
+    private var statusRight = STATUS_RIGHT
+    private var savedLeft = SAVED_LEFT
+
+    fun setButtonGap(statusRight: Float?, savedLeft: Float?) {
+        this.statusRight = statusRight ?: STATUS_RIGHT
+        this.savedLeft = savedLeft ?: SAVED_LEFT
+        apply()
+    }
+
     fun reset() {
         band = BAND_RIGHT; call = CALL_LEFT; text = TEXT_BOTTOM; main = MAIN_BOTTOM; wf = CONTROLS_LEFT
         prefs.edit().remove(KEY_BAND).remove(KEY_CALL).remove(KEY_TEXT).remove(KEY_MAIN).remove(KEY_WF).apply()
@@ -131,7 +141,7 @@ class Js8PcSplitters(private val window: FrameLayout, private val prefs: SharedP
         // waterfall / controls line (level with the frequency scale and the tabs)
         spot(leftCorner, band + GAP_BAND / 2, text + GAP_TEXT / 2, GRAB, GRAB)
         spot(rightCorner, call - GAP_CALL / 2, text + GAP_TEXT / 2, GRAB, GRAB)
-        spot(mainSpot, (STATUS_RIGHT + SAVED_LEFT) / 2, buttonsTop + BUTTONS_H / 2, SAVED_LEFT - STATUS_RIGHT - 4f, BUTTONS_H + 16f)
+        spot(mainSpot, (statusRight + savedLeft) / 2, buttonsTop + BUTTONS_H / 2, savedLeft - statusRight - 4f, BUTTONS_H + 16f)
         spot(wfSpot, wf - GAP_WF / 2, wfTop + 14f, 24f, GRAB)
     }
 

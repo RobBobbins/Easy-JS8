@@ -461,6 +461,21 @@ Java_com_js8call_core_JS8Engine_nativeGetTxFramesStarted(
   return js8_engine_tx_frames_started(engine);
 }
 
+JNIEXPORT jintArray JNICALL
+Java_com_js8call_core_JS8Engine_nativeGetTxFrameTones(
+    JNIEnv* env,
+    jobject /* thiz */,
+    jlong handle) {
+  JS8Engine_Native* engine = reinterpret_cast<JS8Engine_Native*>(handle);
+  auto tones = js8_engine_tx_current_tones(engine);
+  jintArray out = env->NewIntArray(static_cast<jsize>(tones.size()));
+  if (out && !tones.empty()) {
+    std::vector<jint> values(tones.begin(), tones.end());
+    env->SetIntArrayRegion(out, 0, static_cast<jsize>(values.size()), values.data());
+  }
+  return out;
+}
+
 JNIEXPORT jint JNICALL
 Java_com_js8call_core_JS8Engine_nativeTxMillisecondsUntilAudio(
     JNIEnv* /* env */,

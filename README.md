@@ -15,6 +15,17 @@ Test transmitting on a dummy load first.
 - Acquire GPS for your grid, SWL (Listening only) mode
 - Tap the waterfall to set the offset
 - JS8 Slow is now decoded
+- APRS forms (Saved > APRS EMAIL / TXT / GRID / MSG)
+- FT8 decodes in the Message Window
+- Press-and-hold callsign menu in Call Activity
+- Waterfall Controls: Control, Timing and Display tabs, palette designer
+- Sending part by part, sent text crossed out
+- API: UDP and TCP, the PC's commands and messages
+- WSJT-X protocol, N3FJP and N1MM logging
+- Log QSO and ADIF log, worked-before column
+- Mailbox: messages held for other stations, QUERY MSGS / QUERY MSG
+- Export Options: log and Message Inbox to a folder you choose
+- HB and CQ buttons with repeat timers
 
 ## Building
 
@@ -39,8 +50,8 @@ The first line is needed only once. The APK is written to
 ## Notice
 
 Easy JS8 is a fork of JS8Android, which is a port of JS8Call, which is a derivative of WSJT-X.
-Easy JS8 is not supported or endorsed by the WSJT-X, JS8Call or JS8Android developers. They keep
-copyright over their original work. Easy JS8 is a derivative work released under the GPLv3.
+The WSJT-X, JS8Call and JS8Android developers keep copyright over their original work. Easy JS8
+is a derivative work released under the GPLv3.
 
 ## Licence
 

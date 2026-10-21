@@ -12,7 +12,9 @@ OUT = os.path.join("android", "app", "src", "main", "res", "layout", "fragment_j
 MENU = [("File", 27), ("Configurations", 85), ("Mode", 218), ("Log", 296),
         ("View", 358), ("Control", 428), ("Help", 515)]
 
-BUTTONS = [("js8_btn_cq", "CQ", 15, 90, True), ("js8_btn_reply", "REPLY", 113, 92, False),
+# HB (hbMacroButton) sits left of CQ and shows only while HB is on; Js8MainFragment then narrows
+# all 11 buttons to fit the row (Rob, 2026-10-20)
+BUTTONS = [("js8_btn_hb", "HB", 15, 90, "gone"), ("js8_btn_cq", "CQ", 15, 90, True), ("js8_btn_reply", "REPLY", 113, 92, False),
            ("js8_btn_snr", "SNR", 212, 91, False), ("js8_btn_info", "INFO", 310, 92, False),
            ("js8_btn_status", "STATUS", 409, 91, True), ("js8_btn_saved", "Saved", 531, 90, True),
            ("js8_btn_directed", "Directed", 652, 92, False), ("js8_btn_deselect", "Deselect", 751, 91, False),
@@ -34,7 +36,8 @@ def menu_item(name, x):
 
 
 def button(id_, text, x, w, enabled):
-    en = "" if enabled else '\n            android:enabled="false"'
+    en = "" if enabled is True else ('\n            android:visibility="gone"' if enabled == "gone"
+                                     else '\n            android:enabled="false"')
     return f"""        <androidx.appcompat.widget.AppCompatButton
             android:id="@+id/{id_}"
             style="@style/Js8Button"

@@ -21,6 +21,7 @@ import androidx.lifecycle.ViewModelProvider
 import androidx.navigation.fragment.findNavController
 import androidx.preference.PreferenceManager
 import com.js8call.example.R
+import com.js8call.example.api.Js8Api
 import com.js8call.example.model.DecodedMessage
 import com.js8call.example.model.EngineState
 import com.js8call.example.model.TransmitState
@@ -72,6 +73,8 @@ class Js8MainFragment : Fragment() {
         private var swipePage = 1
         /** checkStartupWarnings runs once per app start, not on each rotation. */
         private var startupChecked = false
+        /** When each callsign was first selected: the QSO start time for Log QSO (m_callSelectedTime). */
+        private val callSelectedTime = mutableMapOf<String, Long>()
     }
 
     private lateinit var monitorVm: MonitorViewModel
@@ -151,6 +154,8 @@ class Js8MainFragment : Fragment() {
             // PC updateTimer: lists redrawn at most once a second, when something changed;
             // ages ("now", "15s", "2m") move on every 5 seconds even without new decodes
             if (activityDirty || (now / 1000) % 5 == 0L) renderActivity()
+            renderHbLabel(now)
+            renderCqLabel(now)
             ui.postDelayed(this, 1000 - now % 1000)
         }
     }
@@ -227,6 +232,11 @@ class Js8MainFragment : Fragment() {
         parentFragmentManager.setFragmentResultListener(Js8AprsFragment.RESULT_KEY, viewLifecycleOwner) { _, result ->
             result.getString(Js8AprsFragment.RESULT_TEXT)?.let { addMessageText(it, send = false) }
         }
+        // Add to Log: the selection is cleared (acceptQSO -> clearCallsignSelected) and the ✓ shows
+        parentFragmentManager.setFragmentResultListener(Js8LogFragment.RESULT_KEY, viewLifecycleOwner) { _, _ ->
+            clearSelection()
+            activityVm.changed()
+        }
         setUpWaterfall()
         wfControls = Js8WaterfallControls(view, prefs(), waterfall,
             offset = { monitorVm.getTxOffset().toInt() },
@@ -249,6 +259,11 @@ class Js8MainFragment : Fragment() {
             importPalette = { onLoaded -> paletteImported = onLoaded; importPaletteFile.launch(arrayOf("*/*")) },
             exportPalette = { text -> paletteToExport = text; exportPaletteFile.launch("palette.pal") })
         observe()
+        // Station > Reporting API commands that use this screen (Typing Box, TUNE, Halt, offset, filter)
+        Js8Api.controller = apiController
+        // The CQ timer sends through this screen (sendCQ(true))
+        com.js8call.example.service.CqTimer.fire = cqFire
+        Js8Api.setSelectedCall(selectedCall)
         if (!startupChecked) {
             startupChecked = true
             // AUTO starts as Station > Turn autoreply on at startup, which needs callsign and grid
@@ -265,6 +280,60 @@ class Js8MainFragment : Fragment() {
             // UI_Constructor::checkStartupWarnings: no callsign or grid opens Station
             view.post { if (isAdded) ensureCallsignSet(alert = false) }
         }
+    }
+
+    override fun onDestroyView() {
+        if (Js8Api.controller === apiController) Js8Api.controller = null
+        if (com.js8call.example.service.CqTimer.fire === cqFire) com.js8call.example.service.CqTimer.fire = null
+        super.onDestroyView()
+    }
+
+    private val cqFire: () -> Boolean = { view != null && !listenOnly() && sendCq(repeat = true) }
+
+    /** What the API commands do on this screen (PC networkMessage on the main window). */
+    private val apiController = object : Js8Api.Controller {
+        override fun typingText(): String = if (view != null) typingBox.text.toString() else ""
+
+        // PC addMessageText(text, clear = true): nothing while a message waits or is sent
+        override fun setTypingText(text: String) {
+            if (view == null || activityVm.typed.value != null) return
+            typingBox.setText(text)
+            typingBox.setSelection(typingBox.text.length)
+        }
+
+        override fun setTune(on: Boolean): Boolean {
+            val tune = view?.findViewById<View>(R.id.js8_btn_tune) ?: return false
+            if (tune.isEnabled && tune.isActivated != on) tune.performClick()
+            return tune.isActivated
+        }
+
+        override fun halt() {
+            view?.findViewById<View>(R.id.js8_btn_halt)?.performClick()
+        }
+
+        override fun setOffset(hz: Int) {
+            if (view != null) jumpToOffset(hz)
+        }
+
+        override fun setFilter(center: Int?, width: Int?, enabled: Boolean?) {
+            wfControls?.setFilter(center, width, enabled)
+        }
+
+        override fun refresh() = refreshFromPrefs()
+    }
+
+    /** Settings changed by the API: header, status bar, TX / SPOT buttons and the lists follow. */
+    private fun refreshFromPrefs() {
+        if (view == null) return
+        val prefs = prefs()
+        callsign.text = prefs.getString("callsign", "").orEmpty().ifBlank { "NOCALL" }
+        statusAutoReply.text = if (prefs.getBoolean("autoreply_enabled", false)) "Auto Reply: On" else "Auto Reply: Off"
+        dialHz = prefs.getString("last_frequency", "14078000")?.toLongOrNull() ?: 14_078_000L
+        renderFrequency()
+        renderSpeed()
+        renderTransmitEnabled()
+        requireView().findViewById<View>(R.id.js8_btn_spot).isActivated = boolPref("psk_reporter", false)
+        activityVm.changed() // groups and @ALLCALL in Call Activity
     }
 
     override fun onResume() {
@@ -386,6 +455,13 @@ class Js8MainFragment : Fragment() {
             }
         }
         inbox?.onRowClick = { row -> showInboxMessage(row.id) }
+        // Press and hold: Delete (MessagePanel)
+        inbox?.onRowLongClick = { row, anchor ->
+            Js8Inbox.showMessageMenu(anchor) {
+                viewLifecycleOwner.lifecycleScope.launch { repository.deleteMessage(row.id.toLong()) }
+                requireView().findViewById<TextView?>(R.id.js8_inbox_message)?.text = ""
+            }
+        }
     }
 
     private fun prefs() = PreferenceManager.getDefaultSharedPreferences(requireContext())
@@ -436,6 +512,7 @@ class Js8MainFragment : Fragment() {
         progress.period = Js8Activity.periodSeconds(submode)
         waterfall.setCyclePeriod(progress.period)
         requestTextStats()
+        renderHb()
     }
 
     // ---- Status Bar wpm box (PC mode) ---------------------------------------------------
@@ -559,6 +636,10 @@ class Js8MainFragment : Fragment() {
             val icon = when {
                 isBlocked -> "✕"; hasMessage -> "⚑"; hasAck -> "★"; hasCq -> "☎"; else -> ""
             }
+            // Worked before / Name / Comment from the log; its grid when none was heard (displayCallActivity)
+            val worked = com.js8call.example.data.Js8LogBook.workedBefore(requireContext(), d.call)
+            val logged = if (worked) com.js8call.example.data.Js8LogBook.details(requireContext(), d.call) else null
+            if (d.grid.isEmpty() && !logged?.grid.isNullOrEmpty()) d.grid = logged!!.grid.trim()
             val vec = Js8Activity.vector(grid, d.grid)
             val dist = vec?.first?.let { km -> if (miles) "${(km * 0.621371).roundToInt()} mi" else "${km.roundToInt()} km" }.orEmpty()
             val az = vec?.second?.let { "${it.roundToInt()}°" }.orEmpty()
@@ -573,7 +654,8 @@ class Js8MainFragment : Fragment() {
                     "tdrift" to "${(d.tdrift * 1000).toInt()} ms",
                     "submode" to Js8Activity.submodeLetter(d.submode),
                     "grid" to d.grid.take(4), "distance" to dist, "azimuth" to az,
-                    "log" to "", "logName" to "", "logComment" to ""
+                    "log" to if (worked) "✓" else "", "logName" to logged?.name.orEmpty(),
+                    "logComment" to logged?.comment.orEmpty()
                 ),
                 sortValues = mapOf("timestamp" to -d.utcMs, "snr" to d.snr, "offset" to d.offset,
                     "distance" to (vec?.first ?: Double.MAX_VALUE), "azimuth" to (vec?.second ?: 999.0)),
@@ -695,9 +777,8 @@ class Js8MainFragment : Fragment() {
             prefs().edit().putBoolean("psk_reporter", on).apply()
             it.isActivated = on
         }
-        requireView().findViewById<View>(R.id.js8_btn_log).setOnClickListener {
-            android.widget.Toast.makeText(requireContext(), "Log QSO is not built yet", android.widget.Toast.LENGTH_SHORT).show()
-        }
+        // LOG: the Log QSO page for the selected callsign (on_logQSOButton_clicked)
+        requireView().findViewById<View>(R.id.js8_btn_log).setOnClickListener { openLog(selectedCall) }
         // TUNE: steady tone at the TX offset until pressed again
         requireView().findViewById<View>(R.id.js8_btn_tune).setOnClickListener {
             val on = !it.isActivated
@@ -733,9 +814,7 @@ class Js8MainFragment : Fragment() {
             }
             menu.show()
         }
-        menubar(R.id.js8_menubar_log) {
-            android.widget.Toast.makeText(requireContext(), "Log QSO is not built yet", android.widget.Toast.LENGTH_SHORT).show()
-        }
+        menubar(R.id.js8_menubar_log) { openLog(selectedCall) }
         menubar(R.id.js8_menubar_help) { openStation(page = Js8SettingsFragment.ABOUT_PAGE) }
     }
 
@@ -847,7 +926,7 @@ class Js8MainFragment : Fragment() {
     private fun renderTransmitEnabled() {
         val v = view ?: return
         val swl = listenOnly()
-        listOf(R.id.js8_btn_cq, R.id.js8_btn_status, R.id.js8_btn_saved, R.id.js8_btn_tune)
+        listOf(R.id.js8_btn_cq, R.id.js8_btn_status, R.id.js8_btn_saved, R.id.js8_btn_tune, R.id.js8_btn_hb)
             .forEach { v.findViewById<View>(it).isEnabled = !swl }
         v.findViewById<View>(R.id.js8_btn_send).isEnabled = !swl && typingBox.text.isNotBlank() && activityVm.typed.value == null
         btnTx.isEnabled = !swl
@@ -864,11 +943,17 @@ class Js8MainFragment : Fragment() {
     private fun macro(text: String) = Js8Macros.expand(text, prefs())
 
     private fun setUpButtons(view: View) {
+        // HB (PC hbMacroButton): tap = one heartbeat, or start / stop the timer when a repeat
+        // time is set; press and hold = the PC's heartbeat menu (buildHeartbeatMenu)
+        view.findViewById<View>(R.id.js8_btn_hb).apply {
+            setOnClickListener { onHbClicked() }
+            setOnLongClickListener { showHbMenu(it); true }
+        }
         // CQ: clears the selection, CQ Message (sendCQ)
-        view.findViewById<View>(R.id.js8_btn_cq).setOnClickListener {
-            clearSelection()
-            addMessageText(macro(prefs().getString("js8cfg_cq_message", "CQ CQ CQ <MYGRID4>").orEmpty()
-                .ifBlank { "CQ CQ CQ <MYGRID4>" }), send = true)
+        // Tap = one CQ, or the CQ timer on / off with a repeat time; press and hold = buildCQMenu
+        view.findViewById<View>(R.id.js8_btn_cq).apply {
+            setOnClickListener { onCqClicked() }
+            setOnLongClickListener { showCqMenu(it); true }
         }
         // REPLY: "CALL <reply message>"
         view.findViewById<View>(R.id.js8_btn_reply).setOnClickListener {
@@ -1028,7 +1113,10 @@ class Js8MainFragment : Fragment() {
         val mySubmode = Js8Activity.txSubmode(prefs().getInt(Js8SettingsSchema.TX_SUBMODE_KEY, 0))
         val saved = savedMessages()
         val directed = directedItems(call)
-        val hasInbox = inboxMessages.any { (it.senderCallsign ?: it.conversationId).equals(call, ignoreCase = true) }
+        // Messages from them, or held for them (Inbox::fetchForCall)
+        val hasInbox = inboxMessages.any {
+            (if (Js8Inbox.isHeld(it)) it.conversationId else it.senderCallsign ?: it.conversationId).equals(call, ignoreCase = true)
+        }
 
         val popup = popupMenu(anchor)
         val m = popup.menu
@@ -1043,9 +1131,9 @@ class Js8MainFragment : Fragment() {
             }
             m.add(1, ID_JUMP_DRIFT, 3, "Jump to ${-(detail.tdrift * 1000).toInt()} ms time drift")
         }
-        m.add(2, ID_LOG, 10, "Log...").isEnabled = false // LOG not built yet
+        m.add(2, ID_LOG, 10, "Log...").isEnabled = !isGroup
         m.add(2, ID_INBOX, 11, "Show Message Inbox...").isEnabled = !isAllCall && hasInbox
-        m.add(2, ID_STORE, 12, "Store Message...").isEnabled = false // engine can't hold messages for others
+        m.add(2, ID_STORE, 12, "Store Message...")
         val savedMenu = m.addSubMenu(3, ID_SAVED, 20, "Saved Messages...")
         saved.forEachIndexed { i, text -> savedMenu.add(0, ID_SAVED_FIRST + i, i, text) }
         savedMenu.add(0, ID_SAVED_EDIT, saved.size, "Edit Saved Messages\u2026")
@@ -1072,6 +1160,8 @@ class Js8MainFragment : Fragment() {
                     })
                 }
                 id == ID_INBOX -> openInbox()
+                id == ID_LOG -> openLog(call)
+                id == ID_STORE -> storeMessage(call)
                 id == ID_SAVED_EDIT -> openStation()
                 id in ID_SAVED_FIRST until ID_SAVED_FIRST + saved.size ->
                     addMessageText(macro(saved[id - ID_SAVED_FIRST]), send = true)
@@ -1122,6 +1212,313 @@ class Js8MainFragment : Fragment() {
         prefs().edit().putString(Js8SettingsSchema.FREQUENCY_KEY, dialHz.toString()).apply()
         jumpToOffset(center)
         renderFrequency()
+    }
+
+    /**
+     * UI_Constructor::on_logQSOButton_clicked: the Log QSO page for [call] (none for a group),
+     * its grid from Call Activity, report sent = their SNR, start = when it was first selected,
+     * frequency = dial + offset.
+     */
+    private fun openLog(call: String?) {
+        val c = call?.takeIf { !it.startsWith("@") }.orEmpty()
+        val d = activityVm.activity.callActivity[c]
+        val args = android.os.Bundle().apply {
+            putString(Js8LogFragment.ARG_CALL, c)
+            putString(Js8LogFragment.ARG_GRID, d?.grid?.trim().orEmpty())
+            putString(Js8LogFragment.ARG_RPT_SENT, d?.snr?.takeIf { it > -50 }?.let { Js8Activity.formatSnr(it) }.orEmpty())
+            putLong(Js8LogFragment.ARG_START_MS, callSelectedTime[c] ?: 0L)
+            putLong(Js8LogFragment.ARG_FREQ_HZ, dialHz + monitorVm.getTxOffset().toLong())
+        }
+        navigateFromMain(R.id.navigation_js8_log, args)
+    }
+
+    /** Call Activity > Store Message...: held for [call] to collect (MessageReplyDialog, addCommandToStorage). */
+    private fun storeMessage(call: String) {
+        val box = EditText(requireContext()).apply {
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS
+            filters = arrayOf(android.text.InputFilter.AllCaps())
+        }
+        AlertDialog.Builder(requireContext())
+            .setTitle("Message")
+            .setMessage("Store this message locally for $call:")
+            .setView(box)
+            .setPositiveButton(android.R.string.ok) { _, _ ->
+                val text = box.text.toString().trim()
+                if (text.isEmpty()) return@setPositiveButton
+                val my = prefs().getString("callsign", "").orEmpty().trim().uppercase(Locale.US)
+                viewLifecycleOwner.lifecycleScope.launch {
+                    com.js8call.example.data.Js8Mailbox.store(requireContext(), call, my, text, relayPath = my)
+                }
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    // ---- HB button (PC hbMacroButton) ----------------------------------------------------------
+
+    private fun hbInterval() = intPref("heartbeat_interval", 0)
+
+    /** prepareHeartbeatMode: shown with Settings > HB on and a speed that sends heartbeats. */
+    private fun hbShown(): Boolean {
+        val speed = Js8Activity.txSubmode(prefs().getInt(Js8SettingsSchema.TX_SUBMODE_KEY, 0))
+        return boolPref(Js8SettingsSchema.HB_KEY, false) &&
+            speed in setOf(Js8Activity.SUBMODE_NORMAL, Js8Activity.SUBMODE_FAST, Js8Activity.SUBMODE_SLOW)
+    }
+
+    /** PC mode: the row's buttons as laid out (restored when HB hides). */
+    private var pcButtonsOriginal: List<Pair<Int, Int>>? = null
+    private val pcButtonIds = listOf(R.id.js8_btn_hb, R.id.js8_btn_cq, R.id.js8_btn_reply, R.id.js8_btn_snr, R.id.js8_btn_info,
+        R.id.js8_btn_status, R.id.js8_btn_saved, R.id.js8_btn_directed, R.id.js8_btn_deselect, R.id.js8_btn_send, R.id.js8_btn_halt)
+
+    private fun renderHb() {
+        val v = view ?: return
+        val hb = v.findViewById<View?>(R.id.js8_btn_hb) ?: return
+        val shown = hbShown()
+        val changed = (hb.visibility == View.VISIBLE) != shown
+        hb.visibility = if (shown) View.VISIBLE else View.GONE
+        if (changed) {
+            layoutPcButtons(shown)
+            layoutUprightButtons(shown)
+            fitStatusText(shown)
+        }
+        renderHbLabel(System.currentTimeMillis())
+    }
+
+    /**
+     * PC mode row (1062 PC dp): with HB the 11 buttons share it, each ~86 dp, the STATUS / Saved
+     * gap kept (Rob's capture of the PC).
+     */
+    private fun layoutPcButtons(withHb: Boolean) {
+        val v = view ?: return
+        if (v.findViewById<View?>(R.id.js8_pc_buttons) == null) return
+        val buttons = pcButtonIds.map { v.findViewById<View>(it) }
+        val original = pcButtonsOriginal ?: buttons.map { b ->
+            val lp = b.layoutParams as ViewGroup.MarginLayoutParams
+            lp.marginStart to lp.width
+        }.also { pcButtonsOriginal = it }
+        val dp = resources.displayMetrics.density
+        // The divider's grab spot follows the STATUS / Saved gap
+        val wHb = (1062f - 15f - 9 * 8f - 31f) / 11f
+        if (withHb) splitters?.setButtonGap(15f + 5 * (wHb + 8f) + wHb, 15f + 6 * (wHb + 8f) + 23f)
+        else splitters?.setButtonGap(null, null)
+        buttons.forEachIndexed { i, b ->
+            val lp = b.layoutParams as ViewGroup.MarginLayoutParams
+            if (withHb) {
+                val w = (1062f - 15f - 9 * 8f - 31f) / 11f
+                val x = 15f + i * (w + 8f) + (if (i >= 6) 31f - 8f else 0f)
+                lp.marginStart = (x * dp).toInt()
+                lp.width = (w * dp).toInt()
+            } else {
+                lp.marginStart = original[i].first
+                lp.width = original[i].second
+            }
+            b.layoutParams = lp
+        }
+    }
+
+    /**
+     * Upright top row with HB (Rob, 2026-10-20): HB, CQ, SNR, INFO small (~47 dp), REPLY ~59 dp,
+     * STATUS ~71 dp so its text fits; without HB all five the same, as before.
+     */
+    private fun layoutUprightButtons(withHb: Boolean) {
+        if (!isUprightLayout()) return
+        val v = view ?: return
+        val weights = listOf(R.id.js8_btn_hb to 0.8f, R.id.js8_btn_cq to 0.8f, R.id.js8_btn_reply to 1f,
+            R.id.js8_btn_snr to 0.8f, R.id.js8_btn_info to 0.8f, R.id.js8_btn_status to 1.2f)
+        weights.forEach { (id, w) ->
+            val b = v.findViewById<View>(id)
+            val lp = b.layoutParams as android.widget.LinearLayout.LayoutParams
+            lp.weight = if (withHb) w else 1f
+            b.layoutParams = lp
+        }
+    }
+
+    /** The upright page (fragment_js8_main), not PC mode or Swipe. */
+    private fun isUprightLayout() = view?.findViewById<View?>(R.id.js8_pc_buttons) == null &&
+        view?.findViewById<View?>(R.id.js8_pager) == null
+
+    /** STATUS text size from the layout (restored when HB hides). */
+    private var statusTextPx = 0f
+
+    /** Swipe: eleven buttons share the row with HB, so STATUS shrinks to fit (upright widens it instead). */
+    private fun fitStatusText(withHb: Boolean) {
+        if (view?.findViewById<View?>(R.id.js8_pager) == null) return // PC mode ~86 dp, upright: STATUS is wider
+        val status = view?.findViewById<TextView?>(R.id.js8_btn_status) ?: return
+        if (statusTextPx == 0f) statusTextPx = status.textSize
+        if (withHb) {
+            status.maxLines = 1
+            androidx.core.widget.TextViewCompat.setAutoSizeTextTypeUniformWithConfiguration(status,
+                (statusTextPx * 0.6f).toInt().coerceAtLeast(1), statusTextPx.toInt(), 1, android.util.TypedValue.COMPLEX_UNIT_PX)
+        } else {
+            androidx.core.widget.TextViewCompat.setAutoSizeTextTypeWithDefaults(status, androidx.core.widget.TextViewCompat.AUTO_SIZE_TEXT_TYPE_NONE)
+            status.setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX, statusTextPx)
+        }
+    }
+
+    /** updateHBButtonDisplay: "HB" / "HB + ACK", "(seconds)" to the next one while the timer runs. */
+    private fun renderHbLabel(now: Long) {
+        val hb = view?.findViewById<TextView?>(R.id.js8_btn_hb) ?: return
+        if (hb.visibility != View.VISIBLE) return
+        val timer = com.js8call.example.service.HeartbeatTimer
+        // presentlyWantHBReplies: AUTO + ACK, and no QSO under way when HB pauses for QSOs
+        val ack = boolPref(Js8SettingsSchema.AUTOREPLY_KEY, false) && boolPref(Js8SettingsSchema.HB_ACK_KEY, false) &&
+            (!boolPref("js8cfg_heartbeat_qso_pause", true) || selectedCall == null)
+        val base = if (ack) "HB + ACK" else "HB"
+        val text = if (timer.on) {
+            val secs = Math.round((timer.nextMs - now) / 1000.0)
+            val count = if (timer.nextMs > 0 && secs > 0) "$secs" else "now"
+            // Upright: only the seconds while counting, the small button can't hold more (Rob, 2026-10-20)
+            if (isUprightLayout()) count else "$base ($count)"
+        } else base
+        if (hb.text.toString() != text) hb.text = text
+        hb.isActivated = timer.on
+    }
+
+    /** on_hbMacroButton_toggled: no repeat time = one heartbeat now, otherwise the timer on / off. */
+    private fun onHbClicked() {
+        if (hbInterval() <= 0) {
+            setHbTimer(false)
+            sendHbNow()
+        } else {
+            setHbTimer(!com.js8call.example.service.HeartbeatTimer.on)
+        }
+    }
+
+    private fun setHbTimer(on: Boolean) {
+        // starting the timer deselects unless heartbeats may go out during a QSO
+        if (on && boolPref("js8cfg_heartbeat_qso_pause", true)) clearSelection()
+        com.js8call.example.service.HeartbeatTimer.on = on
+        requireContext().startService(Intent(requireContext(), JS8EngineService::class.java).apply {
+            action = JS8EngineService.ACTION_HB_TIMER
+            putExtra(JS8EngineService.EXTRA_HB_TIMER_ON, on)
+        })
+        renderHbLabel(System.currentTimeMillis())
+    }
+
+    private fun sendHbNow() {
+        if (listenOnly() || !ensureCallsignSet(alert = true)) return
+        requireContext().startService(Intent(requireContext(), JS8EngineService::class.java).apply {
+            action = JS8EngineService.ACTION_SEND_HB
+        })
+    }
+
+    /**
+     * buildHeartbeatMenu + buildRepeatMenu(isLowInterval = false): the HB repeat times 10 / 15 / 30 / 60.
+     * The time is Station > Heartbeat interval (one setting).
+     */
+    private fun showHbMenu(anchor: View) = showRepeatMenu(anchor, "Heartbeat", listOf(10, 15, 30, 60), hbInterval(),
+        com.js8call.example.service.HeartbeatTimer.on, "Send Heartbeat Now",
+        toggle = { setHbTimer(!com.js8call.example.service.HeartbeatTimer.on) },
+        setInterval = { min -> prefs().edit().putString("heartbeat_interval", min.toString()).apply(); setHbTimer(min > 0) },
+        sendNow = { sendHbNow() })
+
+    /** buildCQMenu + buildRepeatMenu(isLowInterval = true): the CQ repeat times 1 / 5 / 10 / 15 (PC CQInterval). */
+    private fun showCqMenu(anchor: View) = showRepeatMenu(anchor, "CQ", listOf(1, 5, 10, 15), cqInterval(),
+        com.js8call.example.service.CqTimer.on, "Send CQ Now",
+        toggle = { setCqTimer(!com.js8call.example.service.CqTimer.on) },
+        setInterval = { min -> prefs().edit().putInt(com.js8call.example.service.CqTimer.KEY_INTERVAL, min).apply(); setCqTimer(min > 0) },
+        sendNow = { sendCq(repeat = false) })
+
+    /**
+     * The PC's HB / CQ button menu: Start / Stop <name> Timer (with a repeat time), On demand /
+     * the repeat times / Repeat every N minutes (Custom Interval), the one in use ticked, and
+     * Send ... Now. A repeat time starts the timer, On demand stops it.
+     */
+    private fun showRepeatMenu(anchor: View, name: String, minutes: List<Int>, interval: Int, on: Boolean, nowText: String,
+                               toggle: () -> Unit, setInterval: (Int) -> Unit, sendNow: () -> Unit) {
+        val menu = popupMenu(anchor)
+        val m = menu.menu
+        androidx.core.view.MenuCompat.setGroupDividerEnabled(m, true)
+        if (interval > 0) m.add(1, 1, 1, if (on) "Stop $name Timer" else "Start $name Timer")
+        val repeats = listOf(0 to "On demand / do not repeat") +
+            minutes.map { it to if (it == 1) "Repeat every 1 minute" else "Repeat every $it minutes" }
+        val custom = interval !in repeats.map { it.first }
+        repeats.forEachIndexed { i, (min, text) -> m.add(2, 100 + min, 10 + i, text).apply { isCheckable = true; isChecked = min == interval } }
+        m.add(2, 99, 20, if (custom) "Repeat every $interval minutes (Custom Interval)" else "Repeat every N minutes (Custom Interval)")
+            .apply { isCheckable = true; isChecked = custom }
+        m.setGroupCheckable(2, true, true)
+        m.add(3, 2, 30, nowText)
+        menu.setOnMenuItemClickListener { item ->
+            when (item.itemId) {
+                1 -> toggle()
+                2 -> sendNow()
+                99 -> askMinutes(interval, setInterval)
+                else -> setInterval(item.itemId - 100)
+            }
+            true
+        }
+        menu.show()
+    }
+
+    /** Repeat every N minutes (Custom Interval): QInputDialog "Minutes", 1-1440. */
+    private fun askMinutes(current: Int, onPick: (Int) -> Unit) {
+        val box = EditText(requireContext()).apply {
+            inputType = android.text.InputType.TYPE_CLASS_NUMBER
+            setText(current.takeIf { it > 0 }?.toString() ?: "1")
+            selectAll()
+        }
+        AlertDialog.Builder(requireContext())
+            .setTitle("Repeat every N minutes")
+            .setMessage("Minutes")
+            .setView(box)
+            .setPositiveButton(android.R.string.ok) { _, _ ->
+                val n = box.text.toString().toIntOrNull() ?: return@setPositiveButton
+                onPick(n.coerceIn(1, 1440))
+            }
+            .setNegativeButton(android.R.string.cancel, null)
+            .show()
+    }
+
+    // ---- CQ button (PC cqMacroButton) ----------------------------------------------------------
+
+    private fun cqInterval() = intPref(com.js8call.example.service.CqTimer.KEY_INTERVAL, 0)
+
+    /** on_cqMacroButton_toggled: no repeat time = one CQ now, otherwise the CQ timer on / off. */
+    private fun onCqClicked() {
+        if (cqInterval() <= 0) sendCq(repeat = false)
+        else setCqTimer(!com.js8call.example.service.CqTimer.on)
+    }
+
+    /** Starting the CQ timer always deselects (PC clearCallsignSelected). */
+    private fun setCqTimer(on: Boolean) {
+        if (on) clearSelection()
+        com.js8call.example.service.CqTimer.on = on
+        requireContext().startService(Intent(requireContext(), JS8EngineService::class.java).apply {
+            action = JS8EngineService.ACTION_CQ_TIMER
+            putExtra(JS8EngineService.EXTRA_HB_TIMER_ON, on)
+        })
+        renderCqLabel(System.currentTimeMillis())
+    }
+
+    /**
+     * sendCQ: a one-off CQ stops the CQ and HB timers; the CQ Message goes in the Typing Box and is
+     * sent (from the timer always, by hand when "Immediately transmit ..." is on). False when
+     * nothing could be put in the Typing Box (a message is waiting or being sent).
+     */
+    private fun sendCq(repeat: Boolean): Boolean {
+        if (!repeat) {
+            if (com.js8call.example.service.CqTimer.on) setCqTimer(false)
+            if (com.js8call.example.service.HeartbeatTimer.on) setHbTimer(false)
+        }
+        if (activityVm.typed.value != null) return repeat // the PC adds nothing while a message waits
+        clearSelection()
+        val text = macro(prefs().getString("js8cfg_cq_message", "CQ CQ CQ <MYGRID4>").orEmpty().ifBlank { "CQ CQ CQ <MYGRID4>" })
+        addMessageText(text, send = !repeat)
+        if (repeat) sendTyped()
+        return true
+    }
+
+    /** updateCQButtonDisplay: "CQ (seconds)" to the next one while the timer runs. */
+    private fun renderCqLabel(now: Long) {
+        val cq = view?.findViewById<TextView?>(R.id.js8_btn_cq) ?: return
+        val timer = com.js8call.example.service.CqTimer
+        val text = if (timer.on) {
+            val secs = Math.round((timer.nextMs - now) / 1000.0)
+            val count = if (timer.nextMs > 0 && secs > 0) "$secs" else "now"
+            if (isUprightLayout()) count else "CQ ($count)" // upright: only the seconds (Rob)
+        } else "CQ"
+        if (cq.text.toString() != text) cq.text = text
+        cq.isActivated = timer.on
     }
 
     /** PC setSubmode: becomes the Speed in Settings too. */
@@ -1195,6 +1592,8 @@ class Js8MainFragment : Fragment() {
 
     /** REPLY, SNR, INFO, Directed, Deselect are enabled only while a callsign is selected (desktop behaviour). */
     private fun renderSelection() {
+        Js8Api.setSelectedCall(selectedCall) // API: STATION.STATUS SELECTED, RX.GET_CALL_SELECTED
+        selectedCall?.let { if (it !in callSelectedTime) callSelectedTime[it] = System.currentTimeMillis() }
         requestTextStats() // the directed callsign changes the parts (PC m_txTextDirtyLastSelectedCall)
         val has = selectedCall != null
         val v = requireView()
@@ -1302,6 +1701,9 @@ class Js8MainFragment : Fragment() {
         val state = monitorVm.status.value?.state ?: EngineState.STOPPED
         val transmitting = state == EngineState.RUNNING && transmitVm.txState.value == TransmitState.TRANSMITTING
         btnTx.isSelected = transmitting
+        // PC updateButtonDisplay: HB greyed while transmitting (and with SWL)
+        view?.findViewById<View?>(R.id.js8_btn_hb)?.isEnabled = !transmitting && !listenOnly()
+        view?.findViewById<View?>(R.id.js8_btn_cq)?.isEnabled = !transmitting && !listenOnly()
         when {
             transmitting -> { statusState.text = "Transmitting"; statusState.setBackgroundResource(R.drawable.js8_status_red) }
             state == EngineState.RUNNING || state == EngineState.STARTING -> {

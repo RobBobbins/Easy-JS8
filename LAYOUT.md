@@ -107,7 +107,8 @@ Copy of JS8Call **File → Settings** (JS8_UI/Configuration.ui, defaults from Co
   list; ← Back on the list works like Cancel. Sub-tabs (General: Station, Behavior, Networking &
   Autoreply; Radio: CAT Control, Rig Options; UI: Band & Call Activity, Messages, Composition)
   are headings on their page. Label above its box.
-- **Sideways**: the PC window: tabs and sub-tabs, label beside its box.
+- **Sideways** (2026-10-20): no tabs. ← Back + page name on one line; page list 3 across; a page's
+  framed groups in two columns, label above its box; tables full width.
 - **OK** / **Cancel** pinned to the bottom in both. Turning the phone keeps the window open and
   keeps unsaved changes.
 - General → Station Details: My Callsign, **SWL (Listening only)**, My Maidenhead Grid Locator,

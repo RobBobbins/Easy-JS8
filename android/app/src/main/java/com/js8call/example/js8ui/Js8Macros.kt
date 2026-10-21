@@ -23,7 +23,7 @@ object Js8Macros {
     }
 
     fun expand(text: String, prefs: SharedPreferences): String {
-        val grid = prefs.getString("grid", "").orEmpty().trim().uppercase()
+        val grid = com.js8call.example.api.Js8Api.myGrid(prefs) // the API's grid while allowed (Configuration::my_grid)
         val base = mapOf(
             "<MYCALL>" to prefs.getString("callsign", "").orEmpty().trim().uppercase(),
             "<MYGRID4>" to grid.take(4),
@@ -33,8 +33,8 @@ object Js8Macros {
         )
         fun sub(s: String) = base.entries.fold(s) { acc, (k, v) -> acc.replace(k, v) }
         val values = base + mapOf(
-            "<MYINFO>" to sub(prefs.getString("my_info", "").orEmpty()),
-            "<MYSTATUS>" to sub(prefs.getString("my_status", "").orEmpty()),
+            "<MYINFO>" to sub(com.js8call.example.api.Js8Api.myInfo(prefs)),
+            "<MYSTATUS>" to sub(com.js8call.example.api.Js8Api.myStatus(prefs)),
             "<MYCQ>" to sub(prefs.getString("js8cfg_cq_message", "CQ CQ CQ <MYGRID4>").orEmpty()),
             "<MYREPLY>" to sub(prefs.getString("js8cfg_reply_message", "HW CPY?").orEmpty())
         )

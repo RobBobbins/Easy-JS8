@@ -20,6 +20,7 @@ import androidx.navigation.ui.setupWithNavController
 import androidx.preference.PreferenceManager
 import com.google.android.material.navigation.NavigationBarView
 import com.google.android.material.snackbar.Snackbar
+import com.js8call.example.api.Js8Api
 import com.js8call.example.model.EngineState
 import com.js8call.example.service.JS8EngineService
 import com.js8call.example.ui.DecodeViewModel
@@ -214,6 +215,8 @@ class MainActivity : AppCompatActivity() {
                 destination.id == R.id.navigation_js8_settings ||
                 destination.id == R.id.navigation_js8_station ||
                 destination.id == R.id.navigation_js8_aprs ||
+                destination.id == R.id.navigation_js8_log ||
+                destination.id == R.id.navigation_js8_export ||
                 destination.id == R.id.navigation_js8_inbox) android.view.View.GONE else android.view.View.VISIBLE
             onMonitorTab = destination.id == R.id.navigation_monitor
             if (destination.id == R.id.navigation_conversation) {
@@ -227,6 +230,11 @@ class MainActivity : AppCompatActivity() {
         transmitViewModel = ViewModelProvider(this)[TransmitViewModel::class.java]
         js8ActivityViewModel = ViewModelProvider(this)[com.js8call.example.js8ui.Js8ActivityViewModel::class.java]
         decodeViewModel.loadPersistedDecodesIfEnabled()
+
+        // Easy JS8: Station > Reporting API (and WSJT-X, N3FJP, N1MM)
+        Js8Api.init(this)
+        Js8Api.activity = js8ActivityViewModel.activity
+        Js8Api.host = apiHost
 
         // Observe unread count for badge on Messages tab
         messagesViewModel.totalUnreadCount.observe(this) { count ->
@@ -286,9 +294,30 @@ class MainActivity : AppCompatActivity() {
             .unregisterReceiver(monitorReceiver)
         decodeViewModel.persistDecodesOnStop()
         if (isFinishing && !isChangingConfigurations) {
+            Js8Api.closing() // PC closeEvent: STATION.CLOSING
             stopEngineService()
         }
         super.onStop()
+    }
+
+    override fun onDestroy() {
+        if (Js8Api.host === apiHost) Js8Api.host = null
+        super.onDestroy()
+    }
+
+    /** API commands that use the transmit queue (TX.SEND_MESSAGE, TX.GET_QUEUE_DEPTH, WINDOW.RAISE). */
+    private val apiHost = object : Js8Api.Host {
+        override fun sendMessage(text: String) {
+            transmitViewModel.queueMessage(text, null, 0, clearComposed = false)
+            processNextTxIfIdle()
+        }
+
+        override fun queueDepth(): Int = transmitViewModel.queue.value?.size ?: 0
+
+        override fun raise() {
+            startActivity(Intent(this@MainActivity, MainActivity::class.java)
+                .addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or Intent.FLAG_ACTIVITY_NEW_TASK))
+        }
     }
 
     /**
