@@ -1,13 +1,10 @@
-# Easy JS8
-
-by VA3OSO
+# Easy JS8<br><sub>by VA3OSO</sub>
 
 Easy JS8 is a fork of JS8Android with added features and a new screen layout.
 
 ## Status
 
 Early test version. Tested on the Android emulator only, not on a real phone or radio yet.
-Test transmitting on a dummy load first.
 
 ## Added
 
