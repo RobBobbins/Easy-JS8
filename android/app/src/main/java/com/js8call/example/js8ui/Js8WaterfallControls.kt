@@ -204,6 +204,35 @@ class Js8WaterfallControls(
         }
         centerRow(R.id.js8_wf_opacity_row)
         field(R.id.js8_wf_opacity_box, R.id.js8_wf_opacity, "100%")
+
+        // Two controls on one line, centred, the second 8 dp right of the first (Rob, 2026-10-22):
+        // QSY | Center, Palette | Adjust..., Current | Smooth
+        fun sideBySide(firstId: Int, secondId: Int) {
+            val first = v<View>(firstId) ?: return
+            val second = v<View>(secondId) ?: return
+            val parent = first.parent as? LinearLayout ?: return
+            if (second.parent !== parent) return
+            val row = LinearLayout(root.context).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER
+            }
+            // The line keeps the first control's gap above it (Current: 6 dp under the Avg N line)
+            parent.addView(row, parent.indexOfChild(first), LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply {
+                topMargin = (first.layoutParams as LinearLayout.LayoutParams).topMargin
+            })
+            listOf(first, second).forEachIndexed { i, view ->
+                val old = view.layoutParams as LinearLayout.LayoutParams
+                parent.removeView(view)
+                row.addView(view, LinearLayout.LayoutParams(old.width, old.height).apply {
+                    gravity = Gravity.CENTER_VERTICAL
+                    if (i == 1) marginStart = (8 * dp).toInt()
+                })
+            }
+        }
+        sideBySide(R.id.js8_wf_qsy, R.id.js8_wf_center_box)
+        sideBySide(R.id.js8_wf_palette, R.id.js8_wf_palette_adjust)
+        sideBySide(R.id.js8_wf_spectrum, R.id.js8_wf_smooth_box)
     }
 
     // ---- Tabs ---------------------------------------------------------------------------

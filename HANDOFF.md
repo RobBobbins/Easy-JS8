@@ -546,6 +546,9 @@ APK: `android/app/build/outputs/apk/debug/app-debug.apk`. Details: `build-env/bu
 - Station > Radio > **Rig:** list has a search box (2026-10-21, Rob): matches any part of the name, ignoring case,
   spaces and dashes (`searchableChoice`). Checked on S22-Fresh: Hamlib list loads, "7300" -> IC-7300 / IC-7300MK2,
   "yaesu" -> Yaesu rigs, a pick lands in the box.
+- Upright (2026-10-22, Rob): Station > Radio **Poll Interval** box 90 dp; Waterfall Controls QSY | Center,
+  Palette | Adjust..., Current | Smooth side by side (`Js8WaterfallControls.fitUpright` sideBySide). Sideways unchanged.
+  Checked on S22-Fresh.
 - Every transmission shows in the Typing Box (2026-10-21, Rob: "all messages do it"): heartbeats, ACKs, AUTO
   replies, CQ timer go into the empty box (text without "CALL: ", from EXTRA_TX_FRAME_FULL_TEXT), struck out
   part by part, emptied at the end; typed text is never replaced (TypedTx.auto, typingBoxEmpty). Checked on

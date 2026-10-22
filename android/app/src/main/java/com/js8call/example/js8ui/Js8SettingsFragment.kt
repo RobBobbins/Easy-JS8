@@ -811,6 +811,8 @@ class Js8SettingsFragment : Fragment() {
         // and callsign lists fill their column, the rest are as wide as their longest value
         val width = when {
             station && sideways -> compactWidth(f) ?: ViewGroup.LayoutParams.MATCH_PARENT
+            // Upright Radio page: Poll Interval as wide as "99 s" with its arrows (Rob, 2026-10-22)
+            station && f.key == "js8cfg_cat_poll_interval" -> px(90)
             station -> ViewGroup.LayoutParams.MATCH_PARENT
             f.kind == Kind.CHOICE -> px(200)
             else -> px(120) // Custom frequency (MHz), Offset with its ▲▼
