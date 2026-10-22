@@ -23,7 +23,7 @@ Advanced (with a rig picked the first row is Rig | CAT Control | PTT Method | Mo
 hold, same height across each row (see LAYOUT.md). Checked with Rig None and Hamlib NET (then Cancel).
 Station > Audio sideways packed the same way (see LAYOUT.md); checked in Swipe's Station screen only
 (scrolls a little there; PC / FT8Call mode not looked at). Rob has not said whether other Station pages should get the same.
-**Next:** the wpm box upright is still to place. Committed: fourth session 7717b9d8, Timing tab
+**Next:** the double-send queue bug, then "CQ CQ API TEST" losing words (wpm box upright done 2026-10-22). Committed: fourth session 7717b9d8, Timing tab
 71a831f2, Display first part 7d421c12, Display bigger group 1b4c3056, engine waterfall detail d265512c.
 
 ## What this is
@@ -348,7 +348,9 @@ Rob's rule: **every menu has the same items in every layout; only the look diffe
   PC mode progress bar now 136 x 14 dp (was 200 x 12; width measured beside the wpm box on Rob's
   PC capture, thicker at Rob's request).
   Swipe: placed after Auto Reply, 150 dp; to fit, Swipe's Receiving box is 110 dp and its
-  progress bar 100 dp (`js8_status_bar_swipe.xml`). Upright: not placed yet (Rob: one at a time).
+  progress bar 100 dp (`js8_status_bar_swipe.xml`). Upright (2026-10-22, Rob): Receiving 110 dp | wpm box
+  150 dp, centred between (9 dp gaps) | progress bar takes the rest (~70 dp), ending at the right edge under
+  Halt. Upright hides the wpm box with INVISIBLE so the progress bar never moves. Checked on S22-Fresh: empty / "14.0wpm / 80.0cpm" / empty again.
 
 ### Sideways: where it stood at the start of the fourth session
 

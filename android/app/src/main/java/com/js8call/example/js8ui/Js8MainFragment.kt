@@ -212,12 +212,16 @@ class Js8MainFragment : Fragment() {
         statusFreq = view.findViewById(R.id.js8_status_freq)
         statusAutoReply = view.findViewById(R.id.js8_status_autoreply)
         progress = view.findViewById(R.id.js8_status_progress)
-        // Upright: the cycle progress bar runs from beside Receiving to the page's right edge (Rob, 2026-10-19)
+        // Upright: Receiving | wpm box | cycle progress bar, which takes what is left and ends at
+        // the page's right edge (Rob, 2026-10-19 / 2026-10-22)
         view.findViewById<View?>(R.id.js8_status_scroll)?.let { scroll ->
             scroll.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
                 val state = view.findViewById<View>(R.id.js8_status_state)
+                val wpm = view.findViewById<View>(R.id.js8_status_wpm)
                 val gap = (progress.layoutParams as ViewGroup.MarginLayoutParams).marginStart
-                val w = scroll.width - scroll.paddingLeft - scroll.paddingRight - state.width - gap
+                val wpmGap = (wpm.layoutParams as ViewGroup.MarginLayoutParams).marginStart
+                val w = scroll.width - scroll.paddingLeft - scroll.paddingRight - state.width - gap -
+                    wpm.layoutParams.width - wpmGap
                 if (w > 0 && progress.layoutParams.width != w) {
                     progress.layoutParams = progress.layoutParams.apply { width = w }
                 }
@@ -559,9 +563,11 @@ class Js8MainFragment : Fragment() {
      */
     private fun refreshTextStats() {
         val label = view?.findViewById<TextView?>(R.id.js8_status_wpm) ?: return
+        // Upright keeps the box's space while hidden, so the progress bar keeps its width
+        val hidden = if (view?.findViewById<View?>(R.id.js8_status_scroll) != null) View.INVISIBLE else View.GONE
         val text = typingBox.text.toString().trim()
         if (text.isEmpty()) {
-            label.visibility = View.GONE
+            label.visibility = hidden
             label.text = ""
             return
         }
@@ -582,7 +588,7 @@ class Js8MainFragment : Fragment() {
             if (typingBox.text.toString().trim() != text) return@launch
             val count = parts.size
             if (count == 0) {
-                label.visibility = View.GONE
+                label.visibility = hidden
                 label.text = ""
                 return@launch
             }
