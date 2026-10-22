@@ -130,6 +130,9 @@ class MainActivity : AppCompatActivity() {
                         else -> EngineState.ERROR
                     }
                     monitorViewModel.updateState(state)
+                    if (state == EngineState.STOPPED || state == EngineState.ERROR) {
+                        transmitViewModel.engineStopped()
+                    }
                     if (state == EngineState.RUNNING) {
                         processNextTxIfIdle()
                     }
@@ -332,6 +335,11 @@ class MainActivity : AppCompatActivity() {
             android.util.Log.d("MainActivity", "processNextTxIfIdle: already transmitting, skipping")
             return
         }
+        // Easy JS8: between the parts of a message the state is QUEUED; wait for it to finish
+        if (transmitViewModel.isBusy()) {
+            android.util.Log.d("MainActivity", "processNextTxIfIdle: message still going out, waiting")
+            return
+        }
         
         // Easy JS8 TX button: transmitter disabled, keep the queue until it is enabled again
         if (!androidx.preference.PreferenceManager.getDefaultSharedPreferences(this)
@@ -349,6 +357,7 @@ class MainActivity : AppCompatActivity() {
         
         // Easy JS8: the Message Window shows each part as it goes out (ACTION_TX_FRAME), not here
         js8ActivityViewModel.onSentToEngine(nextMessage.text)
+        transmitViewModel.markSent(nextMessage)
 
         // Send to service for transmission
         android.util.Log.d("MainActivity", "processNextTxIfIdle: sending to service: text='${nextMessage.text}' directed=${nextMessage.directed}")

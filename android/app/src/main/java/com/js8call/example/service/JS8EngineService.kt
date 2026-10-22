@@ -267,7 +267,9 @@ class JS8EngineService : Service() {
     private var nextHeartbeatTime = 0L
     private val heartbeatRunnable = object : Runnable {
         override fun run() {
-            checkHeartbeat()
+            // Easy JS8: on the transmit thread like typed messages, so a stuck engine call can't
+            // freeze the screen (2026-10-22: a stuck Halt froze the app when the HB timer fired)
+            txHandler.post { checkHeartbeat() }
         }
     }
 

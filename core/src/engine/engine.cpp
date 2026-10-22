@@ -337,18 +337,25 @@ public:
   }
 
   void stop_transmit() override {
-    std::lock_guard<std::mutex> lock(tx_mutex_);
-    tx_active_ = false;
-    tx_queue_.clear();
-    tx_message_frames_.clear();
-    tx_frames_started_ = 0;
-    tx_settings_.tuning = false;
-    tx_modulator_.stop();
-    tx_resampler_.reset();
-    if (deps_.audio_out && tx_output_started_) {
-      deps_.audio_out->stop();
-      tx_output_started_ = false;
+    bool stop_output = false;
+    {
+      std::lock_guard<std::mutex> lock(tx_mutex_);
+      tx_active_ = false;
+      tx_queue_.clear();
+      tx_message_frames_.clear();
+      tx_frames_started_ = 0;
+      tx_settings_.tuning = false;
+      tx_modulator_.stop();
+      tx_resampler_.reset();
+      if (deps_.audio_out && tx_output_started_) {
+        tx_output_started_ = false;
+        stop_output = true;
+      }
     }
+    // Easy JS8: stop the audio output after letting go of tx_mutex_. Stopping waits for the
+    // output's callback to finish, and the callback takes tx_mutex_ to render samples; holding
+    // it here locked both for good (Halt never returned, the next transmit froze the app).
+    if (stop_output) deps_.audio_out->stop();
   }
 
   bool is_transmitting() const override {

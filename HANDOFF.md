@@ -23,7 +23,7 @@ Advanced (with a rig picked the first row is Rig | CAT Control | PTT Method | Mo
 hold, same height across each row (see LAYOUT.md). Checked with Rig None and Hamlib NET (then Cancel).
 Station > Audio sideways packed the same way (see LAYOUT.md); checked in Swipe's Station screen only
 (scrolls a little there; PC / FT8Call mode not looked at). Rob has not said whether other Station pages should get the same.
-**Next:** the double-send queue bug, then "CQ CQ API TEST" losing words (wpm box upright done 2026-10-22). Committed: fourth session 7717b9d8, Timing tab
+**Next:** "CQ CQ API TEST" losing words (wpm box upright and the double send done 2026-10-22). Committed: fourth session 7717b9d8, Timing tab
 71a831f2, Display first part 7d421c12, Display bigger group 1b4c3056, engine waterfall detail d265512c.
 
 ## What this is
@@ -443,9 +443,23 @@ Station window sideways = PC tabs, no About tab.
   NO, QUERY MSG 3 sent and collected, Store Message..., Inbox shows held, Delete; Export of all three files
   to Documents. Not tested: HB ACK with MSG ID (needs HB + ACK on), group messages, @APRSIS, Swipe,
   a real radio.
-- **Found while testing (old JS8Android transmit queue, not fixed):** a reply queued while a multi-part
-  message is going out makes the queue start the current message again (it was sent twice). MainActivity
-  `processNextTxIfIdle` only waits while TRANSMITTING; between parts the state is QUEUED.
+- **Double send fixed (2026-10-22):** a reply queued while a multi-part message was going out made the
+  queue send the current message again (`processNextTxIfIdle` only waited while TRANSMITTING; between parts
+  the state is QUEUED). `TransmitViewModel` now keeps the message handed to the engine (`markSent`,
+  `isBusy`) and, when it finishes, removes that message (was: the first in the queue, which could be a
+  higher-priority reply, or a message after a service heartbeat / TUNE). Checked on S22-Fresh: long
+  @ALLCALL message, "K4RDX: VE3TST MSG HELLO FROM K4RDX" injected during part 1 -> message sent once,
+  then "VE3TST: K4RDX ACK".
+- **Halt freeze fixed (2026-10-22, Rob saw it when the HB countdown reached the end):** the engine's
+  `stop_transmit` (core/src/engine/engine.cpp) held `tx_mutex_` while stopping the audio output, which waits
+  for the output callback, and the callback takes `tx_mutex_` -> Halt never returned; the next timed heartbeat
+  (then on the main thread) waited on the same lock and the app froze ("not responding", 13:56:17 on S22-Fresh).
+  Now the output is stopped after the lock is let go, and the timed heartbeat runs on the Js8Tx thread like
+  typed messages. Checked on S22-Fresh: Halt during a typed message x3, during a timed heartbeat, during
+  TUNE x3; heartbeat after a Halt went out in full; no freeze.
+- **Found while testing, not changed:** an auto reply to a query heard while Easy JS8 is transmitting
+  (e.g. "K4RDX: VE3TST SNR?") is dropped, not queued (`maybeHandleAutoReply`: `if (isTransmitActive()) return`).
+  PC behaviour not checked yet. MSG ACKs and mailbox replies are queued.
 
 ### HB button (seventh session, 2026-10-20, Rob said LETS GO)
 

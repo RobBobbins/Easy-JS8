@@ -123,14 +123,36 @@ class TransmitViewModel(application: Application) : AndroidViewModel(application
         _txState.value = TransmitState.IDLE
     }
 
+    // Easy JS8: the queued message handed to the engine, until it finishes or fails. Between its
+    // parts the state is QUEUED, so the state alone let a newly queued reply send it again.
+    private var inFlight: TransmitMessage? = null
+
+    // Easy JS8: the engine reported a transmission (ours, or the service's own heartbeat / TUNE)
+    private var engineBusy = false
+
+    /** Easy JS8: a message is with the engine; the next one waits until it is finished. */
+    fun isBusy(): Boolean = inFlight != null || engineBusy
+
+    fun markSent(message: TransmitMessage) {
+        inFlight = message
+    }
+
+    /** Easy JS8: engine stopped; nothing is on the air any more. */
+    fun engineStopped() {
+        inFlight = null
+        engineBusy = false
+    }
+
     /**
      * Start transmitting (called when engine starts TX).
      */
     fun startTransmitting() {
+        engineBusy = true
         _txState.value = TransmitState.TRANSMITTING
     }
 
     fun setQueued() {
+        engineBusy = true
         _txState.value = TransmitState.QUEUED
     }
 
@@ -138,11 +160,13 @@ class TransmitViewModel(application: Application) : AndroidViewModel(application
      * Transmission complete (called when engine finishes TX).
      */
     fun transmissionComplete() {
-        // Remove first item from queue
-        if (txQueue.isNotEmpty()) {
-            txQueue.removeAt(0)
-            _queue.value = txQueue.toList()
+        // Easy JS8: remove the message that was sent, not the first in the queue (a higher-priority
+        // reply may be first by now; a heartbeat or TUNE from the service removes nothing)
+        inFlight?.let { sent ->
+            if (txQueue.removeAll { it === sent }) _queue.value = txQueue.toList()
         }
+        inFlight = null
+        engineBusy = false
 
         _txState.value = if (txQueue.isEmpty()) {
             TransmitState.IDLE
@@ -152,6 +176,8 @@ class TransmitViewModel(application: Application) : AndroidViewModel(application
     }
 
     fun transmissionFailed() {
+        inFlight = null
+        engineBusy = false
         _txState.value = if (txQueue.isEmpty()) {
             TransmitState.IDLE
         } else {
