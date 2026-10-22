@@ -3138,6 +3138,9 @@ class JS8EngineService : Service() {
             // 2026-10-21: the strike-out ran 8 characters ahead and crossed out short messages at once)
             val added = Regex("^[A-Z0-9/]+: ").find(texts[0])?.value?.length ?: 0
             putExtra(EXTRA_TX_FRAME_CHARS_SENT, (texts.take(index + 1).sumOf { it.length } - added).coerceAtLeast(0))
+            // The whole message as sent, without the "CALLSIGN: ": shown in the Typing Box for messages
+            // that did not come from it (heartbeats, replies; Rob, 2026-10-21: "all messages do it")
+            putExtra(EXTRA_TX_FRAME_FULL_TEXT, texts.joinToString("").drop(added).trim())
             putExtra(EXTRA_TX_OFFSET_HZ, lastTxFrequencyHz)
         }
         LocalBroadcastManager.getInstance(this).sendBroadcast(intent)
@@ -4687,6 +4690,7 @@ class JS8EngineService : Service() {
         const val EXTRA_TX_FRAME_INDEX = "tx_frame_index"
         const val EXTRA_TX_FRAME_COUNT = "tx_frame_count"
         const val EXTRA_TX_FRAME_CHARS_SENT = "tx_frame_chars_sent"
+        const val EXTRA_TX_FRAME_FULL_TEXT = "tx_frame_full_text"
         const val ACTION_RADIO_FREQUENCY = "com.js8call.example.ACTION_RADIO_FREQUENCY"
         const val ACTION_MESSAGE_RECEIVED = "com.js8call.example.ACTION_MESSAGE_RECEIVED"
         const val ACTION_QUEUE_TX = "com.js8call.example.ACTION_QUEUE_TX"

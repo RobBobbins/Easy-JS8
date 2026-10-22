@@ -24,7 +24,12 @@ class Js8ActivityViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** A message from the Typing Box, kept there (locked) until its last part has gone out. */
-    data class TypedTx(val text: String, val onAir: Boolean = false, val charsSent: Int = 0)
+    data class TypedTx(val text: String, val onAir: Boolean = false, val charsSent: Int = 0,
+                       /** Not typed: a heartbeat or reply put in the empty Typing Box while it is sent. */
+                       val auto: Boolean = false)
+
+    /** The Typing Box has nothing in it (kept by Js8MainFragment): only then is an automatic message shown there. */
+    var typingBoxEmpty = true
 
     private val _typed = MutableLiveData<TypedTx?>(null)
     /** Typing Box message waiting or being sent; null = the box is free. */
@@ -44,9 +49,14 @@ class Js8ActivityViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** A part of any of our transmissions started going out (heartbeats and replies too). */
-    fun onTxFrame(text: String, index: Int, count: Int, charsSent: Int, offset: Int) {
+    fun onTxFrame(text: String, index: Int, count: Int, charsSent: Int, offset: Int, fullText: String = "") {
         activity.writeTxFrame(text, offset, first = index == 0, last = index == count - 1, cfg = cfg())
-        _typed.value?.let { if (it.onAir) _typed.value = it.copy(charsSent = charsSent) }
+        // Every transmission shows in the Typing Box (Rob, 2026-10-21); what you typed is never replaced
+        if (_typed.value == null && typingBoxEmpty && fullText.isNotEmpty()) {
+            _typed.value = TypedTx(fullText, onAir = true, charsSent = charsSent, auto = true)
+        } else {
+            _typed.value?.let { if (it.onAir) _typed.value = it.copy(charsSent = charsSent) }
+        }
         changed()
     }
 

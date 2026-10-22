@@ -109,6 +109,8 @@ object Js8SettingsSchema {
     // ---- Radio: one "Rig" list = JS8Android rig types + every Hamlib model ---------------------
 
     private const val RIG = "js8cfg_rig"
+    /** Station > Radio > Rig: its list has a search box. */
+    const val RIG_KEY = RIG
 
     private fun rigChoices(context: Context): List<Pair<String, String>> {
         val base = listOf(

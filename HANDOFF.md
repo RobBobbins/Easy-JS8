@@ -531,15 +531,27 @@ APK: `android/app/build/outputs/apk/debug/app-debug.apk`. Details: `build-env/bu
 
 ## Test on the emulator
 
-- AVD **S22** (1080×2340, 480 dpi) = `emulator-5554`. Another emulator **EasyFT8**
-  (`emulator-5556`) belongs to another project — never touch it. Scripts use `-s emulator-5554`.
-- Start it: `C:\Users\Robert\AppData\Local\Android\Sdk\emulator\emulator.exe -avd S22`
-- **S22-Fresh** (made 2026-10-21): S22's settings, no data, for brand-new-install tests. Start with
-  `emulator.exe -avd S22-Fresh -no-snapshot -port 5600` (= `emulator-5600`), close with `adb -s emulator-5600 emu kill`.
-  First test: a fresh install opens Station Settings; Station Status shows IDLE <MYIDLE> VERSION <MYVERSION>
+- **Test emulator: AVD S22-Fresh = `emulator-5600`** (Rob, 2026-10-21: "S22 fresh is the one"). Same screen and
+  Android as S22 (1080×2340, 480 dpi). Start: `C:\Users\Robert\AppData\Local\Android\Sdk\emulator\emulator.exe -avd S22-Fresh -no-snapshot -port 5600`,
+  close: `adb -s emulator-5600 emu kill`. Check the name before installing (`adb -s emulator-5600 emu avd name`).
+  Test callsign VE3TST.
+- **S22 is retired**: kept on disk, closed, not used (the Easy FT8 session kept installing onto it). Earlier
+  "Tested on S22" notes in this file are from it.
+- Other projects' emulators (EasyFT8, EasyWEFAX, EasyAPRS) are never touched.
+- `build-env/test/run.sh` and `inject.sh` use `-s emulator-5600` (S22-Fresh) since 2026-10-21.
+- S22-Fresh was made 2026-10-21 for brand-new-install tests. First test: a fresh install opens Station Settings; Station Status shows IDLE <MYIDLE> VERSION <MYVERSION>
   and the first OK saves it.
 - Saved > **APRS GRID** (2026-10-21, Rob): no page any more; sends "@APRSIS GRID <saved grid>" like a saved
   message (alert if no valid grid). Tested on S22-Fresh: "VE3TST: @APRSIS GRID CM87WK91" in the Message Window.
+- Station > Radio > **Rig:** list has a search box (2026-10-21, Rob): matches any part of the name, ignoring case,
+  spaces and dashes (`searchableChoice`). Checked on S22-Fresh: Hamlib list loads, "7300" -> IC-7300 / IC-7300MK2,
+  "yaesu" -> Yaesu rigs, a pick lands in the box.
+- Every transmission shows in the Typing Box (2026-10-21, Rob: "all messages do it"): heartbeats, ACKs, AUTO
+  replies, CQ timer go into the empty box (text without "CALL: ", from EXTRA_TX_FRAME_FULL_TEXT), struck out
+  part by part, emptied at the end; typed text is never replaced (TypedTx.auto, typingBoxEmpty). Checked on
+  S22-Fresh: HB button -> "@HB HEARTBEAT CM87" struck out, box emptied. AUTO reply checked too: injected
+  "K4RDX: VE3TST SNR?" -> "K4RDX SNR -03" in the box, struck out. (A first try got no reply because AUTO was off:
+  "Turn autoreply on at startup" unticked switches AUTO off at each app start, as the PC.)
 - RX / TX at startup (2026-10-21): Receiver (RX) off at startup and Transmitter (TX) off at startup were never
   read, so RX stayed off after every fresh start. Now once per app start (Js8MainFragment, startupRxTxDone), as the
   PC (mainwindow.cpp 7761): RX starts unless RX off is ticked, TX is set on / off from TX off. Checked on S22-Fresh

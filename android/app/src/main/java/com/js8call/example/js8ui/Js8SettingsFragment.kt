@@ -971,6 +971,7 @@ class Js8SettingsFragment : Fragment() {
             setOnClickListener {
                 val list = choices(f)
                 val idx = list.indexOfFirst { it.second == (draft.values[f.key] ?: current) }
+                if (f.key == Js8SettingsSchema.RIG_KEY) { searchableChoice(f, list, idx); return@setOnClickListener }
                 AlertDialog.Builder(requireContext())
                     .setTitle(f.label.trimEnd(':'))
                     .setSingleChoiceItems(list.map { it.first.ifEmpty { " " } }.toTypedArray(), idx) { d, which ->
@@ -980,6 +981,56 @@ class Js8SettingsFragment : Fragment() {
                     }.show()
             }
         }
+    }
+
+    /**
+     * Rig list with a search box (Rob, 2026-10-21): typing keeps the rigs whose name contains it,
+     * ignoring case, spaces and dashes ("ic7300" finds "Icom IC-7300"); tap one to pick it.
+     */
+    private fun searchableChoice(f: Field, list: List<Pair<String, String>>, idx: Int) {
+        val ctx = requireContext()
+        fun key(t: String) = t.lowercase(Locale.US).filter { it.isLetterOrDigit() }
+        var shown = list
+        val adapter = android.widget.ArrayAdapter(ctx, android.R.layout.simple_list_item_single_choice, shown.map { it.first.ifEmpty { " " } }.toMutableList())
+        val listView = android.widget.ListView(ctx).apply {
+            choiceMode = android.widget.ListView.CHOICE_MODE_SINGLE
+            this.adapter = adapter
+            if (idx >= 0) { setItemChecked(idx, true); setSelection(idx) }
+        }
+        val search = EditText(ctx).apply {
+            hint = "Search (e.g. 7300, yaesu)"
+            isSingleLine = true
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
+        }
+        val box = LinearLayout(ctx).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(px(16), px(8), px(16), 0)
+            addView(search, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+            addView(listView, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
+        }
+        val dialog = AlertDialog.Builder(ctx).setTitle(f.label.trimEnd(':')).setView(box)
+            .setNegativeButton(android.R.string.cancel, null).create()
+        search.addTextChangedListener(object : android.text.TextWatcher {
+            override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
+            override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
+            override fun afterTextChanged(s: android.text.Editable?) {
+                val q = key(s?.toString().orEmpty())
+                shown = if (q.isEmpty()) list else list.filter { key(it.first).contains(q) }
+                adapter.clear()
+                adapter.addAll(shown.map { it.first.ifEmpty { " " } })
+                listView.clearChoices()
+                val sel = shown.indexOfFirst { it.second == (draft.values[f.key] ?: draft.get(f)) }
+                if (sel >= 0) listView.setItemChecked(sel, true)
+            }
+        })
+        listView.setOnItemClickListener { _, _, pos, _ ->
+            dialog.dismiss()
+            draft.set(f, shown[pos].second)
+            render() // some choices show / hide other settings (Rig)
+        }
+        dialog.show()
+        // Tall enough for the list under the search box
+        dialog.window?.setLayout(ViewGroup.LayoutParams.MATCH_PARENT, (resources.displayMetrics.heightPixels * 0.8f).toInt())
     }
 
     private fun radioGroup(item: RadioItem): View = groupBox(item.title) { box ->

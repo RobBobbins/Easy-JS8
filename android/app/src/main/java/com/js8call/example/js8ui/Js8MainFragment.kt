@@ -506,6 +506,11 @@ class Js8MainFragment : Fragment() {
      * already sent crossed out; emptied and unlocked when the message is done or halted.
      */
     private fun renderTyped(t: Js8ActivityViewModel.TypedTx?) {
+        // A heartbeat or reply going out while the box was empty: show its text there
+        if (t != null && t.auto && typingBox.text.toString() != t.text) {
+            typingBox.filters = emptyArray()
+            typingBox.setText(t.text)
+        }
         val e = typingBox.text
         e.getSpans(0, e.length, android.text.style.StrikethroughSpan::class.java).forEach { e.removeSpan(it) }
         if (t == null) {
@@ -1017,6 +1022,8 @@ class Js8MainFragment : Fragment() {
         view.findViewById<View?>(R.id.js8_inbox_reply)?.setOnClickListener { inboxReply() }
         typingBox.addTextChangedListener(object : android.text.TextWatcher {
             override fun afterTextChanged(s: android.text.Editable?) {
+                activityVm.typingBoxEmpty = s.isNullOrBlank()
+                if (activityVm.typed.value?.auto == true) return // shown by the app, not typed
                 Js8Macros.touch()
                 requestTextStats()
                 view.findViewById<View>(R.id.js8_btn_send).isEnabled =

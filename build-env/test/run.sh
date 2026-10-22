@@ -1,6 +1,6 @@
 #!/bin/bash
 # usage: run.sh <shotname> [install]
-ADB="/c/Users/Robert/AppData/Local/Android/Sdk/platform-tools/adb.exe -s emulator-5554"
+ADB="/c/Users/Robert/AppData/Local/Android/Sdk/platform-tools/adb.exe -s emulator-5600"
 S="${SHOTS:-/e/new-w3bguru-websites/easy js8/build-env/test/out}"; mkdir -p "$S"
 if [ "$2" = install ]; then
   $ADB install -r "E:/new-w3bguru-websites/easy js8/android/app/build/outputs/apk/debug/app-debug.apk" | tail -1
