@@ -1439,7 +1439,7 @@ class Js8SettingsFragment : Fragment() {
     /** Settings > Power: PC outAttenuation, acts at once like the PC slider (also while TUNE is on), not on Save. */
     private fun powerSlider(): View {
         val key = JS8EngineService.PREF_OUT_ATTENUATION
-        val start = (draft.prefs.all[key]?.toString()?.toIntOrNull() ?: 100).coerceIn(0, 450)
+        val start = (draft.prefs.all[key]?.toString()?.toIntOrNull() ?: 0).coerceIn(0, 450) // PC default 0
         val value = label("")
         fun show(a: Int) { value.text = String.format(Locale.US, "%.1f dB", -a / 10.0) }
         show(start)

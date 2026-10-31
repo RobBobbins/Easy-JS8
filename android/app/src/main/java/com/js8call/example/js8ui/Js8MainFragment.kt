@@ -287,6 +287,7 @@ class Js8MainFragment : Fragment() {
         if (firstStart) {
             startupRxTxDone = true
             prefs().edit().putBoolean("js8cfg_tx_enabled", !boolPref("js8cfg_transmit_off", false)).apply()
+            if (boolPref("js8cfg_check_updates", true)) Js8Updates.check(requireActivity(), false) // PC checkStartupWarnings
         }
         setUpHeader()
         setUpButtons(view)
@@ -977,13 +978,15 @@ class Js8MainFragment : Fragment() {
         menubar(R.id.js8_menubar_help) { anchor ->
             val menu = popupMenu(anchor)
             menu.menu.add(0, 1, 1, "Copyright notice")
-            menu.menu.add(0, 2, 2, "About")
-            menu.menu.add(0, 3, 3, "User Guide")
+            menu.menu.add(0, 4, 2, "Check for Updates")
+            menu.menu.add(0, 2, 3, "About")
+            menu.menu.add(0, 3, 4, "User Guide")
             menu.setOnMenuItemClickListener { item ->
                 when (item.itemId) {
                     1 -> AlertDialog.Builder(requireContext()).setMessage(COPYRIGHT_NOTICE)
                         .setPositiveButton(android.R.string.ok, null).show()
                     2 -> openStation(page = Js8SettingsFragment.ABOUT_PAGE)
+                    4 -> Js8Updates.check(requireActivity(), true)
                     else -> startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(USER_GUIDE_URL)))
                 }
                 true

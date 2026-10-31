@@ -14,8 +14,8 @@ import com.js8call.example.api.Js8Api
  * "js8cfg_*" keys.
  *
  * PC-only settings are left out on purpose (Rob, 2026-10-19): Save Directory, PTT command,
- * Application stylesheet / font, Check for software updates. API / WSJT-X / N3FJP / N1MM came
- * back on 2026-10-20 (Rob: "include all the desktop features"), Reporting tab, see api/Js8Api.
+ * Application stylesheet / font. API / WSJT-X / N3FJP / N1MM came back on 2026-10-20 (Rob:
+ * "include all the desktop features"), Reporting tab, see api/Js8Api.
  */
 object Js8SettingsSchema {
 
@@ -331,7 +331,8 @@ object Js8SettingsSchema {
                 check("js8cfg_transmit_directed", "Immediately transmit CQ, Reply, Info, Saved, and Directed messages from the menu", true),
                 check("log_messages_to_file", "Write log files (ALL.TXT, DIRECTED.TXT, etc) of decoded text", false),
                 check("js8cfg_spellcheck", "Suggest alternative word choices for more efficient message transmission", true),
-                check("js8cfg_reset_activity", "Reset the Band Activity, Call Activity, and RX history at startup", false)
+                check("js8cfg_reset_activity", "Reset the Band Activity, Call Activity, and RX history at startup", false),
+                check("js8cfg_check_updates", "Check for software updates at startup", true)
             )),
             Group("Aging", listOf(
                 spin("js8cfg_callsign_aging", "Remove callsigns from call activity after:", 0, 0.0, 1440.0, suffix = " minutes", special = "Disabled"),

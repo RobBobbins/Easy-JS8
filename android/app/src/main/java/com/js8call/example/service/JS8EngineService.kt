@@ -5325,7 +5325,7 @@ class JS8EngineService : Service() {
 
     // ---- Power (PC outAttenuation and Remember power settings by band) ------------------------
 
-    private fun outAttenuation() = numberPref(PREF_OUT_ATTENUATION, 100.0).toInt().coerceIn(0, 450)
+    private fun outAttenuation() = numberPref(PREF_OUT_ATTENUATION, 0.0).toInt().coerceIn(0, 450) // PC default 0
 
     /** PC on_outAttenuation_valueChanged: a / 10 dB (SoundOutput::setAttenuation), Output channel. */
     private fun applyTxOutput() {
