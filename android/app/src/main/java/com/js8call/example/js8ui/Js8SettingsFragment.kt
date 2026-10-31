@@ -539,8 +539,22 @@ class Js8SettingsFragment : Fragment() {
         line("Built ${BuildConfig.BUILD_DATE}", parent = left)
         line("Easy JS8 is a fork of JS8Android.", top = 12, parent = left)
         line("Features", size = 1.1f, bold = true, top = if (sideways) 0 else 16, parent = right)
-        listOf("Traditional style", "Upright and sideways layouts", "SWL mode", "JS8 Slow decoding",
-            "APRS forms", "FT8 decodes").forEach { line("  •  $it", parent = right) }
+        val features = listOf("Traditional style", "Upright and sideways layouts", "SWL mode", "JS8 Slow decoding",
+            "APRS forms", "FT8 decodes", "APRS-IS relay", "Message mailbox", "HB and CQ timers",
+            "Log QSO and ADIF export", "API and logging links", "Waterfall Controls")
+        // Upright the list is two columns of six (Rob, 2026-10-31)
+        var first = right
+        var second = right
+        if (!sideways) {
+            first = column()
+            second = column()
+            col.addView(LinearLayout(requireContext()).apply {
+                orientation = LinearLayout.HORIZONTAL
+                addView(first, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+                addView(second, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            })
+        }
+        features.forEachIndexed { i, f -> line("  •  $f", parent = if (i < 6) first else second) }
         line("Source: https://github.com/RobBobbins/Easy-JS8", top = 16)
         line("Licence: GPLv3. No warranty.")
         line("Credits", size = 1.1f, bold = true, top = 16)
