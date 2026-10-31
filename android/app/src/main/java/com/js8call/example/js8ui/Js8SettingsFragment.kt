@@ -237,6 +237,7 @@ class Js8SettingsFragment : Fragment() {
         // (Rob, 2026-10-19). Sideways, also in Swipe's Station screen, the list's title or the
         // page name sits in the middle of that row, centred on the screen (Rob, 2026-10-21)
         var header: FrameLayout? = null
+        var settingsRow: LinearLayout? = null
         if (station && (!embedded || sideways)) root.addView(FrameLayout(requireContext()).apply {
             header = this
             if (sideways) addView(label("", size = 1.15f, bold = true).also {
@@ -254,6 +255,7 @@ class Js8SettingsFragment : Fragment() {
             // Settings window: ← Back (works like Cancel) at the left, ⚙ opening Station at the
             // right (Rob, 2026-10-19)
             root.addView(LinearLayout(requireContext()).apply {
+                settingsRow = this
                 orientation = LinearLayout.HORIZONTAL
                 gravity = Gravity.CENTER_VERTICAL
                 addView(label("← Back", size = 1.15f, bold = true).apply {
@@ -275,8 +277,9 @@ class Js8SettingsFragment : Fragment() {
         root.addView(content, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
 
         // OK / Cancel pinned to the bottom, right-aligned as on the PC; in Pages' Station screen
-        // they sit at the right of the ← Back row, for one more row of settings (Rob, 2026-10-31)
-        val barOnTop = station && embedded && sideways
+        // and upright in both windows they sit at the right of the ← Back row, for one more row
+        // of settings (Rob, 2026-10-31)
+        val barOnTop = if (sideways) station && embedded else !embedded
         val bar = LinearLayout(requireContext()).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.END or Gravity.CENTER_VERTICAL
@@ -285,9 +288,10 @@ class Js8SettingsFragment : Fragment() {
         // Settings window: Save (Rob, 2026-10-19); Station keeps the PC's OK
         bar.addView(button(if (station) "OK" else "Save") { onOk() }, LinearLayout.LayoutParams(px(64), px(30)))
         bar.addView(button("Cancel") { onCancel() }, LinearLayout.LayoutParams(px(64), px(30)).apply { marginStart = px(8) })
-        if (barOnTop) header?.addView(bar, FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
+        if (!barOnTop) root.addView(bar)
+        else if (station) header?.addView(bar, FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
             ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.END or Gravity.CENTER_VERTICAL))
-        else root.addView(bar)
+        else settingsRow?.addView(bar)
         render()
         return root
     }
@@ -540,7 +544,7 @@ class Js8SettingsFragment : Fragment() {
         line("Source: https://github.com/RobBobbins/Easy-JS8", top = 16)
         line("Licence: GPLv3. No warranty.")
         line("Credits", size = 1.1f, bold = true, top = 16)
-        line("WSJT-X: Joe Taylor K1JT and the WSJT Development Group")
+        line("WSJT-X: Joe Taylor K1JT${if (sideways) " " else "\n"}and the WSJT Development Group")
         line("JS8Call: Jordan Sherer KN4CRD", top = 6)
         line("JS8Call-improved team: AC9KH, W6BAZ, KJ4CTD, K0OG, DJ3EI, K4RWR, KN4CRD", top = 6)
         line("JS8Android: https://github.com/JS8Call-improved/Android-port", top = 6)
