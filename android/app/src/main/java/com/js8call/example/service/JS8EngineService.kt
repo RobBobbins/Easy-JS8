@@ -43,6 +43,7 @@ import com.js8call.example.data.Js8LogBook
 import com.js8call.example.data.Js8Mailbox
 import com.js8call.example.data.MessageRepository
 import com.js8call.example.network.PskReporterClient
+import com.js8call.example.network.SpotClient
 import com.js8call.example.util.CallsignValidator
 import com.js8call.example.util.Js8Commands
 import com.js8call.example.util.TxMessageClassifier
@@ -284,6 +285,7 @@ class JS8EngineService : Service() {
     }
 
     private var pskReporterClient: PskReporterClient? = null
+    private var spotClient: SpotClient? = null
     private var pskReporterEnabled = false
     private var currentDialHz: Long = 0
     private var splitXitHz = 0 // PC m_XIT for the transmission in progress
@@ -524,6 +526,7 @@ class JS8EngineService : Service() {
         cqHandler.removeCallbacksAndMessages(null)
         messageLogger?.shutdown()
         aprsClient.shutdown()
+        spotClient?.stop()
 
         stopEngine()
         txHandlerThread.quitSafely()
@@ -2095,6 +2098,7 @@ class JS8EngineService : Service() {
         notifyDecode(text)
         broadcastDecode(utc, snr, dt, freq, text, type, quality, mode, driftMs)
         apiDecode(utc, snr, dt, freq, text, type, quality, mode)
+        spotDecode(snr, freq, text, type, mode)
         logDirected(snr, freq, text, type)
         handleRelayFrame(text, snr, mode, freq, type)
         maybeHandleIncomingMessage(text, snr, freq, type, mode)
@@ -4445,11 +4449,84 @@ class JS8EngineService : Service() {
         if (!enabled || callsign.isBlank() || grid.isBlank()) {
             pskReporterClient?.stop(flush = false, discardPending = true)
             pskReporterEnabled = false
+            spotClient?.stop()
             return
         }
         pskReporterClient?.start()
         pskReporterClient?.setLocalStation(callsign, grid, "")
         pskReporterEnabled = true
+        // PC prepareSpotting / spotSetLocal. debug_spot_host: debug builds test against a local server
+        val spotHost = prefs.getString("debug_spot_host", null)?.takeIf { BuildConfig.DEBUG } ?: SPOT_HOST
+        val spot = spotClient ?: SpotClient(spotHost, SPOT_PORT, "${Js8Api.APP_NAME} ${Js8Api.VERSION}").also { spotClient = it }
+        spot.start()
+        spot.setLocalStation(callsign, grid, com.js8call.example.js8ui.Js8Macros.expand(Js8Api.myInfo(prefs), prefs))
+    }
+
+    /** One command heard for a group, waiting for its data frames (PC m_messageBuffer). */
+    private class SpotCmdBuffer(
+        val directed: com.js8call.example.js8ui.Js8Activity.Directed, val command: Int, val grid: String,
+        val snr: Int, val offset: Int, val mode: Int, val parts: MutableList<String>, var lastUpdated: Long
+    )
+
+    private val spotCmdBuffers = mutableMapOf<Int, SpotCmdBuffer>()
+
+    /** PC processSpots / spotReport and spotCmd: heard stations and group commands go to JS8NET. */
+    private fun spotDecode(snr: Int, freq: Float, text: String, type: Int, mode: Int) {
+        val spot = spotClient
+        if (spot == null || !pskReporterEnabled) {
+            spotCmdBuffers.clear()
+            return
+        }
+        val dial = currentDialHz
+        if (dial <= 0) return
+        val offset = freq.toInt()
+        val now = System.currentTimeMillis()
+        // PC processBufferedActivity: a buffer quiet for 60 s counts as finished
+        spotCmdBuffers.entries.filter { now - it.value.lastUpdated > 60_000L }.forEach {
+            spotCmdBuffers.remove(it.key)
+            finishSpotCmd(it.value)
+        }
+        val trimmed = text.trim()
+        val call = if (trimmed.substringBefore(' ').endsWith(":")) extractHeardCallsign(trimmed) else null
+        if (call != null && !isSelfCallsign(currentCallsign, call) && !isOnCallList("js8cfg_spot_blacklist", call)) {
+            spot.enqueueSpot(call, extractGrid(trimmed).orEmpty(), mode, dial, offset, snr)
+        }
+        val d = if ((type and 0x4) == 0) apiDirectedParser.parseDirected(text) else null
+        if (d == null) {
+            val key = spotCmdBuffers.keys.firstOrNull { kotlin.math.abs(it - offset) <= 10 } ?: return
+            val buffer = spotCmdBuffers.getValue(key)
+            buffer.parts.add(text)
+            buffer.lastUpdated = now
+            if (isLastFrame(type)) {
+                spotCmdBuffers.remove(key)
+                finishSpotCmd(buffer)
+            }
+            return
+        }
+        if (d.from == "<....>" || d.to == "<....>" || !d.to.startsWith("@")) return
+        val command = Js8Commands.COMMANDS[d.cmd.uppercase()] ?: return
+        val grid = (d.extra + " " + text).split(Regex("\\s+")).lastOrNull { com.js8call.example.js8ui.Js8Activity.isGrid(it) && it.length >= 4 }.orEmpty()
+        if (command !in SPOT_BUFFERED_COMMANDS) {
+            if (isOnCallList("js8cfg_spot_blacklist", d.from)) return
+            spot.enqueueCmd(d.cmd.uppercase(), d.from, d.to, "", trimmed, grid, d.extra, mode, dial, offset, snr)
+            return
+        }
+        val buffer = SpotCmdBuffer(d, command, grid, snr, offset, mode, mutableListOf(d.extra), now)
+        if (isLastFrame(type)) finishSpotCmd(buffer) else spotCmdBuffers[offset] = buffer
+    }
+
+    /** PC processBufferedActivity: the parts joined, the checksum checked and taken off. */
+    private fun finishSpotCmd(buffer: SpotCmdBuffer) {
+        val d = buffer.directed
+        var message = assembleMsgPayload(buffer.parts).replace(Regex("[\\s▪■♢]+$"), "")
+        if (buffer.command != SPOT_NO_CHECKSUM_COMMAND) {
+            val (valid, checked) = validateRelayChecksum(message)
+            if (!valid) return
+            message = checked
+        }
+        if (isOnCallList("js8cfg_spot_blacklist", d.from)) return
+        spotClient?.enqueueCmd(d.cmd.uppercase(), d.from, d.to, "", message, buffer.grid, d.extra,
+            buffer.mode, currentDialHz, buffer.offset, buffer.snr)
     }
 
     private fun updateDialFromPrefs() {
@@ -5447,6 +5524,11 @@ class JS8EngineService : Service() {
         private const val PREF_MY_INFO = "my_info"
         private const val PREF_MY_STATUS = "my_status"
         private const val PREF_PSK_REPORTER = "psk_reporter"
+        private const val SPOT_HOST = "spot.js8call.com"
+        private const val SPOT_PORT = 50000
+        // PC Varicode buffered_cmds / checksum_cmds: all checksummed except 15
+        private val SPOT_BUFFERED_COMMANDS = setOf(5, 9, 10, 11, 12, 13, 15, 24)
+        private const val SPOT_NO_CHECKSUM_COMMAND = 15
         private const val PREF_TRUSDX_DIAGNOSTICS_ENABLED = "trusdx_diagnostics_enabled"
         private const val HEARD_LIMIT = 4
         private const val HEARD_WINDOW_MS = 15 * 60 * 1000L
