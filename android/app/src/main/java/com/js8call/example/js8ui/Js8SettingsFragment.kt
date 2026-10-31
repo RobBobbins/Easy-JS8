@@ -236,7 +236,9 @@ class Js8SettingsFragment : Fragment() {
         // Station: ← Back at the top (a page returns to the list; the list works like Cancel)
         // (Rob, 2026-10-19). Sideways, also in Swipe's Station screen, the list's title or the
         // page name sits in the middle of that row, centred on the screen (Rob, 2026-10-21)
+        var header: FrameLayout? = null
         if (station && (!embedded || sideways)) root.addView(FrameLayout(requireContext()).apply {
+            header = this
             if (sideways) addView(label("", size = 1.15f, bold = true).also {
                 titleView = it
                 it.gravity = Gravity.CENTER
@@ -272,16 +274,20 @@ class Js8SettingsFragment : Fragment() {
         content = FrameLayout(requireContext())
         root.addView(content, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
 
-        // OK / Cancel pinned to the bottom, right-aligned as on the PC
+        // OK / Cancel pinned to the bottom, right-aligned as on the PC; in Pages' Station screen
+        // they sit at the right of the ← Back row, for one more row of settings (Rob, 2026-10-31)
+        val barOnTop = station && embedded && sideways
         val bar = LinearLayout(requireContext()).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.END or Gravity.CENTER_VERTICAL
-            setPadding(px(10), px(8), px(10), px(8))
+            setPadding(px(10), if (barOnTop) 0 else px(8), px(10), if (barOnTop) 0 else px(8))
         }
         // Settings window: Save (Rob, 2026-10-19); Station keeps the PC's OK
         bar.addView(button(if (station) "OK" else "Save") { onOk() }, LinearLayout.LayoutParams(px(64), px(30)))
         bar.addView(button("Cancel") { onCancel() }, LinearLayout.LayoutParams(px(64), px(30)).apply { marginStart = px(8) })
-        root.addView(bar)
+        if (barOnTop) header?.addView(bar, FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
+            ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.END or Gravity.CENTER_VERTICAL))
+        else root.addView(bar)
         render()
         return root
     }
