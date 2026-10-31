@@ -9,6 +9,8 @@ object Js8Commands {
 
     const val CMD_MSG = "MSG"
     const val CMD_MSG_TO = "MSG TO:"
+    const val CMD_APRS_GRID = "GRID"
+    const val CMD_APRS_CMD = "CMD"
     const val CMD_QUERY = "QUERY"
     const val CMD_QUERY_MSGS = "QUERY MSGS"
     const val CMD_QUERY_CALL = "QUERY CALL"

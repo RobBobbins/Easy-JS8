@@ -803,12 +803,13 @@ class Js8MainFragment : Fragment() {
         a.rxLines.forEach { line ->
             if (sb.isNotEmpty()) sb.append('\n')
             val start = sb.length
-            sb.append(clockFormat.format(Date(line.utcMs)).substring(12)).append(" - (").append(line.offset.toString())
-                .append(") - ")
+            sb.append(clockFormat.format(Date(line.utcMs)).substring(12)).append(" - ")
+            if (line.offset != Js8Activity.NOTICE_OFFSET) sb.append("(").append(line.offset.toString()).append(") - ")
             val textStart = sb.length
             sb.append(line.text.toString().trimEnd())
             sb.setSpan(android.text.style.ForegroundColorSpan(if (line.isTx) txFg else rxFg), start, sb.length, 0)
             if (line.isTx && txTextScale != 1f) sb.setSpan(android.text.style.RelativeSizeSpan(txTextScale), start, sb.length, 0)
+            if (line.offset == Js8Activity.NOTICE_OFFSET) sb.setSpan(android.text.style.StyleSpan(android.graphics.Typeface.BOLD), start, sb.length, 0)
             // FT8 transmitting callsign in bold
             line.bold?.let { b ->
                 if (textStart + b.last < sb.length) {

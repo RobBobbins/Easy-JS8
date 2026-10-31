@@ -63,6 +63,7 @@ class Js8Activity {
     private val bufferedToMe = mutableMapOf<Int, Long>()   // offset -> time a directed header to me/group started
 
     companion object {
+        const val NOTICE_OFFSET = -1
         const val SUBMODE_NORMAL = 0
         const val SUBMODE_FAST = 1
         const val SUBMODE_TURBO = 2
@@ -349,6 +350,13 @@ class Js8Activity {
         if (isLast) openRxLine.clear() else {
             openRxLine[offset] = line; openRxLine[bucket] = line; openRxLine[bucket + 10] = line
         }
+    }
+
+    /** PC writeNoticeTextToUI: a bold line with the time and no offset. */
+    fun writeNotice(text: String) {
+        val line = RxLine(System.currentTimeMillis(), NOTICE_OFFSET, isTx = false, text = StringBuilder(text), closed = true)
+        rxLines += line
+        while (rxLines.size > 500) rxLines.removeAt(0)
     }
 
     /**

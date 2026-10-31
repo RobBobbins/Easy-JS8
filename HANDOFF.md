@@ -126,8 +126,18 @@ values (ViewModel keyed by window).
   (addressee padded to 9). Rob: message number is `{01` only, no closing `}`.
 - Rules (APRS 1.2 spec ch. 14): `{01`–`{99` then `{01`, one counter `js8cfg_aprs_msg_number`,
   goes up on OK; APRS text ≤ 67 characters (email address / `@phone` count toward it); no `{` in the message.
-- Easy JS8 itself does not gate @APRSIS to the internet (engine has no APRS-IS code); a PC station
-  with spotting on has to hear it.
+- Easy JS8 has the PC's APRS-IS client (JS8Call 3.0.3): `service/AprsIsClient.kt`, wired in
+  `JS8EngineService.kt` (`updateAprsState`, `handleAprsSpot`, `onAprsMessage`). Needs **Enable spotting to
+  reporting networks** and **Enable spotting @APRSIS messages**; **Enable relaying inbound APRS messages to
+  Heard List stations** keeps the connection up and relays.
+  - Out: heard `@APRSIS GRID` and `@APRSIS CMD` (checksum checked) queue up and go on the one-minute timer,
+    with the PC's 25% random skip, so a frame can take 2 minutes or more. Login is `APJ8CL`, as on the PC.
+  - In: a message for a station in Call Activity (exact call, not on **spot blacklist**, within
+    **Remove callsigns from call activity after:**) sends ack to APRS (every copy; 120 s repeat filter), shows a
+    bold `APRS-IS Relay:` line in the Message Window and transmits `@APRSIS MSG TO:CALL TEXT DE SENDER`
+    at top priority. Reconnects 5 s after a drop.
+  - Difference from the PC: **RX** off ends the service, so the APRS connection closes until **RX** is on.
+  - Tested on S22-Fresh against a fake server, `scratchpad` only. Not yet tried against the real APRS-IS network.
 
 ### Lists, Message Window, sending (third session, 2026-10-19)
 

@@ -59,6 +59,8 @@ class MainActivity : AppCompatActivity() {
                         utc, snr, dt, freq, text, type, quality, mode, driftMs))
                     monitorViewModel.updateSnr(snr)
                 }
+                JS8EngineService.ACTION_APRS_NOTICE ->
+                    js8ActivityViewModel.writeNotice(intent.getStringExtra(JS8EngineService.EXTRA_TEXT) ?: "")
                 JS8EngineService.ACTION_QUEUE_TX -> {
                     val text = intent.getStringExtra(JS8EngineService.EXTRA_QUEUE_TX_TEXT) ?: return
                     val directed = intent.getStringExtra(JS8EngineService.EXTRA_QUEUE_TX_DIRECTED)
@@ -356,6 +358,7 @@ class MainActivity : AppCompatActivity() {
         Js8Api.init(this)
         Js8Api.activity = js8ActivityViewModel.activity
         Js8Api.host = apiHost
+        JS8EngineService.callHeardMs = { call -> js8ActivityViewModel.activity.callActivity[call]?.utcMs }
 
         // Observe unread count for badge on Messages tab
         messagesViewModel.totalUnreadCount.observe(this) { count ->
@@ -383,6 +386,7 @@ class MainActivity : AppCompatActivity() {
         val filter = IntentFilter().apply {
             addAction(JS8EngineService.ACTION_DECODE)
             addAction(JS8EngineService.ACTION_QUEUE_TX)
+            addAction(JS8EngineService.ACTION_APRS_NOTICE)
             addAction(JS8EngineService.ACTION_TX_STATE)
             addAction(JS8EngineService.ACTION_TX_FRAME)
             addAction(JS8EngineService.ACTION_FT8_DECODED)
@@ -442,6 +446,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onDestroy() {
         if (Js8Api.host === apiHost) Js8Api.host = null
+        JS8EngineService.callHeardMs = null
         super.onDestroy()
     }
 

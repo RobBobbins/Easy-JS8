@@ -43,6 +43,11 @@ class Js8ActivityViewModel(app: Application) : AndroidViewModel(app) {
         if (activity.onFrame(m, myOffset, cfg())) changed()
     }
 
+    fun writeNotice(text: String) {
+        activity.writeNotice(text)
+        changed()
+    }
+
     /** A message from the Typing Box, kept there (locked) until its last part has gone out. */
     data class TypedTx(val text: String, val onAir: Boolean = false, val charsSent: Int = 0,
                        /** Not typed: a heartbeat or reply put in the empty Typing Box while it is sent. */

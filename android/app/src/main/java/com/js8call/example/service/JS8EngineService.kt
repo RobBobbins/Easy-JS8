@@ -315,6 +315,7 @@ class JS8EngineService : Service() {
         if (key == PREF_PSK_REPORTER || key == "callsign" || key == "grid") {
             updatePskReporterState()
         }
+        if (key in APRS_PREFS) updateAprsState()
         if (key == "last_frequency") {
             updateDialFromPrefs()
             dialChanged()
@@ -522,6 +523,7 @@ class JS8EngineService : Service() {
         heartbeatHandler.removeCallbacksAndMessages(null)
         cqHandler.removeCallbacksAndMessages(null)
         messageLogger?.shutdown()
+        aprsClient.shutdown()
 
         stopEngine()
         txHandlerThread.quitSafely()
@@ -3748,6 +3750,24 @@ class JS8EngineService : Service() {
         val directed = parseDirectedCommand(text)
         
         val command = directed?.command?.uppercase()
+        // PC: @APRSIS GRID and CMD are spotted for everyone
+        if (directed != null && command != null && command in APRS_SPOT_COMMANDS && directed.to.trim().uppercase() == "@APRSIS") {
+            val from = directed.from.trim().uppercase()
+            if (isLastFrame(type)) {
+                handleAprsSpot(command, from, directed.payload, snr, freq)
+                return
+            }
+            val key = findMatchingMsgBufferKey(freq) ?: Math.round(freq)
+            synchronized(msgLock) {
+                msgBuffers[key] = MsgBuffer(
+                    from = from, to = "@APRSIS", snr = snr, frequency = freq, lastUpdated = now,
+                    timeoutMs = 4 * framePeriodMs(submode),
+                    parts = if (directed.payload.isNotBlank()) mutableListOf(directed.payload) else mutableListOf(),
+                    command = command
+                )
+            }
+            return
+        }
         // PC processCommandActivity: these lists come before the inbox, mailbox and ACK
         if (directed != null && (command == Js8Commands.CMD_MSG || command in MAILBOX_COMMANDS) && isAutoreplyBlocked(directed.from)) return
         if (directed != null && command != null && command in MAILBOX_COMMANDS) {
@@ -3893,6 +3913,10 @@ class JS8EngineService : Service() {
     }
     
     private fun processMsgBuffer(buffer: MsgBuffer, myCallsign: String) {
+        if (buffer.command in APRS_SPOT_COMMANDS) {
+            handleAprsSpot(buffer.command, buffer.from, assembleMsgPayload(buffer.parts), buffer.snr, buffer.frequency)
+            return
+        }
         if (buffer.command != Js8Commands.CMD_MSG) {
             handleMailboxCommand(buffer.command, buffer.from, buffer.to, cleanMsgText(assembleMsgPayload(buffer.parts)), buffer.snr, buffer.frequency)
             return
@@ -3932,6 +3956,76 @@ class JS8EngineService : Service() {
         .trim()
 
     private val aprsRelayDedupe = mutableMapOf<String, Long>()
+    private val aprsInboundDedupe = mutableMapOf<String, Long>()
+    private val aprsClient by lazy {
+        AprsIsClient { from, to, message, id -> mainHandler.post { onAprsMessage(from, to, message, id) } }
+    }
+
+    private fun prefOn(key: String) = PreferenceManager.getDefaultSharedPreferences(this).all[key]?.toString() == "true"
+
+    /** PC spot_to_aprs: Enable spotting to reporting networks and Enable spotting @APRSIS messages. */
+    private fun spotToAprs() = prefOn(PREF_PSK_REPORTER) && prefOn("aprs_is")
+
+    /** PC spot_to_aprs_relay: also needs Enable relaying inbound APRS messages to Heard List stations. */
+    private fun aprsRelayOn() = spotToAprs() && prefOn("js8cfg_aprs_relay")
+
+    /** PC prepareSpotting. */
+    private fun updateAprsState() {
+        val prefs = PreferenceManager.getDefaultSharedPreferences(this)
+        val enabled = spotToAprs()
+        if (enabled) {
+            aprsClient.setSkipPercent(0.25f)
+            aprsClient.setServer(prefs.getString("js8cfg_aprs_server", "rotate.aprs2.net")?.trim().orEmpty(),
+                numberPref("js8cfg_aprs_port", 14580.0).toInt())
+        }
+        aprsClient.setIncomingRelayEnabled(aprsRelayOn())
+        aprsClient.setPaused(!enabled)
+    }
+
+    /** PC spotAprsGrid / spotAprsCmd: an assembled @APRSIS GRID or CMD frame goes up to APRS-IS. */
+    private fun handleAprsSpot(command: String, from: String, payload: String, snr: Int, freq: Float) {
+        val message = payload.trim().replace(Regex("\\s*[▪■]+\\s*$"), "").trim()
+        if (!spotToAprs() || isOnCallList("js8cfg_spot_blacklist", from)) return
+        val myCall = getConfiguredCallsign() ?: return
+        val byCall = AprsIsClient.replaceCallsignSuffixWithSSID(myCall, com.js8call.example.js8ui.Js8Activity.baseCall(myCall))
+        val fromCall = AprsIsClient.replaceCallsignSuffixWithSSID(from, com.js8call.example.js8ui.Js8Activity.baseCall(from))
+        if (command == Js8Commands.CMD_APRS_GRID) {
+            val mhz = String.format(Locale.US, "%.6f", (currentDialHz + Math.round(freq)) / 1_000_000.0)
+            val comment = "${mhz}MHz ${formatSNR(snr)}dB"
+            aprsGridRegex.findAll(message.uppercase(Locale.US)).map { it.value }.filter { it != "RR73" }.forEach { grid ->
+                aprsClient.enqueueSpot(byCall, fromCall, grid, if ("/" in from) "$from $comment" else comment)
+            }
+            return
+        }
+        val (valid, text) = validateRelayChecksum(message)
+        if (!valid) {
+            Log.d(TAG, "APRS CMD failed checksum, discarded: $message")
+            return
+        }
+        aprsClient.enqueueThirdParty(byCall, fromCall, text)
+    }
+
+    /** PC AprsInboundRelay::onMessageReceived. */
+    private fun onAprsMessage(from: String, to: String, message: String, messageId: String) {
+        if (!aprsRelayOn() || isOnCallList("js8cfg_spot_blacklist", to)) return
+        val heardMs = callHeardMs?.invoke(to) ?: return
+        val now = System.currentTimeMillis()
+        val aging = numberPref("js8cfg_callsign_aging", 0.0).toInt()
+        if (aging > 0 && now - heardMs > aging * 60_000L) return
+        if (message.length >= 4 && message.startsWith("ack", ignoreCase = true) &&
+            message.drop(3).all { it.isLetterOrDigit() }) return
+        if (messageId.isNotEmpty()) {
+            aprsInboundDedupe.entries.removeIf { now - it.value > APRS_DEDUPE_MS }
+            val key = "$from|$to|$messageId".uppercase(Locale.US)
+            val duplicate = key in aprsInboundDedupe
+            aprsClient.enqueueMessageAck(to, from, messageId)
+            if (duplicate) return
+            aprsInboundDedupe[key] = now
+        }
+        val intent = Intent(ACTION_APRS_NOTICE).putExtra(EXTRA_TEXT, "APRS-IS Relay: $from -> $to: $message")
+        LocalBroadcastManager.getInstance(this).sendBroadcast(intent)
+        broadcastQueueTx("@APRSIS MSG TO:$to $message DE $from".uppercase(Locale.US), null, priority = APRS_RELAY_PRIORITY)
+    }
 
     /**
      * Easy JS8 mailbox: the PC's processCommandActivity for MSG TO: (hold a message for another
@@ -4335,6 +4429,7 @@ class JS8EngineService : Service() {
         if (pskReporterClient != null) return
         val programInfo = "JS8Android-${BuildConfig.VERSION_NAME}"
         pskReporterClient = PskReporterClient(programInfo)
+        updateAprsState()
         updatePskReporterState()
     }
 
@@ -5422,6 +5517,9 @@ class JS8EngineService : Service() {
         const val ACTION_RADIO_FREQUENCY = "com.js8call.example.ACTION_RADIO_FREQUENCY"
         const val ACTION_MESSAGE_RECEIVED = "com.js8call.example.ACTION_MESSAGE_RECEIVED"
         const val ACTION_QUEUE_TX = "com.js8call.example.ACTION_QUEUE_TX"
+        const val ACTION_APRS_NOTICE = "com.js8call.example.ACTION_APRS_NOTICE"
+        /** Set by MainActivity: last heard time of a call in Call Activity, read on the main thread. */
+        @Volatile var callHeardMs: ((String) -> Long?)? = null
         const val ACTION_TIME_SYNC_ONCE = "com.js8call.example.ACTION_TIME_SYNC_ONCE"
         const val ACTION_SET_TIME_DRIFT = "com.js8call.example.ACTION_SET_TIME_DRIFT"
         const val ACTION_TIME_DRIFT = "com.js8call.example.ACTION_TIME_DRIFT"
@@ -5493,6 +5591,11 @@ class JS8EngineService : Service() {
         const val ACTION_CQ_TIMER = "com.js8call.example.ACTION_CQ_TIMER"
         const val EXTRA_HB_TIMER_ON = "hb_timer_on"
         /** Commands the mailbox answers (PC processCommandActivity). */
+        private val APRS_PREFS = setOf(PREF_PSK_REPORTER, "aprs_is", "js8cfg_aprs_relay", "js8cfg_aprs_server", "js8cfg_aprs_port")
+        private val APRS_SPOT_COMMANDS = setOf(Js8Commands.CMD_APRS_GRID, Js8Commands.CMD_APRS_CMD)
+        private const val APRS_DEDUPE_MS = 120_000L
+        private const val APRS_RELAY_PRIORITY = 1000
+        private val aprsGridRegex = Regex("\\b[A-X]{2}[0-9]{2}(?:[A-X]{2}(?:[0-9]{2})?)*\\b")
         private val MAILBOX_COMMANDS = setOf(Js8Commands.CMD_MSG_TO, Js8Commands.CMD_QUERY, Js8Commands.CMD_QUERY_MSGS, "QUERY MSGS?")
         const val EXTRA_TUNE_ON = "tune_on"
 
