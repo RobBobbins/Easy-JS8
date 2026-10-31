@@ -507,7 +507,14 @@ class Js8SettingsFragment : Fragment() {
                 renderItems(col, s.items)
             }
         }
-        content.addView(ScrollView(requireContext()).apply { addView(col) })
+        content.addView(ScrollView(requireContext()).apply {
+            // About: centred top to bottom when it fits, scrolls from the top when not (Rob, 2026-10-31)
+            if (page == ABOUT_PAGE) {
+                isFillViewport = true
+                col.gravity = Gravity.CENTER_VERTICAL
+            }
+            addView(col)
+        })
     }
 
     /** Station > About: version, features over JS8Android, source, licence, credits (Rob, 2026-10-19). */
