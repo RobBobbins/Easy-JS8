@@ -1154,6 +1154,23 @@ class Js8MainFragment : Fragment() {
         }
         typingBox.setOnLongClickListener { showTypingMenu(it); true }
         messageWindow.setOnLongClickListener { showMessageWindowMenu(it); true }
+        // Up and down drags scroll the box, not the page it sits in; sideways drags stay with the Swipe tabs
+        var downX = 0f
+        var downY = 0f
+        messageWindow.setOnTouchListener { v, ev ->
+            when (ev.actionMasked) {
+                android.view.MotionEvent.ACTION_DOWN -> {
+                    downX = ev.x
+                    downY = ev.y
+                }
+                android.view.MotionEvent.ACTION_MOVE ->
+                    if ((v.canScrollVertically(1) || v.canScrollVertically(-1)) &&
+                        kotlin.math.abs(ev.y - downY) > kotlin.math.abs(ev.x - downX)) {
+                        v.parent?.requestDisallowInterceptTouchEvent(true)
+                    }
+            }
+            false
+        }
         view.findViewById<View>(R.id.js8_btn_saved).setOnClickListener { showSavedMenu(it) }
         view.findViewById<View>(R.id.js8_btn_directed).setOnClickListener { showDirectedMenu(it) }
         view.findViewById<View>(R.id.js8_btn_deselect).setOnClickListener { clearSelection() }
