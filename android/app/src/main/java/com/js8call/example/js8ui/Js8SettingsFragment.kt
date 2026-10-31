@@ -17,6 +17,7 @@ import android.graphics.Typeface
 import android.location.Location
 import android.location.LocationListener
 import android.location.LocationManager
+import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Handler
@@ -192,7 +193,9 @@ class Js8SettingsFragment : Fragment() {
     /** Station window: the PC's File > Settings. Otherwise the operating Settings window. */
     private val station get() = (arguments?.getString(ARG_WINDOW) ?: "station") == "station"
     private val sections by lazy {
-        if (station) Js8SettingsSchema.stationSections() else Js8SettingsSchema.settingsSections()
+        if (station) Js8SettingsSchema.stationSections() else Js8SettingsSchema.settingsSections(
+            androidx.preference.PreferenceManager.getDefaultSharedPreferences(requireContext())
+                .getBoolean("js8cfg_autoreply_confirmation", true))
     }
     private lateinit var content: FrameLayout
     private var sideways = false
@@ -392,6 +395,7 @@ class Js8SettingsFragment : Fragment() {
         }
         draft.values[Js8SettingsSchema.SAVED_MESSAGES_KEY]?.let { e.putString(Js8SettingsSchema.SAVED_MESSAGES_KEY, it) }
         draft.values[Js8SettingsSchema.SCHEDULE_KEY]?.let { e.putString(Js8SettingsSchema.SCHEDULE_KEY, it) }
+        draft.values[Js8SettingsSchema.FREQUENCIES_KEY]?.let { e.putString(Js8SettingsSchema.FREQUENCIES_KEY, it) }
         draft.values.filterKeys { it.startsWith("js8cfg_notify_") || it.startsWith("js8cfg_ui_") || it == "js8cfg_pills" ||
             it == com.js8call.example.api.Js8Api.KEY_WSJTX_INTERFACES }
             .forEach { (k, v) -> e.putString(k, v) }
@@ -1139,6 +1143,9 @@ class Js8SettingsFragment : Fragment() {
         val row = LinearLayout(requireContext()).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0, px(6), 0, px(6)) }
         item.buttons.forEach { (lab, action) ->
             val b = button(lab) { onAction(action) }
+            if (action == "configurations") b.setOnClickListener {
+                Js8Configurations.showMenu(this, android.widget.PopupMenu(android.view.ContextThemeWrapper(requireContext(), R.style.ThemeOverlay_Js8PopupMenu), it))
+            }
             if (action == "test_cat" || action == "test_ptt") {
                 b.isEnabled = Js8SettingsSchema.rigTestEnabled(draft, action)
                 val tint = if (action == "test_cat") vm.testCat?.let { if (it) Color.rgb(0, 128, 0) else Color.RED }
@@ -1181,6 +1188,10 @@ class Js8SettingsFragment : Fragment() {
                 activityVm().changed(); toast("All Activity cleared")
             }
             "reset_window_sizes" -> { Js8LineDividers.reset(draft.prefs); toast("Window sizes reset") }
+            "exit" -> { // PC File > Exit
+                requireContext().stopService(Intent(requireContext(), JS8EngineService::class.java))
+                requireActivity().finishAndRemoveTask()
+            }
             "test_cat" -> {
                 // The rig opens from saved settings: the PC tests the window's values, so save the Radio page first
                 val e = draft.prefs.edit()
@@ -1256,11 +1267,8 @@ class Js8SettingsFragment : Fragment() {
 
     private fun special(id: String): View = when (id) {
         "grid_gps" -> gpsRow()
-        "frequencies_table" -> table("cfg_freq", listOf(
-            Js8TableView.Column("region", "IARU Region", 90), Js8TableView.Column("mode", "Mode", 60),
-            Js8TableView.Column("freq", "Frequency", 90), Js8TableView.Column("mhz", "Frequency (MHz)", 120),
-            Js8TableView.Column("desc", "Description", 120, stretch = true)
-        ), frequencyRows(), 160)
+        "power_slider" -> powerSlider()
+        "frequencies_table" -> frequencyTable()
         "schedule_table" -> scheduleTable()
         "saved_messages" -> savedMessages()
         "notifications_table" -> notifications()
@@ -1305,18 +1313,106 @@ class Js8SettingsFragment : Fragment() {
             }
         }
 
-    private fun frequencyRows(): List<Js8TableView.Row> {
-        val entries = resources.getStringArray(R.array.js8_frequency_entries)
-        val values = resources.getStringArray(R.array.js8_frequency_values)
-        return entries.indices.map { i ->
-            val hz = values[i].toLongOrNull() ?: 0L
-            Js8TableView.Row("f$i", mapOf(
-                "region" to "All", "mode" to "JS8",
-                "freq" to entries[i].substringBefore(" - ").trim(),
-                "mhz" to String.format(Locale.US, "%.6f", hz / 1_000_000.0),
-                "desc" to ""
+    /** PC frequencies_table_view and its right-click menu: Insert ..., Delete, Reset. */
+    private fun frequencyTable(): View {
+        val key = Js8SettingsSchema.FREQUENCIES_KEY
+        fun current() = Js8SettingsSchema.frequencyItems(requireContext(), draft.values[key] ?: draft.prefs.getString(key, null))
+        fun rows(items: List<Js8SettingsSchema.FrequencyItem>) = items.mapIndexed { i, f ->
+            Js8TableView.Row("$i", mapOf(
+                "region" to f.region, "mode" to f.mode,
+                "freq" to com.js8call.example.util.BandUtils.bandLabelForFrequencyHz(f.hz),
+                "mhz" to String.format(Locale.US, "%.6f", f.hz / 1_000_000.0),
+                "desc" to f.description
             ))
         }
+        val list = table("cfg_freq", listOf(
+            Js8TableView.Column("region", "IARU Region", 90), Js8TableView.Column("mode", "Mode", 60),
+            Js8TableView.Column("freq", "Frequency", 90), Js8TableView.Column("mhz", "Frequency (MHz)", 120),
+            Js8TableView.Column("desc", "Description", 120, stretch = true)
+        ), rows(current()), 160)
+        list.onRowClick = { list.selectedRowId = it.id }
+        fun refresh(items: List<Js8SettingsSchema.FrequencyItem>) {
+            val sorted = items.sortedBy { it.hz }
+            draft.values[key] = sorted.joinToString("\n") { it.line() }
+            list.selectedRowId = null
+            list.setRows(rows(sorted))
+        }
+        val col = column()
+        val buttons = LinearLayout(requireContext()).apply { orientation = LinearLayout.HORIZONTAL }
+        buttons.addView(button("Insert ...") { insertFrequency { refresh(current() + it) } }, LinearLayout.LayoutParams(0, px(30), 1f))
+        buttons.addView(button("Delete") {
+            val sel = list.selectedRowId?.toIntOrNull() ?: return@button
+            refresh(current().filterIndexed { i, _ -> i != sel })
+        }, LinearLayout.LayoutParams(0, px(30), 1f).apply { marginStart = px(6) })
+        buttons.addView(button("Reset") {
+            AlertDialog.Builder(requireContext()).setTitle("Reset Working Frequencies")
+                .setMessage("Are you sure you want to discard your current working frequencies and replace them with default ones?")
+                .setPositiveButton("Yes") { _, _ -> refresh(Js8SettingsSchema.frequencyItems(requireContext(), null)) }
+                .setNegativeButton("No", null).show()
+        }, LinearLayout.LayoutParams(0, px(30), 1f).apply { marginStart = px(6) })
+        col.addView(buttons)
+        col.addView(list)
+        return col
+    }
+
+    /** PC FrequencyDialog "Add Frequency". */
+    private fun insertFrequency(onAdd: (Js8SettingsSchema.FrequencyItem) -> Unit) {
+        val box = column().apply { setPadding(px(16), px(8), px(16), 0) }
+        fun title(name: String) = box.addView(label(name).apply { setTextColor(Color.BLACK) })
+        fun spinner(items: List<String>) = android.widget.Spinner(requireContext()).apply {
+            adapter = android.widget.ArrayAdapter(requireContext(), android.R.layout.simple_spinner_dropdown_item, items)
+            box.addView(this)
+        }
+        title("IARU Region:")
+        val region = spinner(listOf("All", "Region 1", "Region 2", "Region 3"))
+        title("Mode:")
+        val mode = spinner(listOf("JS8"))
+        title("Frequency (MHz):")
+        val mhz = styledField(EditText(requireContext())).apply {
+            inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL
+            box.addView(this)
+        } as EditText
+        title("Description:")
+        val desc = styledField(EditText(requireContext())).apply { inputType = InputType.TYPE_CLASS_TEXT; box.addView(this) } as EditText
+        val dialog = AlertDialog.Builder(requireContext()).setTitle("Add Frequency").setView(box)
+            .setPositiveButton(android.R.string.ok, null).setNegativeButton(android.R.string.cancel, null).create()
+        dialog.setCanceledOnTouchOutside(false)
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val hz = mhz.text.toString().trim().toDoubleOrNull()?.let { Math.round(it * 1_000_000.0) } ?: 0L
+                if (hz <= 0L) { mhz.error = "MHz"; return@setOnClickListener }
+                onAdd(Js8SettingsSchema.FrequencyItem(hz, region.selectedItem.toString(), mode.selectedItem.toString(),
+                    desc.text.toString().replace('|', ' ').replace('\n', ' ').trim()))
+                dialog.dismiss()
+            }
+        }
+        dialog.show()
+    }
+
+    /** Settings > Power: PC outAttenuation, acts at once like the PC slider (also while TUNE is on), not on Save. */
+    private fun powerSlider(): View {
+        val key = JS8EngineService.PREF_OUT_ATTENUATION
+        val start = (draft.prefs.all[key]?.toString()?.toIntOrNull() ?: 100).coerceIn(0, 450)
+        val value = label("")
+        fun show(a: Int) { value.text = String.format(Locale.US, "%.1f dB", -a / 10.0) }
+        show(start)
+        val col = column()
+        col.addView(value)
+        // Right = more power, a = 450 - progress
+        col.addView(android.widget.SeekBar(requireContext()).apply {
+            max = 450
+            progress = 450 - start
+            setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
+                override fun onProgressChanged(sb: android.widget.SeekBar, p: Int, fromUser: Boolean) {
+                    if (!fromUser) return
+                    show(450 - p)
+                    draft.prefs.edit().putString(key, (450 - p).toString()).apply()
+                }
+                override fun onStartTrackingTouch(sb: android.widget.SeekBar) {}
+                override fun onStopTrackingTouch(sb: android.widget.SeekBar) {}
+            })
+        }, LinearLayout.LayoutParams(px(240), ViewGroup.LayoutParams.WRAP_CONTENT))
+        return col
     }
 
     private fun confirmErase(message: String, erase: () -> Unit) {
@@ -1471,6 +1567,8 @@ class Js8SettingsFragment : Fragment() {
         val col = column().apply { setPadding(0, px(4), 0, 0) }
         Js8SettingsSchema.NOTIFY_EVENTS.forEach { (k, name) ->
             val key = "js8cfg_notify_$k"
+            val fileKey = Js8SettingsSchema.NOTIFY_FILE_PREFIX + k
+            val file = (draft.values[fileKey] ?: draft.prefs.getString(fileKey, "")).orEmpty()
             col.addView(CheckBox(requireContext()).apply {
                 text = name
                 typeface = font
@@ -1480,8 +1578,40 @@ class Js8SettingsFragment : Fragment() {
                 isChecked = (draft.values[key] ?: draft.prefs.getString(key, "false")) == "true"
                 setOnCheckedChangeListener { _, c -> draft.values[key] = c.toString() }
             })
+            // PC notifications table: Sound File, Select, Test, Clear. No file = the phone's notification sound
+            val row = LinearLayout(requireContext()).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+            row.addView(label(if (file.isEmpty()) "Phone's notification sound" else soundFileName(file)).apply {
+                isSingleLine = true
+                ellipsize = android.text.TextUtils.TruncateAt.MIDDLE
+            }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            fun small(name: String, click: () -> Unit) = row.addView(button(name, click),
+                LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, px(26)).apply { marginStart = px(4) })
+            small("Select") { notifyPicking = fileKey; pickNotifySound.launch(arrayOf("audio/*")) }
+            small("Test") {
+                val uri = if (file.isEmpty()) android.media.RingtoneManager.getDefaultUri(android.media.RingtoneManager.TYPE_NOTIFICATION) else Uri.parse(file)
+                android.media.RingtoneManager.getRingtone(requireContext(), uri)?.play()
+            }
+            small("Clear") { draft.values[fileKey] = ""; draft.values[key] = "false"; render() }
+            col.addView(row, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin = px(6) })
         }
         return col
+    }
+
+    /** The file's own name; the picker's address alone reads like "msf:1000000024". */
+    private fun soundFileName(file: String): String = runCatching {
+        requireContext().contentResolver.query(Uri.parse(file), arrayOf(android.provider.OpenableColumns.DISPLAY_NAME), null, null, null)
+            ?.use { if (it.moveToFirst()) it.getString(0) else null }
+    }.getOrNull() ?: Uri.decode(file).substringAfterLast('/')
+
+    /** Station > Notifications > Select: the phone's file picker (PC QFileDialog). */
+    private var notifyPicking: String? = null
+    private val pickNotifySound = registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.OpenDocument()) { uri ->
+        val key = notifyPicking
+        if (uri != null && key != null) {
+            runCatching { requireContext().contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) }
+            draft.values[key] = uri.toString()
+            render()
+        }
     }
 
     private val palette = listOf(

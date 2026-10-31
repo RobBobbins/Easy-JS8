@@ -240,6 +240,17 @@ Java_com_js8call_core_JS8Engine_nativeSetTxBoostEnabled(
 }
 
 JNIEXPORT void JNICALL
+Java_com_js8call_core_JS8Engine_nativeSetTxOutput(
+    JNIEnv* /* env */,
+    jobject /* thiz */,
+    jlong handle,
+    jfloat gain,
+    jint channel) {
+  JS8Engine_Native* engine = reinterpret_cast<JS8Engine_Native*>(handle);
+  js8_engine_set_tx_output(engine, static_cast<float>(gain), static_cast<int>(channel));
+}
+
+JNIEXPORT void JNICALL
 Java_com_js8call_core_JS8Engine_nativeSetTimeDriftMs(
     JNIEnv* /* env */,
     jobject /* thiz */,
@@ -445,6 +456,38 @@ Java_com_js8call_core_JS8Engine_nativeBuildFrameTexts(
   jobjectArray out = env->NewObjectArray(static_cast<jsize>(texts.size()), string_class, nullptr);
   for (std::size_t i = 0; i < texts.size(); ++i) {
     jstring item = env->NewStringUTF(texts[i].c_str());
+    env->SetObjectArrayElement(out, static_cast<jsize>(i), item);
+    env->DeleteLocalRef(item);
+  }
+  env->DeleteLocalRef(string_class);
+  return out;
+}
+
+JNIEXPORT jboolean JNICALL
+Java_com_js8call_core_JS8Engine_nativeJscCorrect(
+    JNIEnv* env,
+    jclass /* clazz */,
+    jstring word) {
+  const char* c = word ? env->GetStringUTFChars(word, nullptr) : nullptr;
+  std::string text = c ? c : "";
+  if (c) env->ReleaseStringUTFChars(word, c);
+  return js8_jsc_correct(text) ? JNI_TRUE : JNI_FALSE;
+}
+
+JNIEXPORT jobjectArray JNICALL
+Java_com_js8call_core_JS8Engine_nativeJscSuggestions(
+    JNIEnv* env,
+    jclass /* clazz */,
+    jstring word,
+    jint count) {
+  const char* c = word ? env->GetStringUTFChars(word, nullptr) : nullptr;
+  std::string text = c ? c : "";
+  if (c) env->ReleaseStringUTFChars(word, c);
+  auto words = js8_jsc_suggestions(text, static_cast<int>(count));
+  jclass string_class = env->FindClass("java/lang/String");
+  jobjectArray out = env->NewObjectArray(static_cast<jsize>(words.size()), string_class, nullptr);
+  for (std::size_t i = 0; i < words.size(); ++i) {
+    jstring item = env->NewStringUTF(words[i].c_str());
     env->SetObjectArrayElement(out, static_cast<jsize>(i), item);
     env->DeleteLocalRef(item);
   }

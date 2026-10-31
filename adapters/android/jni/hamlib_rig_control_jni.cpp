@@ -172,7 +172,10 @@ jlong open_rig_with_path(int rig_model,
                          int baud_rate,
                          int data_bits,
                          int stop_bits,
-                         const std::string& parity_value) {
+                         const std::string& parity_value,
+                         const std::string& handshake,
+                         const std::string& dtr_state,
+                         const std::string& rts_state) {
   std::call_once(g_hamlib_loaded, ensure_hamlib_loaded);
 
   log_info("nativeOpen: model=%d path=%s baud=%d data=%d stop=%d",
@@ -222,9 +225,21 @@ jlong open_rig_with_path(int rig_model,
   set_rig_conf_if_supported(
       rig, {"serial_parity", "parity"}, normalized_parity, false,
       "rig_set_conf(parity) failed: ");
-  set_rig_conf_if_supported(
-      rig, {"serial_handshake", "handshake"}, "None", false,
-      "rig_set_conf(handshake) failed: ");
+  // PC HamlibTransceiver: Default leaves the rig's own handshake; lines only when forced,
+  // RTS never with hardware handshake
+  if (!handshake.empty()) {
+    set_rig_conf_if_supported(
+        rig, {"serial_handshake", "handshake"}, handshake, false,
+        "rig_set_conf(handshake) failed: ");
+  }
+  if (!dtr_state.empty()) {
+    set_rig_conf_if_supported(rig, {"dtr_state"}, dtr_state, false,
+                              "rig_set_conf(dtr_state) failed: ");
+  }
+  if (!rts_state.empty() && handshake != "Hardware") {
+    set_rig_conf_if_supported(rig, {"rts_state"}, rts_state, false,
+                              "rig_set_conf(rts_state) failed: ");
+  }
 
   log_info("serial params requested: baud=%d data=%d stop=%d parity=%s",
            normalized_baud,
@@ -291,6 +306,18 @@ jlong open_rig_with_path(int rig_model,
   return reinterpret_cast<jlong>(handle);
 }
 
+std::string jstring_value(JNIEnv* env, jstring value) {
+  std::string out;
+  if (value) {
+    const char* chars = env->GetStringUTFChars(value, nullptr);
+    if (chars) {
+      out = chars;
+      env->ReleaseStringUTFChars(value, chars);
+    }
+  }
+  return out;
+}
+
 }  // namespace
 
 extern "C" JNIEXPORT jlong JNICALL
@@ -315,7 +342,8 @@ Java_com_js8call_core_HamlibRigControl_nativeOpen(JNIEnv* env,
     }
   }
 
-  return open_rig_with_path(rig_model, path, baud_rate, data_bits, stop_bits, parity_value);
+  return open_rig_with_path(rig_model, path, baud_rate, data_bits, stop_bits, parity_value,
+                            "None", "", "");
 }
 
 extern "C" JNIEXPORT jlong JNICALL
@@ -326,7 +354,10 @@ Java_com_js8call_core_HamlibRigControl_nativeOpenWithPath(JNIEnv* env,
                                                           jint baud_rate,
                                                           jint data_bits,
                                                           jint stop_bits,
-                                                          jstring parity) {
+                                                          jstring parity,
+                                                          jstring handshake,
+                                                          jstring dtr_state,
+                                                          jstring rts_state) {
   std::string path;
   if (serial_path) {
     const char* path_str = env->GetStringUTFChars(serial_path, nullptr);
@@ -349,7 +380,9 @@ Java_com_js8call_core_HamlibRigControl_nativeOpenWithPath(JNIEnv* env,
     }
   }
 
-  return open_rig_with_path(rig_model, path, baud_rate, data_bits, stop_bits, parity_value);
+  return open_rig_with_path(rig_model, path, baud_rate, data_bits, stop_bits, parity_value,
+                            jstring_value(env, handshake), jstring_value(env, dtr_state),
+                            jstring_value(env, rts_state));
 }
 
 extern "C" JNIEXPORT void JNICALL
@@ -385,17 +418,39 @@ Java_com_js8call_core_HamlibRigControl_nativeSetFrequency(JNIEnv* /*env*/,
   return ret == RIG_OK ? JNI_TRUE : JNI_FALSE;
 }
 
+// PC HamlibTransceiver do_frequency poll: the rig's dial, 0 when it can't be read
+extern "C" JNIEXPORT jlong JNICALL
+Java_com_js8call_core_HamlibRigControl_nativeGetFrequency(JNIEnv* /*env*/,
+                                                          jobject /*thiz*/,
+                                                          jlong handle_value) {
+  if (!handle_value) return 0;
+  auto* handle = reinterpret_cast<HamlibRigHandle*>(handle_value);
+  std::lock_guard<std::mutex> lock(handle->mutex);
+  if (!handle->rig) return 0;
+  freq_t frequency = 0;
+  int ret = rig_get_freq(handle->rig, RIG_VFO_CURR, &frequency);
+  if (ret != RIG_OK) {
+    log_error("rig_get_freq failed: ", rigerror(ret));
+    return 0;
+  }
+  return static_cast<jlong>(frequency);
+}
+
 extern "C" JNIEXPORT jboolean JNICALL
 Java_com_js8call_core_HamlibRigControl_nativeSetPtt(JNIEnv* /*env*/,
                                                     jobject /*thiz*/,
                                                     jlong handle_value,
-                                                    jboolean enabled) {
+                                                    jboolean enabled,
+                                                    jboolean rear_data) {
   if (!handle_value) return JNI_FALSE;
   auto* handle = reinterpret_cast<HamlibRigHandle*>(handle_value);
   std::lock_guard<std::mutex> lock(handle->mutex);
   if (!handle->rig) return JNI_FALSE;
-  int ret = rig_set_ptt(handle->rig, RIG_VFO_CURR,
-                        enabled == JNI_TRUE ? RIG_PTT_ON : RIG_PTT_OFF);
+  // PC do_ptt: back_ptt_port_ on a rig with both PTT commands keys the rear / data input
+  ptt_t on = RIG_PTT_RIG_MICDATA == handle->rig->caps->ptt_type && rear_data == JNI_TRUE
+                 ? RIG_PTT_ON_DATA
+                 : RIG_PTT_ON;
+  int ret = rig_set_ptt(handle->rig, RIG_VFO_CURR, enabled == JNI_TRUE ? on : RIG_PTT_OFF);
   if (ret != RIG_OK) {
     log_error("rig_set_ptt failed: ", rigerror(ret));
   }

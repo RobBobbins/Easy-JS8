@@ -32,7 +32,8 @@
         <TextView
             android:id="@+id/js8_status_blank"
             style="@style/Js8FrameText"
-            android:layout_width="160dp"
+            android:layout_width="wrap_content"
+            android:minWidth="160dp"
             android:layout_height="22dp"
             android:layout_marginStart="6dp"
             android:gravity="center_vertical"

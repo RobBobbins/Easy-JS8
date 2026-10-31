@@ -393,6 +393,12 @@ public:
     config_.tx_output_gain_boost_enabled = enabled;
   }
 
+  // PC SoundOutput::setAttenuation (gain 1.0 = no attenuation) and AudioDevice::load (channel)
+  void set_tx_output(float gain, int channel) override {
+    config_.tx_output_gain = gain;
+    config_.tx_output_channel = channel;
+  }
+
   void set_submodes(int submodes) override {
     constexpr int knownSubmodes = (1 << static_cast<int>(protocol::SubmodeId::A)) |
                                  (1 << static_cast<int>(protocol::SubmodeId::B)) |
@@ -831,7 +837,7 @@ public:
 
       AudioStreamParams params;
       params.format.sample_rate = config_.tx_output_rate_hz;
-      params.format.channels = 1;
+      params.format.channels = config_.tx_output_channel == 0 ? 1 : 2;
       params.format.sample_type = SampleType::Int16;
 
       bool ok = deps_.audio_out->start(
@@ -922,7 +928,7 @@ public:
         for (std::size_t i = 0; i < frames; ++i) {
           float v = tx_float_buffer_[i];
           for (int ch = 0; ch < buffer.format.channels; ++ch) {
-            *out++ = v;
+            *out++ = tx_channel_silent(ch, buffer.format.channels) ? 0.0f : v;
           }
         }
         return frames * bytes_per_sample * static_cast<std::size_t>(buffer.format.channels);
@@ -938,10 +944,16 @@ public:
         }
         auto sample = static_cast<std::int16_t>(std::lround(v * 32767.0f));
         for (int ch = 0; ch < buffer.format.channels; ++ch) {
-          *out++ = sample;
+          *out++ = tx_channel_silent(ch, buffer.format.channels) ? std::int16_t{0} : sample;
         }
       }
       return frames * bytes_per_sample * static_cast<std::size_t>(buffer.format.channels);
+    }
+
+    // PC AudioDevice::load: Left and Right leave the other channel at 0
+    bool tx_channel_silent(int ch, int channels) const {
+      if (channels < 2) return false;
+      return (config_.tx_output_channel == 1 && ch != 0) || (config_.tx_output_channel == 2 && ch != 1);
     }
 
     float next_tx_sample_locked() {

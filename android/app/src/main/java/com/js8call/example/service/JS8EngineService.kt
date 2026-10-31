@@ -96,6 +96,7 @@ class JS8EngineService : Service() {
     private var uvproConnected: Boolean = false
     private var rtsPttTransport: SerialTransport? = null
     private var usbSerialBridge: UsbSerialBridge? = null
+    private var pttUsbBridge: UsbSerialBridge? = null // Station > Radio > PTT Port
     private var bluetoothSerialBridge: BluetoothSerialBridge? = null
     private var trusdxDirectSerial: TruSdxDirectSerial? = null
     private var trusdxSerialSession: TruSdxSerialSession? = null
@@ -209,6 +210,7 @@ class JS8EngineService : Service() {
             if (!sessionActive) {
                 txMonitorActive = false
                 txMonitorWasAudioActive = false
+                endTuning()
                 apiTransmitting(false, activeEngine)
                 trusdxTxIntentActive = false
                 if (isRigControlConnected()) {
@@ -235,7 +237,8 @@ class JS8EngineService : Service() {
                 failTransmitForPtt(generation, "Rig control is not connected")
                 return
             }
-            if (rigConnected && !audioActive && millisecondsUntilAudio in 0..PTT_LEAD_TIME_MS) {
+            val pttLeadMs = pttLeadMs()
+            if (rigConnected && !audioActive && millisecondsUntilAudio in 0..pttLeadMs) {
                 requestRigPtt(true, generation)
             }
 
@@ -254,13 +257,14 @@ class JS8EngineService : Service() {
             } else if (!audioActive && txMonitorWasAudioActive) {
                 txMonitorWasAudioActive = false
                 apiTransmitting(false, activeEngine)
-                if (rigConnected) {
+                // PC stopTx2: Hold PTT between frames leaves the rig keyed while more are to come
+                if (rigConnected && !PreferenceManager.getDefaultSharedPreferences(this@JS8EngineService).getBoolean("js8cfg_hold_ptt", false)) {
                     requestRigPtt(false, generation)
                 }
                 broadcastTxState(TX_STATE_QUEUED)
             }
 
-            val nextCheckMs = if (millisecondsUntilAudio.toLong() > PTT_LEAD_TIME_MS + TX_MONITOR_INTERVAL_MS) {
+            val nextCheckMs = if (millisecondsUntilAudio.toLong() > pttLeadMs + TX_MONITOR_INTERVAL_MS) {
                 TX_MONITOR_INTERVAL_MS
             } else {
                 TX_PREKEY_MONITOR_INTERVAL_MS
@@ -283,6 +287,10 @@ class JS8EngineService : Service() {
     private var pskReporterEnabled = false
     private var currentDialHz: Long = 0
     private var splitXitHz = 0 // PC m_XIT for the transmission in progress
+    @Volatile private var catReadPending = false // CAT button: the next FA answer sets the dial
+    private var pwrBandSetOk = true // PC m_PwrBandSetOK
+    private var pwrLastBand = "" // PC m_lastBand
+    private var tuneOn = false // PC m_tune
     private var bandHopped = true // PC m_bandHopped
     private var bandHoppedHz = 0L // PC m_bandHoppedFreq
     private var bandScheduleSeen = ""
@@ -309,7 +317,11 @@ class JS8EngineService : Service() {
         }
         if (key == "last_frequency") {
             updateDialFromPrefs()
+            dialChanged()
         }
+        if (key == PREF_OUT_ATTENUATION) onOutAttenuationChanged()
+        if (key == "js8cfg_output_channel") applyTxOutput()
+        if (key == "js8cfg_input_channel") restartAudioCapture()
         if (key == PREF_LOG_MESSAGES) {
             updateMessageLogging()
         }
@@ -325,6 +337,7 @@ class JS8EngineService : Service() {
         txHandlerThread.start()
         txHandler = Handler(txHandlerThread.looper)
         heartbeatHandler.post(bandHopRunnable)
+        heartbeatHandler.post(idleRunnable)
         txMonitorHandler = Handler(Looper.getMainLooper())
         (getSystemService(AUDIO_SERVICE) as AudioManager)
             .registerAudioDeviceCallback(audioDeviceCallback, mainHandler)
@@ -357,6 +370,8 @@ class JS8EngineService : Service() {
                     Log.i(TAG, "Start requested with device ID: $selectedAudioDeviceId")
                 }
                 updateDialFromPrefs()
+                monitorLastUsed()
+                startPowerMemory()
                 updatePskReporterState()
                 startForegroundService()
                 startEngine()
@@ -430,6 +445,9 @@ class JS8EngineService : Service() {
             ACTION_SEND_HB -> sendHeartbeat()
             ACTION_ERASE_LOG -> messageLogger?.erase()
             ACTION_SCHEDULE_HOP_ANSWER -> finishScheduledHop(intent.getBooleanExtra(EXTRA_SCHEDULE_HOP_OK, false))
+            ACTION_IDLE_OK -> finishIdleTimeout()
+            ACTION_AUTOREPLY_CONFIRM_ANSWER -> finishAutoReplyConfirm(intent.getIntExtra(EXTRA_CONFIRM_ID, -1),
+                intent.getBooleanExtra(EXTRA_CONFIRM_ACCEPTED, false), intent.getBooleanExtra(EXTRA_CONFIRM_FROM_API, false))
             // PC manualBandHop: Switch to Frequency Now
             ACTION_SCHEDULE_HOP_NOW -> {
                 val hz = intent.getLongExtra(EXTRA_FREQUENCY_HZ, 0L)
@@ -467,14 +485,17 @@ class JS8EngineService : Service() {
             // session end, releases PTT and reports TX_STATE_FINISHED as usual.
             ACTION_HALT_TX -> {
                 Log.i(TAG, "Halt requested")
+                endTuning()
                 txHandler.post { engine?.stopTransmit() }
             }
             // Easy JS8 TUNE button: steady tone at the TX offset until TUNE is pressed again.
             ACTION_TUNE -> {
                 val on = intent.getBooleanExtra(EXTRA_TUNE_ON, false)
                 val freq = intent.getDoubleExtra(EXTRA_TX_FREQ_HZ, currentTxOffsetHz.toDouble())
+                if (on) startTuning() else endTuning()
                 txHandler.post { handleTune(on, freq) }
             }
+            ACTION_READ_RIG -> readRig()
             // Station > Radio (PC on_test_CAT_push_button_clicked / on_test_PTT_push_button_clicked)
             ACTION_TEST_CAT -> testCat()
             ACTION_TEST_PTT -> testPtt(intent.getBooleanExtra(EXTRA_RIG_TEST_ON, false))
@@ -489,6 +510,8 @@ class JS8EngineService : Service() {
     override fun onDestroy() {
         super.onDestroy()
         pendingHopHz = 0L
+        idleTimedOutMinutes = 0L
+        autoReplyConfirms.clear()
         Log.i(TAG, "Service destroyed")
         (getSystemService(AUDIO_SERVICE) as AudioManager)
             .unregisterAudioDeviceCallback(audioDeviceCallback)
@@ -582,6 +605,9 @@ class JS8EngineService : Service() {
                         if (isTruSdxDiagnosticsEnabled()) {
                             Log.v(TAG, "TruSDX CAT <= $message")
                         }
+                        if (catReadPending && message.startsWith("FA")) {
+                            message.substring(2).trimEnd(';').toLongOrNull()?.let { hz -> mainHandler.post { onRigRead(hz) } }
+                        }
                     }
 
                     override fun onAudioFrame(samplesU8: ByteArray) {
@@ -608,8 +634,13 @@ class JS8EngineService : Service() {
             QmxCatSession(direct, object : QmxCatSession.Listener {
                 override fun onFrequency(frequencyHz: Long) {
                     if (splitHeld != "none") return // the radio is on the TX dial for now
-                    currentDialHz = frequencyHz
-                    mainHandler.post { broadcastRadioFrequency(frequencyHz) }
+                    if (catReadPending) {
+                        mainHandler.post { onRigRead(frequencyHz) }
+                        return
+                    }
+                    val dialHz = removeCalibration(frequencyHz)
+                    currentDialHz = dialHz
+                    mainHandler.post { broadcastRadioFrequency(dialHz) }
                 }
 
                 override fun onMessage(message: String) {
@@ -821,6 +852,7 @@ class JS8EngineService : Service() {
                 spectrumEventCount = 0
 
                 applyTxBoostSetting()
+                applyTxOutput()
                 applyFt8Setting()
                 applyTimeDriftSetting()
                 engine?.setAutoSync(autoDriftOn)
@@ -944,7 +976,7 @@ class JS8EngineService : Service() {
         rtsPttTransport = null
         when (rigType) {
             "network" -> initializeNetworkRigControl()
-            "hamlib_usb" -> initializeHamlibUsbControl()
+            "hamlib_usb" -> { initializeHamlibUsbControl(); openPttPort() }
             "rts_ptt" -> initializeRtsPttControl()
             "trusdx_serial" -> initializeTruSdxControl(generation)
             "qmx_serial" -> initializeQmxControl(generation)
@@ -1106,7 +1138,7 @@ class JS8EngineService : Service() {
                         Log.i(TAG, "TruSDX serial control ready device=$deviceId port=$portIndex")
                         if (currentDialHz > 0L) {
                             Thread {
-                                val ok = session?.setFrequency(currentDialHz) == true
+                                val ok = session?.setFrequency(applyCalibration(currentDialHz)) == true
                                 Log.i(TAG, "TruSDX initial frequency apply: hz=$currentDialHz ok=$ok")
                             }.start()
                         }
@@ -1167,7 +1199,7 @@ class JS8EngineService : Service() {
                         } else if (initialized) {
                             qmxConnected = true
                             rigCtlErrorShown = false
-                            if (currentDialHz > 0L) session?.setFrequency(currentDialHz)
+                            if (currentDialHz > 0L) session?.setFrequency(applyCalibration(currentDialHz))
                             startEngine(generation)
                         } else {
                             session?.stop()
@@ -1222,6 +1254,7 @@ class JS8EngineService : Service() {
             SUBMODE_FAST -> RX_BIT_FAST
             SUBMODE_TURBO -> RX_BIT_TURBO
             SUBMODE_SLOW -> RX_BIT_SLOW
+            SUBMODE_ULTRA -> RX_BIT_ULTRA
             else -> RX_BIT_NORMAL
         }
     }
@@ -1244,6 +1277,7 @@ class JS8EngineService : Service() {
                 mainHandler.post {
                     if (rigCtlConnected) {
                         Log.i(TAG, "Connected to rigctld at $host:$port")
+                        rigOnline()
                     } else {
                         Log.w(TAG, "Failed to connect to rigctld at $host:$port")
                         broadcastError("Failed to connect to rigctld. Rig control unavailable.")
@@ -1404,6 +1438,7 @@ class JS8EngineService : Service() {
                 if (ok) {
                     rtsPttTransport = SerialTransport.USB
                     usbSerialBridge?.setRts(false)
+                    applyForcedLines(params)
                     Log.i(TAG, "RTS PTT USB serial opened device=$deviceId port=$portIndex")
                 } else {
                     Log.w(TAG, "RTS PTT USB serial open failed for device=$deviceId port=$portIndex")
@@ -1450,6 +1485,7 @@ class JS8EngineService : Service() {
                 if (ok) {
                     rtsPttTransport = SerialTransport.BLUETOOTH
                     bluetoothSerialBridge?.setRts(false)
+                    applyForcedLines(params)
                     Log.i(TAG, "RTS PTT Bluetooth serial opened addr=$address port=${selection.portIndex}")
                 } else {
                     val detail = bluetoothSerialBridge?.getLastError().orEmpty()
@@ -1575,7 +1611,10 @@ class JS8EngineService : Service() {
                 params.baudRate,
                 params.dataBits,
                 params.stopBits,
-                params.parity
+                params.parity,
+                params.handshake,
+                params.dtrState,
+                params.rtsState
             ) == true
 
             mainHandler.post {
@@ -1583,6 +1622,7 @@ class JS8EngineService : Service() {
                 rigCtlErrorShown = false
                 if (ok) {
                     Log.i(TAG, "Hamlib rig opened (model=$rigModel path=$serialPath)")
+                    rigOnline()
                 } else {
                     val detail = hamlibRigControl?.getLastError().orEmpty()
                     if (detail.isNotBlank()) {
@@ -1653,7 +1693,10 @@ class JS8EngineService : Service() {
                 params.baudRate,
                 params.dataBits,
                 params.stopBits,
-                params.parity
+                params.parity,
+                params.handshake,
+                params.dtrState,
+                params.rtsState
             ) == true
 
             mainHandler.post {
@@ -1661,6 +1704,7 @@ class JS8EngineService : Service() {
                 rigCtlErrorShown = false
                 if (ok) {
                     Log.i(TAG, "Hamlib rig opened (model=$rigModel path=$serialPath)")
+                    rigOnline()
                 } else {
                     val detail = hamlibRigControl?.getLastError().orEmpty()
                     if (detail.isNotBlank()) {
@@ -1676,12 +1720,23 @@ class JS8EngineService : Service() {
         }.start()
     }
 
+    /** RTS PTT rig: Force Control Lines on the line that isn't keying PTT (Hamlib rigs: set_conf at open). */
+    private fun applyForcedLines(params: SerialParams) {
+        val dtrKeys = pttMethod() == "dtr"
+        if (!dtrKeys && params.dtrState.isNotEmpty()) setSerialLine(usbSerialBridge, bluetoothSerialBridge, true, params.dtrState == "ON")
+        if (dtrKeys && params.rtsState.isNotEmpty()) setSerialLine(usbSerialBridge, bluetoothSerialBridge, false, params.rtsState == "ON")
+    }
+
     private data class SerialParams(
         val baudRate: Int,
         val dataBits: Int,
         val stopBits: Int,
         val parity: String,
-        val parityValue: Int
+        val parityValue: Int,
+        // PC HamlibTransceiver set_conf values; "" = leave as it is
+        val handshake: String,
+        val dtrState: String,
+        val rtsState: String
     )
 
     private fun readSerialParams(): SerialParams {
@@ -1697,7 +1752,18 @@ class JS8EngineService : Service() {
             "space" -> 4
             else -> 0
         }
-        return SerialParams(baudRate, dataBits, stopBits, parity, parityValue)
+        val handshake = when (prefs.getString("js8cfg_handshake", "default")) {
+            "none" -> "None"
+            "xonxoff" -> "XONXOFF"
+            "hardware" -> "Hardware"
+            else -> ""
+        }
+        fun line(key: String) = when (prefs.getString(key, "")) {
+            "high" -> "ON"
+            "low" -> "OFF"
+            else -> ""
+        }
+        return SerialParams(baudRate, dataBits, stopBits, parity, parityValue, handshake, line("js8cfg_force_dtr"), line("js8cfg_force_rts"))
     }
 
     private fun resolveSerialSelection(
@@ -1833,6 +1899,8 @@ class JS8EngineService : Service() {
             // it stays here: deferred, it could wipe a restart's registration.
             shutdownUsb?.unregisterNative()
             shutdownBluetooth?.unregisterNative()
+            pttUsbBridge?.close()
+            pttUsbBridge = null
 
             createRigTransports()
             rigCtlClient = null
@@ -1944,7 +2012,8 @@ class JS8EngineService : Service() {
     private val rigStatusRunnable = object : Runnable {
         override fun run() {
             broadcastRigStatus(isRigControlConnected())
-            rigStatusHandler.postDelayed(this, RIG_STATUS_POLL_INTERVAL_MS)
+            readRig() // PC Poll Interval: the rig's frequency is read on this timer
+            rigStatusHandler.postDelayed(this, numberPref("js8cfg_cat_poll_interval", 1.0).toLong().coerceAtLeast(1L) * 1000L)
         }
     }
 
@@ -1993,6 +2062,19 @@ class JS8EngineService : Service() {
         Js8Api.rxDirected(d.from, d.to, cmd, grid, d.extra, base, offset, snr, mode, dt, now)
     }
 
+    /** PC processCommandActivity writeMsgTxt: a directed command heard goes in DIRECTED.TXT, the same ones as RX.DIRECTED. */
+    private fun logDirected(snr: Int, freq: Float, text: String, type: Int) {
+        val d = apiDirectedParser.parseDirected(text) ?: return
+        if (d.from == "<....>" || d.to == "<....>") return
+        if (!com.js8call.example.util.Js8Commands.COMMANDS.containsKey(d.cmd.uppercase())) return
+        var line = text.trim()
+        if ((type and 0x2) != 0) {
+            val eot = PreferenceManager.getDefaultSharedPreferences(this).getString("js8cfg_eot", "♢").orEmpty().ifEmpty { "♢" }
+            line = "$line $eot "
+        }
+        messageLogger?.logDirected(currentDialHz, freq.toInt(), com.js8call.example.js8ui.Js8Activity.formatSnr(snr), line)
+    }
+
     /** API: PTT on / off (PC emitPTT), the frame's tones (emitTones) and a status update. */
     private fun apiTransmitting(on: Boolean, activeEngine: JS8Engine) {
         if (Js8Api.State.transmitting == on) return
@@ -2010,18 +2092,21 @@ class JS8EngineService : Service() {
         notifyDecode(text)
         broadcastDecode(utc, snr, dt, freq, text, type, quality, mode, driftMs)
         apiDecode(utc, snr, dt, freq, text, type, quality, mode)
+        logDirected(snr, freq, text, type)
         handleRelayFrame(text, snr, mode, freq, type)
         maybeHandleIncomingMessage(text, snr, freq, type, mode)
         maybeHandleAutoReply(text, snr, mode)
     }
 
-    /** PC tryNotify: only with Enable Notifications and that event's box ticked. PC plays a file; this plays the phone's notification sound. */
+    /** PC tryNotify: only with Enable Notifications and that event's box ticked. Plays its Sound File, or the phone's notification sound. */
     private fun tryNotify(key: String) {
         val prefs = PreferenceManager.getDefaultSharedPreferences(this)
         if (!prefs.getBoolean("js8cfg_notifications", false)) return
         if (prefs.getString("js8cfg_notify_$key", "false") != "true") return
         Log.i(TAG, "Notify: $key")
-        RingtoneManager.getRingtone(this, RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION))?.play()
+        val file = prefs.getString(com.js8call.example.js8ui.Js8SettingsSchema.NOTIFY_FILE_PREFIX + key, "").orEmpty()
+        val sound = if (file.isEmpty()) RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION) else android.net.Uri.parse(file)
+        RingtoneManager.getRingtone(this, sound)?.play()
     }
 
     private fun notifyDecode(text: String) {
@@ -2344,6 +2429,15 @@ class JS8EngineService : Service() {
 
     private fun getDeviceName(device: AudioDeviceInfo): String {
         return AudioDevices.nameFor(device) ?: "Unknown Device"
+    }
+
+    /** Station > Audio > Input channel changed while receiving (PC reopens the input on OK). */
+    private fun restartAudioCapture() {
+        val activeEngine = engine ?: return
+        val helper = audioHelper ?: return
+        helper.stopCapture()
+        helper.close()
+        audioHelper = buildAudioHelper(activeEngine, selectedAudioDeviceId).also { it.startCapture() }
     }
 
     private fun switchAudioDevice(deviceId: Int) {
@@ -2718,7 +2812,8 @@ class JS8EngineService : Service() {
         } else {
             -1
         }
-        return JS8AudioHelper(engine, 12000, deviceId, applicationContext, overrideSource)
+        return JS8AudioHelper(engine, 12000, deviceId, applicationContext, overrideSource,
+            PreferenceManager.getDefaultSharedPreferences(this).getString("js8cfg_input_channel", "Mono") ?: "Mono")
     }
 
     private fun applyInputRouting(inputDeviceId: Int) {
@@ -2975,6 +3070,7 @@ class JS8EngineService : Service() {
             SUBMODE_NORMAL -> 15000L
             SUBMODE_FAST -> 10000L
             SUBMODE_TURBO -> 6000L
+            SUBMODE_ULTRA -> 4000L
             else -> 15000L
         }
     }
@@ -3015,7 +3111,11 @@ class JS8EngineService : Service() {
         val callsign = getConfiguredCallsign() ?: return
         val grid = com.js8call.example.api.Js8Api.myGrid(prefs)
 
-        val freq = heartbeatOffsetHz(getPreferredTxSubmode())
+        val freq = if (prefs.getBoolean("js8cfg_heartbeat_anywhere", false)) {
+            prefs.getString("js8cfg_tx_offset", null)?.toFloatOrNull() ?: 1500f
+        } else {
+            heartbeatOffsetHz(getPreferredTxSubmode())
+        }
         
         // Message format: CALL: @HB HEARTBEAT GRID
         // Note: JS8Call desktop constructs it as: CALL: @HB HEARTBEAT GRID
@@ -3059,7 +3159,7 @@ class JS8EngineService : Service() {
                 selectedCall = "", // Broadcast-ish
                 submode = submode,
                 audioFrequencyHz = splitAudioHz(freq.toDouble()),
-                txDelaySec = 0.0,
+                txDelaySec = configuredTxDelay(),
                 forceIdentify = true, // Force ID to ensure callsign is sent
                 forceData = false
             )
@@ -3110,15 +3210,15 @@ class JS8EngineService : Service() {
         // This covers manual HB sends and auto HB ACKs; the scheduled heartbeat
         // picks its own offset in sendHeartbeat().
         val requestedFrequencyHz = intent.getDoubleExtra(EXTRA_TX_FREQ_HZ, DEFAULT_AUDIO_FREQUENCY_HZ)
-        val audioFrequencyHz = if (isHeartbeatTraffic(text)) {
+        val audioFrequencyHz = if (isHeartbeatTraffic(text) && !prefs.getBoolean("js8cfg_heartbeat_anywhere", false)) {
             heartbeatOffsetHz(submode).toDouble()
         } else {
             requestedFrequencyHz
         }
-        val txDelaySec = intent.getDoubleExtra(EXTRA_TX_DELAY_S, 0.0)
+        val txDelaySec = intent.getDoubleExtra(EXTRA_TX_DELAY_S, configuredTxDelay())
         val forceIdentify = intent.getBooleanExtra(EXTRA_TX_FORCE_IDENTIFY, false)
         val forceData = intent.getBooleanExtra(EXTRA_TX_FORCE_DATA, false)
-        val effectiveForceIdentify = forceIdentify || callsign.isNotBlank()
+        val effectiveForceIdentify = (forceIdentify || callsign.isNotBlank()) && !avoidForcedIdentify()
         val payloadText = text.trim() // sent as typed, like the PC (the CQ button's CQ Message holds the grid)
 
         // Set transmit mode if configured (before queuing TX)
@@ -3163,13 +3263,10 @@ class JS8EngineService : Service() {
             activeEngine?.stopTransmit()
             return
         }
-        if (isListenOnly()) return
-        if (activeEngine == null) {
-            broadcastError("Start receiving (RX) before tuning")
-            return
-        }
-        if (isTransmitActive()) {
-            broadcastError("Already transmitting")
+        if (isListenOnly() || activeEngine == null || isTransmitActive()) {
+            mainHandler.post { endTuning() } // no tone: back to the Tx power
+            if (activeEngine == null) broadcastError("Start receiving (RX) before tuning")
+            else if (!isListenOnly()) broadcastError("Already transmitting")
             return
         }
         setTransmitMode()
@@ -3179,6 +3276,7 @@ class JS8EngineService : Service() {
             broadcastTxState(TX_STATE_QUEUED)
             startTxMonitor()
         } else {
+            mainHandler.post { endTuning() }
             broadcastError("Failed to start tune")
         }
     }
@@ -3298,6 +3396,118 @@ class JS8EngineService : Service() {
         }
         LocalBroadcastManager.getInstance(this).sendBroadcast(intent)
         Log.d(TAG, "Broadcast queue TX: text='$text' directed=$directed priority=$priority")
+    }
+
+    private fun numberPref(key: String, default: Double): Double =
+        PreferenceManager.getDefaultSharedPreferences(this).all[key]?.toString()?.toDoubleOrNull() ?: default
+
+    /** Station > Radio > Tx delay (PC m_TxDelay). */
+    private fun configuredTxDelay() = numberPref("js8cfg_tx_delay", 0.2)
+
+    /** PC: PTT goes on Tx delay before the period start; the audio follows the speed's start delay after it. */
+    private fun pttLeadMs(): Int = (configuredTxDelay() * 1000.0).toInt() + when (getPreferredTxSubmode()) {
+        SUBMODE_NORMAL, SUBMODE_SLOW -> 500
+        SUBMODE_FAST -> 200
+        else -> 100
+    }
+
+    /** PC processHeartbeatRateLimit: a second heartbeat within 55 minutes puts the station on the Never acknowledge list. */
+    private fun processHeartbeatRateLimit(call: String) {
+        val prefs = PreferenceManager.getDefaultSharedPreferences(this)
+        if (!prefs.getBoolean("js8cfg_hb_rate_limit", false)) return
+        val times = prefs.getString(PREF_HB_TIMES, "").orEmpty().split(',').mapNotNull {
+            val parts = it.split('=')
+            parts.getOrNull(1)?.toLongOrNull()?.let { ms -> parts[0] to ms }
+        }.toMap().toMutableMap()
+        val now = System.currentTimeMillis()
+        val last = times[call]
+        val edit = prefs.edit()
+        if (last != null && now - last < 55 * 60 * 1000L) {
+            times.remove(call)
+            val list = prefs.getString("js8cfg_hb_blacklist", "").orEmpty().trim().trimEnd(',')
+            edit.putString("js8cfg_hb_blacklist", if (list.isEmpty()) call else "$list,$call")
+        } else {
+            times[call] = now
+        }
+        edit.putString(PREF_HB_TIMES, times.entries.joinToString(",") { "${it.key}=${it.value}" }).apply()
+    }
+
+    // ---- Idle timeout (PC tx_watchdog) ----------------------------------------------------------
+
+    private var idleWasAuto = false
+    private var idleWasHb = false
+    private var idleWasCq = false
+
+    private val idleRunnable = object : Runnable {
+        override fun run() {
+            checkIdleTimeout()
+            heartbeatHandler.postDelayed(this, 60_000L)
+        }
+    }
+
+    private fun checkIdleTimeout() {
+        val minutes = numberPref("js8cfg_tx_watchdog", 60.0).toLong()
+        if (minutes <= 0 || idleTimedOutMinutes != 0L) return
+        if (System.currentTimeMillis() - lastUserMs < minutes * 60_000L) return
+        Log.i(TAG, "Idle timeout after $minutes minutes")
+        idleTimedOutMinutes = minutes
+        val prefs = PreferenceManager.getDefaultSharedPreferences(this)
+        idleWasAuto = prefs.getBoolean(PREF_AUTOREPLY_ENABLED, false)
+        idleWasHb = HeartbeatTimer.on
+        idleWasCq = CqTimer.on
+        txHandler.post { engine?.stopTransmit() }
+        prefs.edit().putBoolean(PREF_AUTOREPLY_ENABLED, false).apply()
+        setTxTimers(hb = false, cq = false)
+        LocalBroadcastManager.getInstance(this).sendBroadcast(Intent(ACTION_IDLE_TIMEOUT))
+    }
+
+    /** The Idle Timeout box's OK puts AUTO, HB and CQ back (PC msgBox finished). */
+    private fun finishIdleTimeout() {
+        if (idleTimedOutMinutes == 0L) return
+        idleTimedOutMinutes = 0L
+        lastUserMs = System.currentTimeMillis()
+        PreferenceManager.getDefaultSharedPreferences(this).edit().putBoolean(PREF_AUTOREPLY_ENABLED, idleWasAuto).apply()
+        setTxTimers(idleWasHb, idleWasCq)
+    }
+
+    private fun setTxTimers(hb: Boolean, cq: Boolean) {
+        HeartbeatTimer.on = hb
+        CqTimer.on = cq
+        scheduleHeartbeat(true)
+        scheduleCq(true)
+    }
+
+    /** PC confirmThenEnqueueMessage: with "Ask for confirmation ..." ticked, Yes / No first; no answer in 90 s = No. */
+    private fun queueAutoReply(text: String, directed: String?, priority: Int = 0) {
+        val prefs = PreferenceManager.getDefaultSharedPreferences(this)
+        if (!prefs.getBoolean("js8cfg_autoreply_confirmation", true)) {
+            broadcastQueueTx(text, directed, priority)
+            return
+        }
+        mainHandler.post {
+            val c = AutoReplyConfirm(nextConfirmId++, text, directed, priority)
+            autoReplyConfirms.add(c)
+            mainHandler.postDelayed({ finishAutoReplyConfirm(c.id, false, false) }, AUTOREPLY_CONFIRM_SECONDS * 1000L)
+            LocalBroadcastManager.getInstance(this).sendBroadcast(Intent(ACTION_AUTOREPLY_CONFIRM))
+            Js8Api.sendNetworkMessage("STATION.AUTOREPLY_CONFIRM_REQUEST", text, mapOf("_ID" to -1, "CONFIRM_ID" to c.id,
+                "PRIORITY" to priority, "OFFSET" to Js8Api.offsetHz(), "TIMEOUT" to AUTOREPLY_CONFIRM_SECONDS))
+        }
+    }
+
+    /** The box's Yes / No, the 90 seconds, or the API's STATION.AUTOREPLY_CONFIRM_RESPONSE. */
+    private fun finishAutoReplyConfirm(id: Int, accepted: Boolean, fromApi: Boolean) {
+        val c = autoReplyConfirms.firstOrNull { it.id == id } ?: return
+        autoReplyConfirms.remove(c)
+        LocalBroadcastManager.getInstance(this).sendBroadcast(Intent(ACTION_AUTOREPLY_CONFIRM))
+        if (accepted) broadcastQueueTx(c.text, c.directed, c.priority)
+        when {
+            fromApi -> Js8Api.sendNetworkMessage("STATION.AUTOREPLY_CONFIRMED", "", mapOf("_ID" to -1, "CONFIRM_ID" to id,
+                "ACCEPTED" to accepted, "MESSAGE" to c.text))
+            accepted -> Js8Api.sendNetworkMessage("STATION.AUTOREPLY_CONFIRM_ACCEPTED", c.text, mapOf("_ID" to -1, "CONFIRM_ID" to id,
+                "PRIORITY" to c.priority, "OFFSET" to Js8Api.offsetHz()))
+            else -> Js8Api.sendNetworkMessage("STATION.AUTOREPLY_CONFIRM_EXPIRED", "", mapOf("_ID" to -1, "CONFIRM_ID" to id,
+                "MESSAGE" to c.text))
+        }
     }
 
     private fun showMessageNotification(from: String, text: String) {
@@ -3597,7 +3807,7 @@ class JS8EngineService : Service() {
                 // Queue auto-ACK now that full message is received (if autoreply enabled)
                 if (isAutoreplyEnabled()) {
                     Log.i(TAG, "Auto ACK for MSG from=${directed.from}")
-                    broadcastQueueTx("$callsign: ${directed.from} ACK", null, priority = 2)
+                    queueAutoReply("$callsign: ${directed.from} ACK", null, priority = 2)
                 }
                 return
             }
@@ -3710,7 +3920,7 @@ class JS8EngineService : Service() {
         // Queue auto-ACK now that full message is received (if autoreply enabled)
         if (isAutoreplyEnabled()) {
             Log.i(TAG, "Auto ACK for MSG from=${buffer.from}")
-            broadcastQueueTx("$myCallsign: ${buffer.from} ACK", null, priority = 2)
+            queueAutoReply("$myCallsign: ${buffer.from} ACK", null, priority = 2)
         }
     }
     
@@ -3815,7 +4025,7 @@ class JS8EngineService : Service() {
             if (!isAutoreplyEnabled()) return@launch
             Log.i(TAG, "Mailbox reply to $from: '$r'")
             mainHandler.post {
-                broadcastQueueTx("$my: $r", null, priority = 1)
+                queueAutoReply("$my: $r", null, priority = 1)
                 afterSend?.invoke()
             }
         }
@@ -3843,6 +4053,7 @@ class JS8EngineService : Service() {
             // PC presentlyWantHBReplies: AUTO (checked above) + HB + ACK, both off by default
             if (!prefs.getBoolean(PREF_HB, false) || !prefs.getBoolean(PREF_HB_ACK, false)) return
             if (isSelfCallsign(callsign, heartbeat.from)) return
+            processHeartbeatRateLimit(heartbeat.from.trim().uppercase())
             if (isAutoreplyBlocked(heartbeat.from) || isOnCallList("js8cfg_hb_blacklist", heartbeat.from)) return
             val snrText = formatSNR(snr)
             if (snrText.isEmpty()) return
@@ -3858,7 +4069,7 @@ class JS8EngineService : Service() {
                 }
                 val payload = "$callsign: $target HEARTBEAT SNR $snrText$extra"
                 Log.i(TAG, "Auto HB ACK: from=$target snr=$snrText text='$payload'")
-                mainHandler.post { broadcastQueueTx(payload, null, priority = 1) }
+                mainHandler.post { queueAutoReply(payload, null, priority = 1) }
             }
             return
         }
@@ -3872,19 +4083,19 @@ class JS8EngineService : Service() {
                 val snrText = formatSNR(snr)
                 if (snrText.isEmpty()) return
                 Log.i(TAG, "Auto SNR reply: from=${directed.from} snr=$snrText")
-                broadcastQueueTx("$callsign: ${directed.from} SNR $snrText", null, priority = 1)
+                queueAutoReply("$callsign: ${directed.from} SNR $snrText", null, priority = 1)
             }
             cmdUpper == "INFO?" -> {
                 val info = com.js8call.example.js8ui.Js8Macros.expand(com.js8call.example.api.Js8Api.myInfo(prefs), prefs)
                 if (info.isBlank()) return
                 Log.i(TAG, "Auto INFO reply: from=${directed.from}")
-                broadcastQueueTx("$callsign: ${directed.from} INFO $info", null, priority = 1)
+                queueAutoReply("$callsign: ${directed.from} INFO $info", null, priority = 1)
             }
             cmdUpper == "STATUS?" -> {
                 val status = com.js8call.example.js8ui.Js8Macros.expand(com.js8call.example.api.Js8Api.myStatus(prefs), prefs)
                 if (status.isBlank()) return
                 Log.i(TAG, "Auto STATUS reply: from=${directed.from}")
-                broadcastQueueTx("$callsign: ${directed.from} STATUS $status", null, priority = 1)
+                queueAutoReply("$callsign: ${directed.from} STATUS $status", null, priority = 1)
             }
             cmdUpper == "HEARING?" -> {
                 val heard = getRecentHeardCallsigns(
@@ -3893,19 +4104,19 @@ class JS8EngineService : Service() {
                 )
                 if (heard.isEmpty()) return
                 Log.i(TAG, "Auto HEARING reply: from=${directed.from}, count=${heard.size}")
-                broadcastQueueTx("$callsign: ${directed.from} HEARING ${heard.joinToString(" ")}", null, priority = 1)
+                queueAutoReply("$callsign: ${directed.from} HEARING ${heard.joinToString(" ")}", null, priority = 1)
             }
             cmdUpper == "GRID?" -> {
                 val grid = com.js8call.example.api.Js8Api.myGrid(prefs)
                 if (grid.isBlank()) return
                 Log.i(TAG, "Auto GRID reply: from=${directed.from}")
-                broadcastQueueTx("$callsign: ${directed.from} GRID $grid", null, priority = 1)
+                queueAutoReply("$callsign: ${directed.from} GRID $grid", null, priority = 1)
             }
             cmdUpper == "AGN?" -> {
                 val message = lastTxMessage.trimEnd()
                 if (message.isBlank()) return
                 Log.i(TAG, "Auto AGN reply: from=${directed.from}")
-                broadcastQueueTx(message, null, priority = 1)
+                queueAutoReply(message, null, priority = 1)
             }
             // MSG auto-ACK is handled in maybeHandleIncomingMessage after full message is received
             else -> return
@@ -4096,7 +4307,8 @@ class JS8EngineService : Service() {
             SUBMODE_NORMAL,
             SUBMODE_FAST,
             SUBMODE_TURBO,
-            SUBMODE_SLOW -> submode
+            SUBMODE_SLOW,
+            SUBMODE_ULTRA -> submode
             else -> SUBMODE_NORMAL
         }
     }
@@ -4501,8 +4713,8 @@ class JS8EngineService : Service() {
             selectedCall = "",
             submode = submode,
             audioFrequencyHz = splitAudioHz(currentTxOffsetHz.toDouble()),
-            txDelaySec = 0.0,
-            forceIdentify = callsign.isNotBlank(),
+            txDelaySec = configuredTxDelay(),
+            forceIdentify = callsign.isNotBlank() && !avoidForcedIdentify(),
             forceData = false
         )
 
@@ -4543,8 +4755,8 @@ class JS8EngineService : Service() {
             selectedCall = directedCall,
             submode = submode,
             audioFrequencyHz = splitAudioHz(currentTxOffsetHz.toDouble()),
-            txDelaySec = 0.0,
-            forceIdentify = callsign.isNotBlank(),
+            txDelaySec = configuredTxDelay(),
+            forceIdentify = callsign.isNotBlank() && !avoidForcedIdentify(),
             forceData = forceData
         )
 
@@ -4661,17 +4873,68 @@ class JS8EngineService : Service() {
     private fun setRigPtt(enabled: Boolean): Boolean {
         val method = pttMethod()
         return when (rigControlMode) {
-            "network" -> method == "vox" || rigCtlClient?.setPtt(enabled) == true
+            "network" -> method == "vox" || rigCtlClient?.setPtt(enabled, rearAudioSource()) == true
             "hamlib_usb" -> when (method) {
                 "vox" -> true // the radio keys itself from the audio
-                "dtr", "rts" -> setSerialLine(usbSerialBridge, bluetoothSerialBridge, method == "dtr", enabled)
-                else -> hamlibRigControl?.setPtt(enabled) == true
+                "dtr", "rts" -> if (pttPortSelected()) {
+                    (if (method == "dtr") pttUsbBridge?.setDtr(enabled) else pttUsbBridge?.setRts(enabled)) == true
+                } else {
+                    setSerialLine(usbSerialBridge, bluetoothSerialBridge, method == "dtr", enabled)
+                }
+                else -> hamlibRigControl?.setPtt(enabled, rearAudioSource()) == true
             }
             "rts_ptt" -> if (method == "dtr") setSerialLine(usbSerialBridge, bluetoothSerialBridge, true, enabled) else setRtsPtt(enabled)
             "trusdx_serial" -> trusdxSerialSession?.setPtt(enabled) == true
             "qmx_serial" -> qmxCatSession?.setPtt(enabled) == true
             "btech_uvpro" -> uvProSession?.setPtt(enabled) == true
             else -> false
+        }
+    }
+
+    /** Station > Behavior > Allow sending standard messages without callsign (PC buildMessageFrames). */
+    private fun avoidForcedIdentify() = PreferenceManager.getDefaultSharedPreferences(this)
+        .all["js8cfg_avoid_forced_identify"]?.toString() == "true"
+
+    /** Station > Radio > Transmit Audio Source (PC back_ptt_port_). */
+    private fun rearAudioSource() = PreferenceManager.getDefaultSharedPreferences(this)
+        .getString("js8cfg_tx_audio_source", "rear") != "front"
+
+    private fun pttPortSelected() = PreferenceManager.getDefaultSharedPreferences(this)
+        .getString("js8cfg_ptt_port", "cat").orEmpty().let { it.isNotEmpty() && it != "cat" }
+
+    /** Station > Radio > PTT Port: a second USB serial port just for the DTR / RTS line. */
+    private fun openPttPort() {
+        if (!pttPortSelected() || pttMethod() !in setOf("dtr", "rts")) return
+        val prefs = PreferenceManager.getDefaultSharedPreferences(this)
+        val selection = resolveSerialSelection(prefs.getString("js8cfg_ptt_port", "cat").orEmpty(), prefs)
+        val deviceId = selection?.usbDeviceId
+        val device = deviceId?.let { UsbPermissionHelper.findUsbDeviceById(this, it) }
+        if (selection == null || deviceId == null || device == null) {
+            broadcastError("PTT Port not found.")
+            return
+        }
+        val open = {
+            val params = readSerialParams()
+            val bridge = UsbSerialBridge(applicationContext)
+            Thread {
+                val ok = bridge.open(deviceId, selection.portIndex, params.baudRate, params.dataBits, params.stopBits, params.parityValue)
+                mainHandler.post {
+                    if (ok) {
+                        bridge.setRts(false)
+                        bridge.setDtr(false)
+                        pttUsbBridge = bridge
+                    } else {
+                        broadcastError("Failed to open PTT Port.")
+                    }
+                }
+            }.start()
+        }
+        if (UsbPermissionHelper.hasPermission(this, device)) {
+            open()
+        } else {
+            UsbPermissionHelper.requestPermission(this, device) { granted ->
+                if (granted) open() else broadcastError("USB permission denied for PTT Port.")
+            }
         }
     }
 
@@ -4820,11 +5083,153 @@ class JS8EngineService : Service() {
     }
 
     private fun setRigFrequency(frequencyHz: Long): Boolean = when (rigControlMode) {
-        "network" -> rigCtlClient?.setFrequency(frequencyHz) == true
-        "hamlib_usb" -> hamlibRigControl?.setFrequency(frequencyHz) == true
-        "trusdx_serial" -> trusdxSerialSession?.setFrequency(frequencyHz) == true
-        "qmx_serial" -> qmxCatSession?.setFrequency(frequencyHz) == true
+        "network" -> rigCtlClient?.setFrequency(applyCalibration(frequencyHz)) == true
+        "hamlib_usb" -> hamlibRigControl?.setFrequency(applyCalibration(frequencyHz)) == true
+        "trusdx_serial" -> trusdxSerialSession?.setFrequency(applyCalibration(frequencyHz)) == true
+        "qmx_serial" -> qmxCatSession?.setFrequency(applyCalibration(frequencyHz)) == true
         else -> false
+    }
+
+    /** PC Configuration apply_calibration: the frequency sent to the rig. */
+    private fun applyCalibration(hz: Long): Long = Math.round(
+        numberPref("js8cfg_cal_intercept", 0.0) + (1.0 + numberPref("js8cfg_cal_slope", 0.0) / 1e6) * hz)
+
+    /** PC Configuration remove_calibration: the frequency read from the rig. */
+    private fun removeCalibration(hz: Long): Long = Math.round(
+        (hz - numberPref("js8cfg_cal_intercept", 0.0)) / (1.0 + numberPref("js8cfg_cal_slope", 0.0) / 1e6))
+
+    /** PC on_readFreq_clicked (CAT button): read the rig again, unless transmitting. */
+    private fun readRig() {
+        if (isTransmitActive() || !isRigControlConnected()) return
+        when (rigControlMode) {
+            "qmx_serial" -> catReadPending = qmxCatSession?.readFrequency() == true
+            "trusdx_serial" -> catReadPending = trusdxSerialSession?.readFrequency() == true
+            "network", "hamlib_usb" -> Thread {
+                val hz = if (rigControlMode == "network") rigCtlClient?.getFrequency() else hamlibRigControl?.getFrequency()
+                mainHandler.post { onRigRead(hz ?: 0L) }
+            }.start()
+        }
+    }
+
+    /** A frequency read from the rig becomes the dial (PC onRigStateChanged). */
+    private fun onRigRead(rigHz: Long) {
+        catReadPending = false
+        if (rigHz <= 0L || splitHeld != "none") return
+        val hz = removeCalibration(rigHz)
+        if (hz == currentDialHz) return
+        currentDialHz = hz
+        PreferenceManager.getDefaultSharedPreferences(this).edit().putString("last_frequency", hz.toString()).apply()
+        broadcastRadioFrequency(hz)
+        dialChanged()
+    }
+
+    /** PC onRigStateChanged: the dial moved. */
+    private fun dialChanged() {
+        if (engine != null) { // PC: if (m_monitoring) m_lastMonitoredFrequency = m_freqNominal
+            PreferenceManager.getDefaultSharedPreferences(this).edit().putLong(PREF_LAST_MONITORED, currentDialHz).apply()
+        }
+        bandChanged()
+    }
+
+    /** PC on_monitorButton_clicked: RX on with "Monitor returns to last used frequency" puts the dial back. */
+    private fun monitorLastUsed() {
+        val prefs = PreferenceManager.getDefaultSharedPreferences(this)
+        val last = prefs.getLong(PREF_LAST_MONITORED, 0L)
+        if (prefs.getBoolean("js8cfg_monitor_last_used", false) && last > 0L && last != currentDialHz) {
+            prefs.edit().putString("last_frequency", last.toString()).apply()
+            currentDialHz = last
+            broadcastRadioFrequency(last)
+        }
+        if (currentDialHz > 0L) prefs.edit().putLong(PREF_LAST_MONITORED, currentDialHz).apply()
+    }
+
+    /** Rig just opened at RX on: PC setRig(m_lastMonitoredFrequency). truSDX and QMX tune at open anyway. */
+    private fun rigOnline() {
+        if (currentDialHz > 0L && PreferenceManager.getDefaultSharedPreferences(this).getBoolean("js8cfg_monitor_last_used", false)) {
+            setFrequency(currentDialHz)
+        }
+    }
+
+    // ---- Power (PC outAttenuation and Remember power settings by band) ------------------------
+
+    private fun outAttenuation() = numberPref(PREF_OUT_ATTENUATION, 100.0).toInt().coerceIn(0, 450)
+
+    /** PC on_outAttenuation_valueChanged: a / 10 dB (SoundOutput::setAttenuation), Output channel. */
+    private fun applyTxOutput() {
+        val channel = listOf("Mono", "Left", "Right", "Both").indexOf(
+            PreferenceManager.getDefaultSharedPreferences(this).getString("js8cfg_output_channel", "Mono")).coerceAtLeast(0)
+        engine?.setTxOutput(Math.pow(10.0, -outAttenuation() / 10.0 / 20.0).toFloat(), channel)
+    }
+
+    private fun onOutAttenuationChanged() {
+        if (pwrBandSetOk) {
+            val prefs = PreferenceManager.getDefaultSharedPreferences(this)
+            if (!tuneOn && prefs.getBoolean("js8cfg_pwr_band_tx", false)) rememberPower(PREF_PWR_TX_MEMORY, outAttenuation())
+            if (tuneOn && prefs.getBoolean("js8cfg_pwr_band_tune", false)) rememberPower(PREF_PWR_TUNE_MEMORY, outAttenuation())
+        }
+        applyTxOutput()
+    }
+
+    /** "20m=100,40m=90" (PC QVariantHash m_pwrBandTxMemory / m_pwrBandTuneMemory). */
+    private fun powerMemory(key: String): Map<String, Int> =
+        PreferenceManager.getDefaultSharedPreferences(this).getString(key, "").orEmpty().split(',')
+            .mapNotNull { e -> e.split('=').takeIf { it.size == 2 }?.let { p -> p[1].toIntOrNull()?.let { p[0] to it } } }.toMap()
+
+    private fun rememberPower(key: String, attenuation: Int) {
+        val text = (powerMemory(key) + (pwrLastBand to attenuation)).entries.joinToString(",") { "${it.key}=${it.value}" }
+        PreferenceManager.getDefaultSharedPreferences(this).edit().putString(key, text).apply()
+    }
+
+    private fun setOutAttenuation(attenuation: Int) {
+        PreferenceManager.getDefaultSharedPreferences(this).edit().putString(PREF_OUT_ATTENUATION, attenuation.toString()).apply()
+    }
+
+    /** Service starting: the Power slider may have moved while nothing listened. Same band = keep it. */
+    private fun startPowerMemory() {
+        val prefs = PreferenceManager.getDefaultSharedPreferences(this)
+        pwrLastBand = prefs.getString(PREF_PWR_LAST_BAND, "").orEmpty()
+        if (pwrLastBand == bandName() && prefs.getBoolean("js8cfg_pwr_band_tx", false)) rememberPower(PREF_PWR_TX_MEMORY, outAttenuation())
+        bandChanged()
+    }
+
+    private fun bandName() = com.js8call.example.util.BandUtils.bandLabelForFrequencyHz(currentDialHz)
+
+    /** PC band_changed. */
+    private fun bandChanged() {
+        val band = bandName()
+        if (currentDialHz <= 0L || band == pwrLastBand) return
+        pwrLastBand = band
+        val prefs = PreferenceManager.getDefaultSharedPreferences(this)
+        prefs.edit().putString(PREF_PWR_LAST_BAND, band).apply()
+        if (prefs.getBoolean("js8cfg_pwr_band_tx", false) && !tuneOn) {
+            val remembered = powerMemory(PREF_PWR_TX_MEMORY)[band]
+            if (remembered != null) setOutAttenuation(remembered) else rememberPower(PREF_PWR_TX_MEMORY, outAttenuation())
+        }
+    }
+
+    /** PC on_tuneButton_clicked, starting: remember the Tx power, go to the Tune power. */
+    private fun startTuning() {
+        if (tuneOn) return
+        if (PreferenceManager.getDefaultSharedPreferences(this).getBoolean("js8cfg_pwr_band_tune", false)) {
+            rememberPower(PREF_PWR_TX_MEMORY, outAttenuation())
+            pwrBandSetOk = false
+            powerMemory(PREF_PWR_TUNE_MEMORY)[pwrLastBand]?.let { setOutAttenuation(it) }
+            pwrBandSetOk = true
+        }
+        tuneOn = true
+    }
+
+    /** PC end_tuning: remember the Tune power, back to the Tx power. */
+    private fun endTuning() {
+        if (!tuneOn) return
+        tuneOn = false
+        val prefs = PreferenceManager.getDefaultSharedPreferences(this)
+        if (prefs.getBoolean("js8cfg_pwr_band_tune", false) || prefs.getBoolean("js8cfg_pwr_band_tx", false)) {
+            rememberPower(PREF_PWR_TUNE_MEMORY, outAttenuation())
+            pwrBandSetOk = false
+            powerMemory(PREF_PWR_TX_MEMORY)[pwrLastBand]?.let { setOutAttenuation(it) }
+            pwrBandSetOk = true
+        }
     }
 
     /**
@@ -4856,8 +5261,8 @@ class JS8EngineService : Service() {
         val ok = when (mode) {
             "emulate" -> setRigFrequency(txHz) // PC EmulateSplitTransceiver
             "rig" -> when (rigControlMode) {
-                "network" -> rigCtlClient?.setSplit(txHz, true) == true
-                else -> hamlibRigControl?.setSplit(txHz, true) == true
+                "network" -> rigCtlClient?.setSplit(applyCalibration(txHz), true) == true
+                else -> hamlibRigControl?.setSplit(applyCalibration(txHz), true) == true
             }
             else -> true
         }
@@ -4878,10 +5283,10 @@ class JS8EngineService : Service() {
         splitHeld = "none"
         when (held) {
             "emulate" -> when (mode) {
-                "network" -> network?.setFrequency(dialHz)
-                "hamlib_usb" -> hamlib?.setFrequency(dialHz)
-                "trusdx_serial" -> trusdx?.setFrequency(dialHz)
-                "qmx_serial" -> qmx?.setFrequency(dialHz)
+                "network" -> network?.setFrequency(applyCalibration(dialHz))
+                "hamlib_usb" -> hamlib?.setFrequency(applyCalibration(dialHz))
+                "trusdx_serial" -> trusdx?.setFrequency(applyCalibration(dialHz))
+                "qmx_serial" -> qmx?.setFrequency(applyCalibration(dialHz))
             }
             "rig" -> if (mode == "network") network?.setSplit(0, false) else hamlib?.setSplit(0, false)
         }
@@ -4946,7 +5351,6 @@ class JS8EngineService : Service() {
         private const val PREF_MY_INFO = "my_info"
         private const val PREF_MY_STATUS = "my_status"
         private const val PREF_PSK_REPORTER = "psk_reporter"
-        private const val RIG_STATUS_POLL_INTERVAL_MS = 2000L
         private const val PREF_TRUSDX_DIAGNOSTICS_ENABLED = "trusdx_diagnostics_enabled"
         private const val HEARD_LIMIT = 4
         private const val HEARD_WINDOW_MS = 15 * 60 * 1000L
@@ -4958,12 +5362,14 @@ class JS8EngineService : Service() {
         private const val SUBMODE_FAST = 1
         private const val SUBMODE_TURBO = 2
         private const val SUBMODE_SLOW = 4
+        private const val SUBMODE_ULTRA = 8
         // Decoder bits: 1 << SubmodeId (core/include/js8core/protocol/submode.hpp)
         private const val RX_BIT_NORMAL = 1
         private const val RX_BIT_FAST = 2
         private const val RX_BIT_TURBO = 4
         private const val RX_BIT_SLOW = 8
-        private const val RX_BITS_ALL = RX_BIT_NORMAL or RX_BIT_FAST or RX_BIT_TURBO or RX_BIT_SLOW
+        private const val RX_BIT_ULTRA = 16
+        private const val RX_BITS_ALL = RX_BIT_NORMAL or RX_BIT_FAST or RX_BIT_TURBO or RX_BIT_SLOW or RX_BIT_ULTRA
 
         // Heartbeat sub-band, matching the desktop app
         private const val HB_SUBBAND_LOW_HZ = 500
@@ -5001,6 +5407,12 @@ class JS8EngineService : Service() {
         const val EXTRA_FT8_TEXT = "ft8_text"
         const val EXTRA_FT8_CALL_DE = "ft8_call_de"
         const val PREF_SHOW_FT8 = "js8cfg_show_ft8"
+        /** Settings > Power: PC outAttenuation, 0-450, a / 10 dB. */
+        const val PREF_OUT_ATTENUATION = "js8cfg_out_attenuation"
+        private const val PREF_PWR_TX_MEMORY = "js8cfg_pwr_band_tx_memory"
+        private const val PREF_PWR_TUNE_MEMORY = "js8cfg_pwr_band_tune_memory"
+        private const val PREF_PWR_LAST_BAND = "js8cfg_pwr_last_band"
+        private const val PREF_LAST_MONITORED = "js8cfg_last_monitored_hz"
         const val EXTRA_TX_FRAME_TEXT = "tx_frame_text"
         const val EXTRA_TX_FRAME_INDEX = "tx_frame_index"
         const val EXTRA_TX_FRAME_COUNT = "tx_frame_count"
@@ -5027,6 +5439,7 @@ class JS8EngineService : Service() {
         const val EXTRA_SYNC_STATS_ON = "sync_stats_on"
         const val ACTION_RIG_STATUS = "com.js8call.example.ACTION_RIG_STATUS"
         const val ACTION_TEST_CAT = "com.js8call.example.ACTION_TEST_CAT"
+        const val ACTION_READ_RIG = "com.js8call.example.ACTION_READ_RIG"
         const val ACTION_TEST_PTT = "com.js8call.example.ACTION_TEST_PTT"
         const val ACTION_RIG_TEST = "com.js8call.example.ACTION_RIG_TEST"
         const val EXTRA_RIG_TEST_KIND = "rig_test_kind"
@@ -5050,6 +5463,27 @@ class JS8EngineService : Service() {
         /** Waiting out the Scheduled Frequency Change countdown; 0 = none. */
         @Volatile var pendingHopHz = 0L
         @Volatile var pendingHopEndMs = 0L
+        const val ACTION_IDLE_TIMEOUT = "com.js8call.example.ACTION_IDLE_TIMEOUT"
+        const val ACTION_IDLE_OK = "com.js8call.example.ACTION_IDLE_OK"
+        private const val PREF_HB_TIMES = "js8cfg_hb_rate_times"
+        /** Last touch or key on any screen (PC eventFilter resetIdleTimer). */
+        @Volatile var lastUserMs = System.currentTimeMillis()
+        /** Non-zero: timed out after this many minutes, waiting for the Idle Timeout box's OK. */
+        @Volatile var idleTimedOutMinutes = 0L
+        const val ACTION_AUTOREPLY_CONFIRM = "com.js8call.example.ACTION_AUTOREPLY_CONFIRM"
+        const val ACTION_AUTOREPLY_CONFIRM_ANSWER = "com.js8call.example.ACTION_AUTOREPLY_CONFIRM_ANSWER"
+        const val EXTRA_CONFIRM_ID = "confirm_id"
+        const val EXTRA_CONFIRM_ACCEPTED = "confirm_accepted"
+        const val EXTRA_CONFIRM_FROM_API = "confirm_from_api"
+        const val AUTOREPLY_CONFIRM_SECONDS = 90
+        private var nextConfirmId = 1
+
+        /** An autoreply waiting for its Yes / No (PC PendingConfirmation). */
+        class AutoReplyConfirm(val id: Int, val text: String, val directed: String?, val priority: Int) {
+            val endMs = System.currentTimeMillis() + AUTOREPLY_CONFIRM_SECONDS * 1000L
+        }
+        val autoReplyConfirms = java.util.concurrent.CopyOnWriteArrayList<AutoReplyConfirm>()
+
         /** A message is queued or going out (the queue lives in TransmitViewModel). */
         @Volatile var messageQueued = false
         private const val BAND_HOP_CHECK_MS = 15_000L
@@ -5143,7 +5577,6 @@ class JS8EngineService : Service() {
         private const val TRUSDX_RX_STALL_REARM_NS = 2_000_000_000L
         private const val TRUSDX_RX_REARM_COOLDOWN_NS = 2_500_000_000L
         private const val TRUSDX_RX_KEEPALIVE_INTERVAL_MS = 2000L
-        private const val PTT_LEAD_TIME_MS = 500
         private const val PTT_COMMAND_RETRIES = 1
         private const val TX_PREKEY_MONITOR_INTERVAL_MS = 25L
         private const val TX_MONITOR_INTERVAL_MS = 250L

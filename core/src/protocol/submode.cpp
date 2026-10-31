@@ -11,7 +11,7 @@ constexpr Submode kDefaults[] = {
     {SubmodeId::B, "B", 1200, 10, 200, true},
     {SubmodeId::C, "C", 600, 6, 100, true},
     {SubmodeId::E, "E", 3840, 30, 500, true},
-    {SubmodeId::I, "I", 384, 4, 100, false},  // disabled by default
+    {SubmodeId::I, "I", 384, 4, 100, true},  // PC JS8_ENABLE_JS8I
 };
 
 }  // namespace

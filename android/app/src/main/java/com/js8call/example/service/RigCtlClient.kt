@@ -89,6 +89,9 @@ class RigCtlClient(
         return response.startsWith("RPRT 0")
     }
 
+    /** The rig's dial in Hz, 0 when it can't be read. */
+    fun getFrequency(): Long = sendCommand("f")?.trim()?.toDoubleOrNull()?.toLong() ?: 0L
+
     /** Split on with the TX VFO at txFrequencyHz, or split off. */
     fun setSplit(txFrequencyHz: Long, enabled: Boolean): Boolean {
         val vfo = sendCommand(if (enabled) "S 1 VFOB" else "S 0 VFOA") ?: return false
@@ -97,7 +100,9 @@ class RigCtlClient(
         return response.startsWith("RPRT 0")
     }
 
-    fun setPtt(enabled: Boolean): Boolean {
+    /** rearData: rigctl's PTT data (PC back_ptt_port_); a server that refuses it gets plain PTT. */
+    fun setPtt(enabled: Boolean, rearData: Boolean = false): Boolean {
+        if (enabled && rearData && sendCommand("T 3")?.startsWith("RPRT 0") == true) return true
         val response = sendCommand("T ${if (enabled) 1 else 0}") ?: return false
         return response.startsWith("RPRT 0")
     }

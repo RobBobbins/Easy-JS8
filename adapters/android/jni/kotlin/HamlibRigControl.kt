@@ -47,7 +47,10 @@ class HamlibRigControl {
         baudRate: Int,
         dataBits: Int,
         stopBits: Int,
-        parity: String
+        parity: String,
+        handshake: String = "None",
+        dtrState: String = "",
+        rtsState: String = ""
     ): Boolean {
         close()
         val nativeHandle = nativeOpenWithPath(
@@ -56,7 +59,10 @@ class HamlibRigControl {
             baudRate,
             dataBits,
             stopBits,
-            parity
+            parity,
+            handshake,
+            dtrState,
+            rtsState
         )
         if (nativeHandle == 0L) {
             return false
@@ -88,11 +94,19 @@ class HamlibRigControl {
         return nativeSetSplit(active, txFrequencyHz, enabled)
     }
 
+    /** The rig's dial in Hz, 0 when it can't be read. */
     @Synchronized
-    fun setPtt(enabled: Boolean): Boolean {
+    fun getFrequency(): Long {
+        val active = handle
+        if (active == 0L) return 0L
+        return nativeGetFrequency(active)
+    }
+
+    @Synchronized
+    fun setPtt(enabled: Boolean, rearData: Boolean = false): Boolean {
         val active = handle
         if (active == 0L) return false
-        return nativeSetPtt(active, enabled)
+        return nativeSetPtt(active, enabled, rearData)
     }
 
     @Synchronized
@@ -123,12 +137,16 @@ class HamlibRigControl {
         baudRate: Int,
         dataBits: Int,
         stopBits: Int,
-        parity: String
+        parity: String,
+        handshake: String,
+        dtrState: String,
+        rtsState: String
     ): Long
 
     private external fun nativeClose(handle: Long)
     private external fun nativeSetFrequency(handle: Long, frequencyHz: Long): Boolean
-    private external fun nativeSetPtt(handle: Long, enabled: Boolean): Boolean
+    private external fun nativeGetFrequency(handle: Long): Long
+    private external fun nativeSetPtt(handle: Long, enabled: Boolean, rearData: Boolean): Boolean
     private external fun nativeSetSplit(handle: Long, txFrequencyHz: Long, enabled: Boolean): Boolean
     private external fun nativeSetMode(handle: Long, mode: String, passband: Int): Boolean
     private external fun nativeGetLastError(): String

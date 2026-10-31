@@ -94,6 +94,7 @@
 
     <!-- Header -->
     <FrameLayout
+        android:id="@+id/js8_pc_header"
         android:layout_width="1047dp"
         android:layout_height="88dp"
         android:layout_marginStart="15dp"
@@ -269,6 +270,7 @@
 
     <!-- Status Bar -->
     <include
+        android:id="@+id/js8_pc_statusbar"
         layout="@layout/js8_status_bar"
         android:layout_width="1062dp"
         android:layout_height="22dp"

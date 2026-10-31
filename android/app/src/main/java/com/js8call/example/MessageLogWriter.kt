@@ -26,6 +26,10 @@ class MessageLogWriter(private val context: Context) {
         timeZone = TimeZone.getDefault()
     }
 
+    private val directedTimeFormatter = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).apply {
+        timeZone = TimeZone.getTimeZone("UTC")
+    }
+
     @Volatile
     private var enabled = false
     private var logTarget: LogTarget? = null
@@ -72,6 +76,26 @@ class MessageLogWriter(private val context: Context) {
         val toPart = if (!to.isNullOrBlank()) " TO=$to" else ""
         val line = "$timestamp TX$toPart FREQ=${formatFrequency(freqHz)} MODE=$mode TEXT=\"${sanitizeText(text)}\""
         enqueue(line)
+    }
+
+    /** PC writeMsgTxt: DIRECTED.TXT, UTC date, dial MHz, offset, SNR and text, tab separated. */
+    fun logDirected(dialHz: Long, offset: Int, snr: String, text: String) {
+        if (!enabled) return
+        val line = directedTimeFormatter.format(Date()) + "\t" + String.format(Locale.US, "%.6f", dialHz / 1_000_000.0) +
+            "\t$offset\t$snr\t$text\n"
+        executor.execute {
+            try {
+                val bytes = line.toByteArray(Charsets.UTF_8)
+                if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                    val uri = findMediaStoreEntry(DIRECTED_NAME) ?: createMediaStoreEntry(DIRECTED_NAME)
+                    uri?.let { writeToMediaStore(it, bytes) }
+                } else {
+                    (ensureLegacyFileTarget() as? LogTarget.FileTarget)?.let { writeToFile(File(it.file.parentFile, DIRECTED_NAME), bytes) }
+                }
+            } catch (e: Exception) {
+                Log.w(TAG, "Failed writing DIRECTED.TXT", e)
+            }
+        }
     }
 
     private fun enqueue(line: String) {
@@ -254,6 +278,7 @@ class MessageLogWriter(private val context: Context) {
         private const val LOG_DIR = "JS8CallLogs"
         private const val LOG_NAME = "js8call-log.txt"
         private const val LOG_BACKUP_NAME = "js8call-log.1.txt"
+        private const val DIRECTED_NAME = "DIRECTED.TXT"
         private const val LOG_MAX_BYTES = 10L * 1024L * 1024L
         private const val TIMESTAMP_FORMAT = "yyyy-MM-dd HH:mm:ss Z"
         private val RELATIVE_PATH = Environment.DIRECTORY_DOWNLOADS + "/JS8CallLogs/"

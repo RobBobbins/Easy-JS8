@@ -119,6 +119,13 @@ class TruSdxSerialSession(
         return true
     }
 
+    /** Asks for the dial; the answer comes through Listener.onCatMessage as FA...; */
+    fun readFrequency(): Boolean {
+        if (!connected) return false
+        serialCatExchange("FA;", expectReply = false)
+        return true
+    }
+
     fun setPtt(enabled: Boolean): Boolean {
         if (!connected) return false
         synchronized(writeLock) {

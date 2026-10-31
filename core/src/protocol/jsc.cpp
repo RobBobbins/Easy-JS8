@@ -163,6 +163,10 @@ std::string decompress(Codeword const& bitvec) {
   return joined;
 }
 
+std::string word_at(std::uint32_t index) {
+  return std::string(JSC_MAP[index].str, static_cast<std::size_t>(JSC_MAP[index].size));
+}
+
 bool exists(std::string const& w, std::uint32_t* pIndex) {
   bool found = false;
   auto idx = lookup(w, &found);

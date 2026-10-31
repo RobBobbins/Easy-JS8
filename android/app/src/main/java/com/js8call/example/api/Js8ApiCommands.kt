@@ -205,8 +205,16 @@ class Js8ApiCommands(private val context: Context) {
                 reply("STATION.AUTOREPLY_CONFIRMATION", "", mapOf("_ID" to id, "AUTOREPLY_CONFIRMATION" to checked))
                 return
             }
-            // Easy JS8 sends autoreplies without asking, so there is never one waiting
-            "STATION.AUTOREPLY_CONFIRM_RESPONSE" -> return
+            "STATION.AUTOREPLY_CONFIRM_RESPONSE" -> {
+                val confirmId = ApiMessage.toIntOrNull(params["CONFIRM_ID"]) ?: -1
+                val accepted = ApiMessage.toBool(message.value)
+                service(JS8EngineService.ACTION_AUTOREPLY_CONFIRM_ANSWER) {
+                    putExtra(JS8EngineService.EXTRA_CONFIRM_ID, confirmId)
+                    putExtra(JS8EngineService.EXTRA_CONFIRM_ACCEPTED, accepted)
+                    putExtra(JS8EngineService.EXTRA_CONFIRM_FROM_API, true)
+                }
+                return
+            }
             "STATION.SET_GROUPS" -> {
                 val newGroups = mutableListOf<String>()
                 (params["GROUPS"] as? List<*>)?.forEach { v ->
@@ -300,9 +308,9 @@ class Js8ApiCommands(private val context: Context) {
             // ---- MODE -------------------------------------------------------------------------
             "MODE.GET_SPEED" -> { reply("MODE.SPEED", "", mapOf("_ID" to id, "SPEED" to api.speed())); return }
             "MODE.SET_SPEED" -> {
-                // Normal 0, Fast 1, 40 2, Slow 4; JS8 60 (8) cannot be sent here, so it is left alone
+                // Normal 0, Fast 1, 40 2, Slow 4, JS8 60 8
                 val speed = if (params.containsKey("SPEED")) ApiMessage.toIntOrNull(params["SPEED"]) else null
-                if (speed != null && speed in setOf(0, 1, 2, 4)) {
+                if (speed != null && speed in setOf(0, 1, 2, 4, 8)) {
                     prefs().edit().putInt("tx_submode", speed).apply()
                     refresh()
                 }

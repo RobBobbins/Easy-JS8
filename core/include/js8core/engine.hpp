@@ -80,6 +80,7 @@ struct EngineConfig {
   int tx_output_rate_hz = 48000;
   float tx_output_gain = 1.0f;
   bool tx_output_gain_boost_enabled = false;
+  int tx_output_channel = 0;  // PC AudioDevice::Channel: 0 Mono, 1 Left, 2 Right, 3 Both
 };
 
 struct TxMessageRequest {
@@ -146,6 +147,7 @@ public:
   // Empty for TUNE and before the first frame.
   virtual std::vector<int> tx_current_tones() { return {}; }
   virtual void set_tx_boost_enabled(bool enabled) = 0;
+  virtual void set_tx_output(float gain, int channel) = 0;
   virtual void set_submodes(int submodes) = 0;
   virtual void set_sync_stats(bool enabled) = 0;
   // Waterfall Controls > Timing > Start Automatic Time Drift (PC WideGraph::isAutoSyncEnabled):

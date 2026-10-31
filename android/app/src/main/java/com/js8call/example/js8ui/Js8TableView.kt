@@ -24,7 +24,7 @@ import com.js8call.example.R
  * - Header row in the list-header colors, body white, like the JS8Call QTableWidget.
  * - The whole table scrolls sideways; the body scrolls up/down.
  * - Tap a column header: sort by it (tap again: reverse).
- * - Press and hold a column header: checklist to show/hide columns (saved per table).
+ * - Press and hold a column header: Sort By... and Show Columns... (saved per table).
  */
 class Js8TableView @JvmOverloads constructor(
     context: Context,
@@ -33,6 +33,10 @@ class Js8TableView @JvmOverloads constructor(
 
     companion object {
         val SELECTED_BG = android.graphics.Color.parseColor("#3498DB")
+        private const val MINIMAL_KEY = "js8_table_all_col_minimal_labels"
+        /** PC buildColumnLabelMap. */
+        private val MINIMAL_LABELS = mapOf("Callsigns" to "Call", "Offset" to "Off", "SNR" to "SN", "Time Delta" to "TD",
+            "Mode Speed" to "Sp", "Distance" to "Dist", "Azimuth" to "Az")
     }
 
     data class Column(
@@ -47,6 +51,10 @@ class Js8TableView @JvmOverloads constructor(
     )
 
     /** One row: values keyed by column key, plus an optional sort value per key. */
+    private var tableBg: Int? = null
+    private var textColor: Int? = null
+    private var selectedBg = SELECTED_BG
+
     data class Row(
         val id: String,
         val values: Map<String, String>,
@@ -77,6 +85,8 @@ class Js8TableView @JvmOverloads constructor(
     private var sortAscending = true
     /** Sort used until a header is tapped (Band / Call Activity: last heard, recent first, Rob 2026-10-22). */
     var defaultSortKey: String? = null
+    /** PC Sort By menu: label, column key, ascending. */
+    var sortChoices: List<Triple<String, String, Boolean>> = emptyList()
 
     private val dp = resources.displayMetrics.density
     private val font: Typeface? = ResourcesCompat.getFont(context, R.font.selawik)
@@ -121,6 +131,17 @@ class Js8TableView @JvmOverloads constructor(
     }
 
     /** Configuration > Colors > Font: 1 is the size this table was built for. */
+    /** Station > UI: Table Background, Foreground Color, Selected Row Background (null = the theme's). */
+    fun setColors(background: Int?, foreground: Int?, selected: Int?) {
+        val newSelected = selected ?: SELECTED_BG
+        if (background == tableBg && foreground == textColor && newSelected == selectedBg) return
+        tableBg = background
+        textColor = foreground
+        selectedBg = newSelected
+        list.setBackgroundColor(background ?: ContextCompat.getColor(context, R.color.js8_list_bg))
+        list.adapter?.notifyDataSetChanged()
+    }
+
     fun setTextScale(scale: Float) {
         val px = resources.getDimension(R.dimen.js8_text) * scale
         if (px == textSizePx) return
@@ -224,13 +245,18 @@ class Js8TableView @JvmOverloads constructor(
         }
     }
 
+    private fun showLabels() = PreferenceManager.getDefaultSharedPreferences(context).getBoolean(labelsKey(), true)
+    private fun minimalLabels() = PreferenceManager.getDefaultSharedPreferences(context).getBoolean(MINIMAL_KEY, false)
+    private fun labelsKey() = "js8_table_${tableKey}_col_labels"
+
     private fun rebuildHeader() {
         header.removeAllViews()
+        header.visibility = if (showLabels()) VISIBLE else GONE
         val vis = visibleColumns()
         val widths = columnWidths()
         vis.forEachIndexed { i, col ->
             val label = TextView(context).apply {
-                text = col.label
+                text = if (minimalLabels()) MINIMAL_LABELS[col.label] ?: col.label else col.label
                 typeface = font
                 setTextSize(TypedValue.COMPLEX_UNIT_PX, textSizePx)
                 setTextColor(ContextCompat.getColor(context, R.color.js8_list_header_text))
@@ -243,7 +269,7 @@ class Js8TableView @JvmOverloads constructor(
                 isSingleLine = true
                 includeFontPadding = false
                 setOnClickListener { onHeaderTap(col) }
-                setOnLongClickListener { showColumnChooser(); true }
+                setOnLongClickListener { showHeaderMenu(); true }
             }
             header.addView(label, LinearLayout.LayoutParams(widths[i], ViewGroup.LayoutParams.MATCH_PARENT))
         }
@@ -274,15 +300,39 @@ class Js8TableView @JvmOverloads constructor(
     }
 
 
-    private fun showColumnChooser() {
-        val labels = columns.map { it.menuLabel }.toTypedArray()
-        val checked = columns.map { isVisible(it) }.toBooleanArray()
+    private fun showHeaderMenu() {
+        AlertDialog.Builder(context)
+            .setItems(arrayOf("Sort By...", "Show Columns...")) { _, which ->
+                if (which == 0) showSortMenu() else showColumnChooser()
+            }.show()
+    }
+
+    /** PC buildSortByMenu: the current sort is ticked. */
+    fun showSortMenu() {
+        val current = sortChoices.indexOfFirst { it.second == sortKey && it.third == sortAscending }
+        AlertDialog.Builder(context)
+            .setTitle("Sort By")
+            .setSingleChoiceItems(sortChoices.map { it.first }.toTypedArray(), current) { d, which ->
+                sortKey = sortChoices[which].second
+                sortAscending = sortChoices[which].third
+                PreferenceManager.getDefaultSharedPreferences(context).edit()
+                    .putString(sortPref(), sortKey).putBoolean(sortPref() + "_asc", sortAscending).apply()
+                applySort()
+                d.dismiss()
+            }.show()
+    }
+
+    /** PC buildShowColumnsMenu: the two label options, then the columns. */
+    fun showColumnChooser() {
+        val p = PreferenceManager.getDefaultSharedPreferences(context)
+        val labels = (listOf("Show Column Labels", "Minimal Column Labels") + columns.map { it.menuLabel }).toTypedArray()
+        val checked = (listOf(showLabels(), minimalLabels()) + columns.map { isVisible(it) }).toBooleanArray()
         AlertDialog.Builder(context)
             .setTitle("Show Columns")
             .setMultiChoiceItems(labels, checked) { _, which, isChecked -> checked[which] = isChecked }
             .setPositiveButton(android.R.string.ok) { _, _ ->
-                val editor = PreferenceManager.getDefaultSharedPreferences(context).edit()
-                columns.forEachIndexed { i, c -> editor.putBoolean(prefKey(c), checked[i]) }
+                val editor = p.edit().putBoolean(labelsKey(), checked[0]).putBoolean(MINIMAL_KEY, checked[1])
+                columns.forEachIndexed { i, c -> editor.putBoolean(prefKey(c), checked[i + 2]) }
                 editor.apply()
                 rebuildHeader()
             }
@@ -326,7 +376,7 @@ class Js8TableView @JvmOverloads constructor(
             }
             val selected = row.id == selectedRowId
             // Selected row: desktop colorTableHighlight #3498db
-            rv.setBackgroundColor(if (selected) SELECTED_BG else row.bg ?: 0)
+            rv.setBackgroundColor(if (selected) selectedBg else row.bg ?: 0)
             val face = if (row.bold) boldFont else font
             vis.forEachIndexed { i, col ->
                 val tv = rv.getChildAt(i) as TextView
@@ -334,7 +384,7 @@ class Js8TableView @JvmOverloads constructor(
                 if (tv.text.toString() != text) tv.text = text
                 if (tv.textSize != textSizePx) tv.setTextSize(TypedValue.COMPLEX_UNIT_PX, textSizePx)
                 if (tv.typeface != face) tv.typeface = face
-                tv.setTextColor(row.colors[col.key] ?: ContextCompat.getColor(context, R.color.js8_list_text))
+                tv.setTextColor(row.colors[col.key] ?: textColor ?: ContextCompat.getColor(context, R.color.js8_list_text))
                 val g = Gravity.CENTER_VERTICAL or when {
                     col.key in row.center -> Gravity.CENTER_HORIZONTAL
                     col.numeric -> Gravity.END

@@ -95,7 +95,7 @@ class Js8Activity {
         }
 
         /** Speeds the engine can send; anything else goes out as Normal (getPreferredTxSubmode). */
-        fun txSubmode(stored: Int) = if (stored in setOf(SUBMODE_NORMAL, SUBMODE_FAST, SUBMODE_TURBO, SUBMODE_SLOW)) stored else SUBMODE_NORMAL
+        fun txSubmode(stored: Int) = if (stored in setOf(SUBMODE_NORMAL, SUBMODE_FAST, SUBMODE_TURBO, SUBMODE_SLOW, SUBMODE_ULTRA)) stored else SUBMODE_NORMAL
 
         /** Status bar mode label (updateModeButtonText). */
         fun modeLabel(submode: Int) = when (submode) {
@@ -196,6 +196,7 @@ class Js8Activity {
         // stored as a boolean by Settings OK; read without assuming the type
         val avoidAllcall = prefs.all["js8cfg_avoid_allcall"]?.toString()?.toBoolean() ?: false
         val eot = prefs.getString("js8cfg_eot", "♢").orEmpty().ifEmpty { "♢" }
+        val mfi = prefs.getString("js8cfg_mfi", "……").orEmpty()
         val blocklist = prefs.getString("js8cfg_rx_blocklist", "").orEmpty().split(',', ' ')
             .map { it.trim().uppercase() }.filter { it.isNotEmpty() }.toSet()
 
@@ -375,6 +376,28 @@ class Js8Activity {
      */
     fun writeTxFrame(text: String, offset: Int, first: Boolean, last: Boolean, cfg: Config, isData: Boolean = false) =
         writeRx(text, offset, System.currentTimeMillis(), isTx = true, newLine = first, isLast = last, cfg = cfg, isData = isData)
+
+    /**
+     * PC processIdleActivity: a message whose next frame didn't come within 1.5 periods gets the
+     * Missing Frame Character Indicator, in Band Activity and on its open Message Window line.
+     */
+    fun processIdle(now: Long, cfg: Config): Boolean {
+        if (cfg.mfi.isEmpty()) return false
+        var changed = false
+        bandActivity.forEach { (offset, list) ->
+            val last = list.lastOrNull() ?: return@forEach
+            if ((last.bits and 2) != 0 || last.text == cfg.mfi) return@forEach
+            if ((now - last.utcMs) < periodSec(last.submode) * 1500L) return@forEach
+            list += ActivityDetail(offset, cfg.mfi, last.snr, last.utcMs, last.tdrift, last.submode, 0, false, true)
+            while (list.size > 10) list.removeAt(0)
+            val bucket = offset / 10 * 10
+            if (openRxLine[offset] ?: openRxLine[bucket] ?: openRxLine[bucket + 10] != null) {
+                writeRx(cfg.mfi, offset, last.utcMs, isTx = false, newLine = false, isLast = false, cfg = cfg, isData = true)
+            }
+            changed = true
+        }
+        return changed
+    }
 
     /** Band Activity row text for one offset, with the hide rules of displayBandActivity.cpp. */
     fun bandRowText(offset: Int, now: Long, agingMin: Int, showHb: Boolean, selected: Boolean, eot: String): Pair<String, ActivityDetail?> {

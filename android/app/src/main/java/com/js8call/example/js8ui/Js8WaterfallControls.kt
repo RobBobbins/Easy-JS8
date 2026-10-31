@@ -60,7 +60,7 @@ class Js8WaterfallControls(
         private const val CENTER_MAX = 5000
         private const val FILTER_CENTER_MIN = 120
         private const val FILTER_CENTER_MAX = 4880
-        private const val FILTER_WIDTH_MIN = 120
+        const val FILTER_WIDTH_MIN = 120
         private const val FILTER_WIDTH_MAX = 5000
         private const val DRIFT_MAX = 30000
         private const val AUTO_AFTER_MAX = 1024
@@ -337,7 +337,10 @@ class Js8WaterfallControls(
         renderAll()
     }
 
-    private fun setFilterWidth(hz: Int) {
+    /** Waterfall menu: Disable Filter, or a center / width that also turns the filter on (WideGraph.cpp). */
+    fun tickFilter(on: Boolean) { v<CheckBox>(R.id.js8_wf_filter_enable)?.isChecked = on }
+
+    fun setFilterWidth(hz: Int) {
         filterWidth = hz.coerceIn(FILTER_WIDTH_MIN, FILTER_WIDTH_MAX)
         prefs.edit().putInt(KEY_FILTER_WIDTH, filterWidth).apply()
         renderAll()

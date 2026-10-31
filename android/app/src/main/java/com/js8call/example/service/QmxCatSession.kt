@@ -57,6 +57,9 @@ class QmxCatSession(
         return command(String.format(Locale.US, "FA%011d;", frequencyHz))
     }
 
+    /** Asks for the dial; the answer comes through Listener.onFrequency. */
+    fun readFrequency(): Boolean = command("FA;")
+
     fun setDigiMode(): Boolean = command("MD6;")
 
     fun setPtt(enabled: Boolean): Boolean = command(if (enabled) "TX;" else "RX;")

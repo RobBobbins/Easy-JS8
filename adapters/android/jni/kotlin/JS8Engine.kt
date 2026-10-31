@@ -54,6 +54,18 @@ class JS8Engine private constructor(
             forceIdentify: Boolean
         ): List<String> = nativeBuildFrameTexts(text, myCall, myGrid, selectedCall, submode, forceIdentify).toList()
 
+        /** PC JSCChecker::checkRange: false = the word would be underlined. */
+        fun jscCorrect(word: String): Boolean = nativeJscCorrect(word)
+
+        /** PC JSCChecker::suggestions. */
+        fun jscSuggestions(word: String, count: Int): List<String> = nativeJscSuggestions(word, count).toList()
+
+        @JvmStatic
+        private external fun nativeJscCorrect(word: String): Boolean
+
+        @JvmStatic
+        private external fun nativeJscSuggestions(word: String, count: Int): Array<String>
+
         @JvmStatic
         private external fun nativeBuildFrameTexts(
             text: String,
@@ -143,6 +155,16 @@ class JS8Engine private constructor(
      */
     fun setTxBoostEnabled(enabled: Boolean) {
         withNativeHandle { nativeSetTxBoostEnabled(it, enabled) }
+    }
+
+    /**
+     * Tx audio level and output channel (PC outAttenuation, Output channel).
+     *
+     * @param gain 0.0 to 1.0
+     * @param channel 0 Mono, 1 Left, 2 Right, 3 Both
+     */
+    fun setTxOutput(gain: Float, channel: Int) {
+        withNativeHandle { nativeSetTxOutput(it, gain, channel) }
     }
 
     /**
@@ -374,6 +396,7 @@ class JS8Engine private constructor(
     private external fun nativeSetSubmodes(handle: Long, submodes: Int)
     private external fun nativeSetOutputDevice(handle: Long, deviceId: Int)
     private external fun nativeSetTxBoostEnabled(handle: Long, enabled: Boolean)
+    private external fun nativeSetTxOutput(handle: Long, gain: Float, channel: Int)
     private external fun nativeIsRunning(handle: Long): Boolean
     private external fun nativeTransmitMessage(
         handle: Long,

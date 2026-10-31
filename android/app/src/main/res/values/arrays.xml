@@ -33,7 +33,9 @@
 
     <!-- JS8Call Frequency Options -->
     <string-array name="js8_frequency_entries">
+        <item>160m - 1.8435 MHz</item>
         <item>80m - 3.578 MHz</item>
+        <item>60m - 5.363 MHz</item>
         <item>40m - 7.078 MHz</item>
         <item>30m - 10.130 MHz</item>
         <item>20m - 14.078 MHz</item>
@@ -45,7 +47,9 @@
         <item>2m - 144.178 MHz</item>
     </string-array>
     <string-array name="js8_frequency_values">
+        <item>1843500</item>
         <item>3578000</item>
+        <item>5363000</item>
         <item>7078000</item>
         <item>10130000</item>
         <item>14078000</item>

@@ -72,6 +72,15 @@ class WaterfallView @JvmOverloads constructor(
 
     // Callback for a tap: the frequency under the finger. The owner applies it.
     var onOffsetChanged: ((Float) -> Unit)? = null
+    /** Press and hold (PC right-click): the whole Hz under the finger. */
+    var onHold: ((Int) -> Unit)? = null
+    private var holdFired = false
+    private var downX = 0f
+    private var downY = 0f
+    private val holdRunnable = Runnable {
+        holdFired = true
+        onHold?.invoke(kotlin.math.floor(startHz() + downX * hzPerPixel()).toInt())
+    }
 
     /** Hz at the left edge (Waterfall Controls > Display > Start). */
     fun startHz(): Float = renderer?.startHz() ?: 0f
@@ -172,9 +181,21 @@ class WaterfallView @JvmOverloads constructor(
     override fun onTouchEvent(event: android.view.MotionEvent): Boolean {
         when (event.action) {
             android.view.MotionEvent.ACTION_DOWN -> {
+                holdFired = false
+                downX = event.x
+                downY = event.y
+                postDelayed(holdRunnable, android.view.ViewConfiguration.getLongPressTimeout().toLong())
                 return true
             }
+            android.view.MotionEvent.ACTION_MOVE -> {
+                val slop = android.view.ViewConfiguration.get(context).scaledTouchSlop
+                if (kotlin.math.abs(event.x - downX) > slop || kotlin.math.abs(event.y - downY) > slop) removeCallbacks(holdRunnable)
+                return true
+            }
+            android.view.MotionEvent.ACTION_CANCEL -> removeCallbacks(holdRunnable)
             android.view.MotionEvent.ACTION_UP -> {
+                removeCallbacks(holdRunnable)
+                if (holdFired) return true
                 // CPlotter::mouseReleaseEvent: offset = whole Hz under the finger
                 val hzPerPx = hzPerPixel()
                 if (hzPerPx > 0f) {

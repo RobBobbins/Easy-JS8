@@ -27,7 +27,8 @@ class JS8AudioHelper(
     private val targetSampleRate: Int = 12000,  // Target rate for engine
     private var preferredDeviceId: Int = -1,  // -1 means use default
     private var context: Context? = null,
-    private var audioSourceOverride: Int = -1
+    private var audioSourceOverride: Int = -1,
+    private val inputChannel: String = "Mono"  // Station > Audio > Input channel
 ) : AutoCloseable {
 
     companion object {
@@ -278,6 +279,9 @@ class JS8AudioHelper(
                                 bestChannel = ch
                             }
                         }
+                        // PC AudioDevice::store: Right is channel 2; Left and Both take the left
+                        if (inputChannel == "Left" || inputChannel == "Both") bestChannel = 0
+                        if (inputChannel == "Right") bestChannel = 1
                         for (i in 0 until framesRead) {
                             out[i] = buffer[i * channels + bestChannel]
                         }
@@ -379,6 +383,8 @@ class JS8AudioHelper(
 
     private fun buildChannelMaskCandidates(device: AudioDeviceInfo?): List<Int> {
         val candidates = LinkedHashSet<Int>()
+        // PC SoundInput::start: two channels unless Mono
+        if (inputChannel != "Mono") candidates.add(AudioFormat.CHANNEL_IN_STEREO)
         val channelCounts = device?.channelCounts ?: IntArray(0)
         if (channelCounts.contains(1)) {
             candidates.add(AudioFormat.CHANNEL_IN_MONO)

@@ -7,13 +7,16 @@
 #include <chrono>
 #include <cstring>
 #include <limits>
+#include <map>
 #include <memory>
 #include <mutex>
+#include <set>
 #include <string>
 #include <thread>
 #include <vector>
 
 #include "js8core/engine.hpp"
+#include "js8core/protocol/jsc.hpp"
 #include "js8core/protocol/varicode.hpp"
 #include "js8core/dsp/resampler.hpp"
 #include "js8core/android/audio_oboe.hpp"
@@ -36,6 +39,7 @@ JNIEXPORT void JNICALL Java_com_js8call_core_JS8Engine_nativeSetFrequency(JNIEnv
 JNIEXPORT void JNICALL Java_com_js8call_core_JS8Engine_nativeSetSubmodes(JNIEnv*, jobject, jlong, jint);
 JNIEXPORT void JNICALL Java_com_js8call_core_JS8Engine_nativeSetOutputDevice(JNIEnv*, jobject, jlong, jint);
 JNIEXPORT void JNICALL Java_com_js8call_core_JS8Engine_nativeSetTxBoostEnabled(JNIEnv*, jobject, jlong, jboolean);
+JNIEXPORT void JNICALL Java_com_js8call_core_JS8Engine_nativeSetTxOutput(JNIEnv*, jobject, jlong, jfloat, jint);
 JNIEXPORT jboolean JNICALL Java_com_js8call_core_JS8Engine_nativeIsRunning(JNIEnv*, jobject, jlong);
 JNIEXPORT jboolean JNICALL Java_com_js8call_core_JS8Engine_nativeTransmitMessage(JNIEnv*, jobject, jlong, jstring, jstring, jstring, jstring, jint, jdouble, jdouble, jboolean, jboolean);
 JNIEXPORT jboolean JNICALL Java_com_js8call_core_JS8Engine_nativeTransmitFrame(JNIEnv*, jobject, jlong, jstring, jint, jint, jdouble, jdouble);
@@ -48,6 +52,8 @@ JNIEXPORT jint JNICALL Java_com_js8call_core_JS8Engine_nativeGetTxFramesStarted(
 JNIEXPORT jboolean JNICALL Java_com_js8call_core_JS8Engine_nativeGetTxFirstFrameIsData(JNIEnv*, jobject, jlong);
 JNIEXPORT jintArray JNICALL Java_com_js8call_core_JS8Engine_nativeGetTxFrameTones(JNIEnv*, jobject, jlong);
 JNIEXPORT jobjectArray JNICALL Java_com_js8call_core_JS8Engine_nativeBuildFrameTexts(JNIEnv*, jclass, jstring, jstring, jstring, jstring, jint, jboolean);
+JNIEXPORT jboolean JNICALL Java_com_js8call_core_JS8Engine_nativeJscCorrect(JNIEnv*, jclass, jstring);
+JNIEXPORT jobjectArray JNICALL Java_com_js8call_core_JS8Engine_nativeJscSuggestions(JNIEnv*, jclass, jstring, jint);
 JNIEXPORT void JNICALL Java_com_js8call_core_JS8Engine_nativeSetFt8Enabled(JNIEnv*, jobject, jlong, jboolean);
 JNIEXPORT void JNICALL Java_com_js8call_core_JS8Engine_nativeDebugFt8Recording(JNIEnv*, jobject, jlong, jshortArray);
 JNIEXPORT jint JNICALL Java_com_js8call_core_JS8Engine_nativeTxMillisecondsUntilAudio(JNIEnv*, jobject, jlong);
@@ -921,6 +927,11 @@ void js8_engine_set_tx_boost_enabled(JS8Engine_Native* engine, bool enabled) {
   engine->engine->set_tx_boost_enabled(enabled);
 }
 
+void js8_engine_set_tx_output(JS8Engine_Native* engine, float gain, int channel) {
+  if (!engine || !engine->engine) return;
+  engine->engine->set_tx_output(gain, channel);
+}
+
 int js8_engine_transmit_message(JS8Engine_Native* engine,
                                 const char* text,
                                 const char* my_call,
@@ -1013,6 +1024,61 @@ std::vector<std::string> js8_engine_tx_frame_texts(JS8Engine_Native* engine) {
 std::vector<int> js8_engine_tx_current_tones(JS8Engine_Native* engine) {
   if (!engine || !engine->engine) return {};
   return engine->engine->tx_current_tones();
+}
+
+// PC JSCChecker::checkRange: is this word sent efficiently?
+bool js8_jsc_correct(std::string const& word) {
+  namespace jsc = js8core::protocol::jsc;
+  bool numeric = !word.empty() && std::all_of(word.begin(), word.end(), [](unsigned char c) { return std::isdigit(c); });
+  if (word.size() < 4 || numeric) return true;
+  bool found = false;
+  auto index = jsc::lookup(word, &found);
+  if (found && jsc::word_at(index).size() == word.size()) return true;
+  return js8core::protocol::varicode::is_valid_callsign(word, nullptr);
+}
+
+// PC JSCChecker::suggestions: the word's prefix in the table and everything one edit away,
+// most common first (JSC index order)
+std::vector<std::string> js8_jsc_suggestions(std::string const& word, int n) {
+  namespace jsc = js8core::protocol::jsc;
+  std::multimap<std::uint32_t, std::string> m;
+  bool prefix_found = false;
+  auto index = jsc::lookup(word, &prefix_found);
+  if (prefix_found) {
+    auto prefix = jsc::word_at(index);
+    if (prefix.size() > 1) m.emplace(index, prefix);
+  }
+  std::set<std::string> one;
+  for (char c = 'A'; c <= 'Z'; ++c) {
+    one.insert(std::string(1, c) + word);
+    one.insert(word + c);
+    for (std::size_t j = 0; j < word.size(); ++j) {
+      auto edited = word;
+      edited[j] = c;
+      one.insert(edited);
+    }
+  }
+  for (std::size_t j = 0; j < word.size(); ++j) {
+    auto deleted = word;
+    deleted.erase(j, 1);
+    one.insert(deleted);
+  }
+  for (auto const& w : one) {
+    std::uint32_t i = 0;
+    if (!w.empty() && jsc::exists(w, &i)) {
+      bool duplicate = false;
+      auto range = m.equal_range(i);
+      for (auto it = range.first; it != range.second; ++it) duplicate = duplicate || it->second == w;
+      if (!duplicate) m.emplace(i, w);
+    }
+  }
+  std::vector<std::string> out;
+  int keys = 0;
+  for (auto it = m.begin(); it != m.end() && keys < n; it = m.upper_bound(it->first), ++keys) {
+    auto range = m.equal_range(it->first);
+    for (auto r = range.first; r != range.second; ++r) out.push_back(r->second);
+  }
+  return out;
 }
 
 std::vector<std::string> js8_build_frame_texts(std::string const& text, std::string const& my_call,
@@ -1118,6 +1184,7 @@ int js8_register_natives(JavaVM* vm, JNIEnv* env) {
     {"nativeSetSubmodes", "(JI)V", (void*)Java_com_js8call_core_JS8Engine_nativeSetSubmodes},
     {"nativeSetOutputDevice", "(JI)V", (void*)Java_com_js8call_core_JS8Engine_nativeSetOutputDevice},
     {"nativeSetTxBoostEnabled", "(JZ)V", (void*)Java_com_js8call_core_JS8Engine_nativeSetTxBoostEnabled},
+    {"nativeSetTxOutput", "(JFI)V", (void*)Java_com_js8call_core_JS8Engine_nativeSetTxOutput},
     {"nativeTransmitMessage", "(JLjava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;IDDZZ)Z",
      (void*)Java_com_js8call_core_JS8Engine_nativeTransmitMessage},
     {"nativeTransmitFrame", "(JLjava/lang/String;IIDD)Z",
@@ -1140,6 +1207,8 @@ int js8_register_natives(JavaVM* vm, JNIEnv* env) {
      (void*)Java_com_js8call_core_JS8Engine_nativeGetTxFrameTones},
     {"nativeBuildFrameTexts", "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;IZ)[Ljava/lang/String;",
      (void*)Java_com_js8call_core_JS8Engine_nativeBuildFrameTexts},
+    {"nativeJscCorrect", "(Ljava/lang/String;)Z", (void*)Java_com_js8call_core_JS8Engine_nativeJscCorrect},
+    {"nativeJscSuggestions", "(Ljava/lang/String;I)[Ljava/lang/String;", (void*)Java_com_js8call_core_JS8Engine_nativeJscSuggestions},
     {"nativeSetFt8Enabled", "(JZ)V",
      (void*)Java_com_js8call_core_JS8Engine_nativeSetFt8Enabled},
     {"nativeDebugFt8Recording", "(J[S)V",

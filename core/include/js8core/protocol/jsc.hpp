@@ -16,6 +16,7 @@ std::vector<CodewordPair> compress(std::string const& text);
 std::string decompress(Codeword const& bits);
 
 bool exists(std::string const& w, std::uint32_t* pIndex);
+std::string word_at(std::uint32_t index);
 std::uint32_t lookup(std::string const& w, bool* ok);
 std::uint32_t lookup(const char* b, bool* ok);
 

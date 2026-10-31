@@ -168,17 +168,16 @@ object Js8SettingsSchema {
 
     /**
      * The PC Mode menu speeds (mainwindow.ui menuModeJS8), stored as the engine's tx_submode.
-     * Also listed in Menu > Mode. JS8 60 is greyed out: the engine cannot send it.
+     * Also listed in Menu > Mode.
      */
     const val TX_SUBMODE_KEY = "tx_submode"
     val SPEEDS = listOf(
+        "JS8 Slow (~8 wpm, best decoder sensitivity)" to "4",
         "JS8 Normal (~16 wpm, best for most conditions)" to "0",
         "JS8 Fast (~24 wpm, reduced decoder sensitivity)" to "1",
         "JS8 40 (~40 wpm, only use in good conditions)" to "2",
-        "JS8 60 (~60 wpm, fast but experimental mode)" to "8",
-        "JS8 Slow (~8 wpm, best decoder sensitivity)" to "4"
+        "JS8 60 (~60 wpm, fast but experimental mode)" to "8"
     )
-    val SPEEDS_DISABLED = setOf("8")
 
     /** Station > SWL (Listening only): no callsign needed, nothing is transmitted (Easy JS8 only). */
     const val SWL_KEY = "js8cfg_swl"
@@ -189,11 +188,11 @@ object Js8SettingsSchema {
      * Settings window (header Settings button): settings for operating the program
      * (Rob, 2026-10-19). The PC has these in its Mode menu.
      */
-    fun settingsSections(): List<Section> = listOf(
+    fun settingsSections(confirm: Boolean): List<Section> = listOf(
         // The rest of the PC Mode menu (Rob, 2026-10-19). Same keys the engine reads.
         Section("Operation", null, listOf(
             check(MULTI_KEY, "Enable Simultaneous Decoding of All Speeds (MULTI)", true),
-            check(AUTOREPLY_KEY, "Enable Autoreply (AUTO)", false),
+            check(AUTOREPLY_KEY, if (confirm) "Enable Autoreply with Confirmation (AUTO+CONF)" else "Enable Autoreply (AUTO)", false),
             check(HB_KEY, "Enable Heartbeat Networking (HB)", false),
             // PC prepareHeartbeatMode: enabled only with HB and AUTO
             Field(HB_ACK_KEY, "Enable Heartbeat Acknowledgments (ACK)", Kind.CHECK, "false",
@@ -204,7 +203,7 @@ object Js8SettingsSchema {
                 Field(TX_SUBMODE_KEY, "", Kind.RADIO, "0",
                     load = { p -> Js8Activity.txSubmode(p.getInt(TX_SUBMODE_KEY, 0)).toString() },
                     save = { e, v, _ -> e.putInt(TX_SUBMODE_KEY, v.toIntOrNull() ?: 0) }), // engine reads an Int
-                "Speed", SPEEDS, disabled = SPEEDS_DISABLED, vertical = true
+                "Speed", SPEEDS, vertical = true
             )
         )),
         // Moved off the main screen (Rob, 2026-10-19). The engine follows last_frequency (dial, CAT).
@@ -215,6 +214,8 @@ object Js8SettingsSchema {
         Section("Offset", null, listOf(
             spin(TX_OFFSET_KEY, "Offset:", 1500, 0.0, 5000.0, suffix = " Hz") // PC offsetSpinBox: 0-5000 Hz
         )),
+        // PC outAttenuation "Adjust Tx audio level"; no room beside the waterfall in these layouts
+        Section("Power", null, listOf(Special("power_slider"))),
         // From Menu > View (Rob, 2026-10-19). The Clear buttons act at once, not on OK.
         Section("View", null, listOf(
             // PC default on (BandHBActivityVisible, true) (Rob, 2026-10-22)
@@ -222,6 +223,9 @@ object Js8SettingsSchema {
             // Band Activity columns, upright (Rob, 2026-10-19); same setting as press-and-hold on the header
             check("js8_table_${BAND_TABLE_UPRIGHT}_col_offset", "Show Offset in Band Activity", false),
             check("js8_table_${BAND_TABLE_UPRIGHT}_col_snr", "Show SNR in Band Activity", false),
+            // Upright has no View menu to bring the labels back once they are off
+            check("js8_table_${BAND_TABLE_UPRIGHT}_col_labels", "Show Column Labels in Band Activity", true),
+            check("js8_table_call_col_labels", "Show Column Labels in Call Activity", true),
             // FT8 signals heard on the JS8 frequency (Rob, 2026-10-19); off = the FT8 decoder doesn't run
             check("js8cfg_show_ft8", "Show FT8 decodes in the Message Window", true),
             ButtonRow(listOf("Clear Band Activity" to "clear_band")),
@@ -229,7 +233,9 @@ object Js8SettingsSchema {
             ButtonRow(listOf("Clear RX Activity" to "clear_rx")),
             ButtonRow(listOf("Clear All Activity" to "clear_all")),
             // Upright and Swipe dividers back to the layout's sizes (Rob, 2026-10-22); PC mode: View menu
-            ButtonRow(listOf("Reset Window Sizes" to "reset_window_sizes"))
+            ButtonRow(listOf("Reset Window Sizes" to "reset_window_sizes")),
+            // Menu bar Configurations and File > Exit, for the layouts without a menu bar
+            ButtonRow(listOf("Configurations..." to "configurations", "Exit" to "exit"))
         )),
         // From the PC's Log menu (Rob, 2026-10-20): Export Log... opens Export Options
         Section("Log", null, listOf(
@@ -268,7 +274,12 @@ object Js8SettingsSchema {
             "mixed" -> setOf("60m", "40m", "30m", "20m", "17m", "15m")
             else -> setOf("80m", "60m", "40m", "30m", "20m")
         }
-        val list = entries.indices.map { entries[it] to values[it] }
+        val labels = values.zip(entries).toMap()
+        val list = frequencyItems(context, d.values[FREQUENCIES_KEY] ?: d.prefs.getString(FREQUENCIES_KEY, null))
+            .map { item ->
+                (labels[item.hz.toString()] ?: String.format(java.util.Locale.US, "%s - %.3f MHz",
+                    com.js8call.example.util.BandUtils.bandLabelForFrequencyHz(item.hz), item.hz / 1_000_000.0)) to item.hz.toString()
+            }
             .filter { !qmx || qmxBands.any { band -> it.first.startsWith(band) } }
             .toMutableList()
         val customMhz = (d.values[CUSTOM_FREQUENCY_KEY] ?: d.prefs.getString(CUSTOM_FREQUENCY_KEY, "")).orEmpty().trim()
@@ -276,6 +287,20 @@ object Js8SettingsSchema {
         if (customHz != null) list += "Custom - ${customMhz}MHz" to customHz.toString()
         return list
     }
+
+    /** Station > Frequencies table (PC FrequencyList_v3), one line each: hz|region|mode|description. */
+    const val FREQUENCIES_KEY = "js8cfg_frequencies"
+    data class FrequencyItem(val hz: Long, val region: String, val mode: String, val description: String) {
+        fun line() = "$hz|$region|$mode|$description"
+    }
+
+    /** Stored table, or the defaults (PC default_frequency_list) when it was never changed. */
+    fun frequencyItems(context: Context, stored: String?): List<FrequencyItem> =
+        stored?.split('\n')?.filter { it.isNotBlank() }?.map { line ->
+            val p = line.split('|', limit = 4)
+            FrequencyItem(p[0].toLongOrNull() ?: 0L, p.getOrElse(1) { "All" }, p.getOrElse(2) { "JS8" }, p.getOrElse(3) { "" })
+        } ?: context.resources.getStringArray(com.js8call.example.R.array.js8_frequency_values)
+            .map { FrequencyItem(it.toLongOrNull() ?: 0L, "All", "JS8", "") }
 
     /** Station window (Menu > File > Station…): the PC's File > Settings window. */
     fun stationSections(): List<Section> = listOf(
@@ -305,7 +330,7 @@ object Js8SettingsSchema {
                 check("js8cfg_avoid_forced_identify", "Allow sending standard messages without callsign", false),
                 check("js8cfg_transmit_directed", "Immediately transmit CQ, Reply, Info, Saved, and Directed messages from the menu", true),
                 check("log_messages_to_file", "Write log files (ALL.TXT, DIRECTED.TXT, etc) of decoded text", false),
-                check("js8cfg_spellcheck", "Suggest alternative word choices for more efficient message transmission", false),
+                check("js8cfg_spellcheck", "Suggest alternative word choices for more efficient message transmission", true),
                 check("js8cfg_reset_activity", "Reset the Band Activity, Call Activity, and RX history at startup", false)
             )),
             Group("Aging", listOf(
@@ -387,6 +412,11 @@ object Js8SettingsSchema {
         Section("Radio", "Rig Options", listOf(
             RadioGroup(radio("js8cfg_ptt_method", "vox"), "PTT Method",
                 listOf("VOX" to "vox", "DTR" to "dtr", "CAT" to "cat", "RTS" to "rts")),
+            // PC set_rig_invariants: only for DTR and RTS. USB ports only; "CAT" = the rig's own port
+            Field("js8cfg_ptt_port", "PTT Port:", Kind.CHOICE, "cat",
+                choices = { c, _ -> portChoices(c).filter { it.second.startsWith("android-usb:") } + ("CAT" to "cat") },
+                active = { d -> (d.values["js8cfg_ptt_method"] ?: d.prefs.getString("js8cfg_ptt_method", "vox")) in setOf("dtr", "rts") },
+                visible = { d -> rigIs(d, "hamlib") }),
             RadioGroup(radio("transmit_mode", "none"), "Mode", listOf("USB" to "usb", "None" to "none", "Data/Pkt" to "usb_data")),
             RadioGroup(radio("js8cfg_tx_audio_source", "rear"), "Transmit Audio Source", listOf("Rear/Data" to "rear", "Front/Mic" to "front")),
             RadioGroup(radio("js8cfg_split", "none"), "Split Operation", listOf("Fake It" to "emulate", "Rig" to "rig", "None" to "none")),
@@ -504,6 +534,9 @@ object Js8SettingsSchema {
 
     /** Frequency Schedule, one line each: hz|HH:MM|HH:MM|description. */
     const val SCHEDULE_KEY = "js8cfg_schedule"
+
+    /** Sound file of a notification event: a content:// link, or empty for the phone's notification sound. */
+    const val NOTIFY_FILE_PREFIX = "js8cfg_notify_file_"
 
     /** Notification events (Configuration.cpp notifyRows). */
     val NOTIFY_EVENTS = listOf(

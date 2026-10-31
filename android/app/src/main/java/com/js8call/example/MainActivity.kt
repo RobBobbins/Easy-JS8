@@ -234,6 +234,71 @@ class MainActivity : AppCompatActivity() {
         }.also { hopUi.postDelayed(it, 1000) }
     }
 
+    // ---- Idle Timeout (PC tx_watchdog) ------------------------------------------------------------
+
+    private var idleDialog: androidx.appcompat.app.AlertDialog? = null
+
+    private val idleReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) {
+            transmitViewModel.clearQueue() // PC resetMessageTransmitQueue
+            showIdleTimeout()
+        }
+    }
+
+    private fun showIdleTimeout() {
+        val minutes = JS8EngineService.idleTimedOutMinutes
+        if (minutes == 0L || idleDialog != null) return
+        idleDialog = androidx.appcompat.app.AlertDialog.Builder(this).setTitle("Idle Timeout")
+            .setMessage("You have been idle for more than $minutes minutes.")
+            .setPositiveButton(android.R.string.ok) { _, _ ->
+                idleDialog = null
+                startService(Intent(this, JS8EngineService::class.java).apply { action = JS8EngineService.ACTION_IDLE_OK })
+            }
+            .setCancelable(false).show()
+    }
+
+    override fun onUserInteraction() {
+        super.onUserInteraction()
+        JS8EngineService.lastUserMs = System.currentTimeMillis()
+    }
+
+    // ---- Autoreply Confirmation Required (PC confirmThenEnqueueMessage), over every screen -------
+
+    private var confirmDialog: androidx.appcompat.app.AlertDialog? = null
+    private var confirmShownId = -1
+
+    private val confirmReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) = showAutoReplyConfirm()
+    }
+
+    private fun answerAutoReply(id: Int, accepted: Boolean) {
+        startService(Intent(this, JS8EngineService::class.java).apply {
+            action = JS8EngineService.ACTION_AUTOREPLY_CONFIRM_ANSWER
+            putExtra(JS8EngineService.EXTRA_CONFIRM_ID, id)
+            putExtra(JS8EngineService.EXTRA_CONFIRM_ACCEPTED, accepted)
+        })
+    }
+
+    private fun closeConfirmDialog() {
+        confirmDialog?.dismiss()
+        confirmDialog = null
+        confirmShownId = -1
+    }
+
+    /** The oldest autoreply waiting; the next one shows when it is answered or runs out. */
+    private fun showAutoReplyConfirm() {
+        val c = JS8EngineService.autoReplyConfirms.firstOrNull()
+        if (c?.id == confirmShownId) return
+        closeConfirmDialog()
+        if (c == null) return
+        confirmShownId = c.id
+        confirmDialog = androidx.appcompat.app.AlertDialog.Builder(this).setTitle("Autoreply Confirmation Required")
+            .setMessage("A transmission is queued for autoreply:\n\n${c.text}\n\nWould you like to send this transmission?")
+            .setPositiveButton("Yes") { _, _ -> answerAutoReply(c.id, true) }
+            .setNegativeButton("No") { _, _ -> answerAutoReply(c.id, false) }
+            .setCancelable(false).show()
+    }
+
     companion object {
         private const val REQUEST_RECORD_AUDIO = 1
         private const val REQUEST_BLUETOOTH_CONNECT = 3
@@ -341,7 +406,13 @@ class MainActivity : AppCompatActivity() {
             .registerReceiver(monitorReceiver, monitorFilter)
         LocalBroadcastManager.getInstance(this)
             .registerReceiver(hopReceiver, IntentFilter(JS8EngineService.ACTION_SCHEDULE_HOP))
+        LocalBroadcastManager.getInstance(this)
+            .registerReceiver(confirmReceiver, IntentFilter(JS8EngineService.ACTION_AUTOREPLY_CONFIRM))
+        LocalBroadcastManager.getInstance(this)
+            .registerReceiver(idleReceiver, IntentFilter(JS8EngineService.ACTION_IDLE_TIMEOUT))
         showScheduledHop()
+        showAutoReplyConfirm()
+        showIdleTimeout()
     }
 
     override fun onStop() {
@@ -353,7 +424,14 @@ class MainActivity : AppCompatActivity() {
             .unregisterReceiver(monitorReceiver)
         LocalBroadcastManager.getInstance(this)
             .unregisterReceiver(hopReceiver)
+        LocalBroadcastManager.getInstance(this)
+            .unregisterReceiver(confirmReceiver)
+        LocalBroadcastManager.getInstance(this)
+            .unregisterReceiver(idleReceiver)
         closeHopDialog()
+        closeConfirmDialog()
+        idleDialog?.dismiss()
+        idleDialog = null
         decodeViewModel.persistDecodesOnStop()
         if (isFinishing && !isChangingConfigurations) {
             Js8Api.closing() // PC closeEvent: STATION.CLOSING

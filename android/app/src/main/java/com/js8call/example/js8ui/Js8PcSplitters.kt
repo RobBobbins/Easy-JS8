@@ -27,11 +27,23 @@ class Js8PcSplitters(private val window: FrameLayout, private val prefs: SharedP
         private const val KEY_MAIN = "js8cfg_pc_split_main"   // lists / text bottom edge
         private const val KEY_WF = "js8cfg_pc_split_wf"       // Waterfall Controls left edge
 
+        private const val SHOW_FREQ = "js8cfg_show_frequency_clock"
+        private const val SHOW_BAND = "js8cfg_show_band_activity"
+        private const val SHOW_CALL = "js8cfg_show_call_activity"
+        private const val SHOW_WATERFALL = "js8cfg_show_waterfall"
+        private const val SHOW_CONTROLS = "js8cfg_show_waterfall_controls"
+        private const val SHOW_STATUS = "js8cfg_show_statusbar"
+        /** PC View menu actionShow_*: setting and menu text. */
+        val PANELS = listOf(SHOW_FREQ to "Show Frequency & Clock", SHOW_BAND to "Show Band Activity", SHOW_CALL to "Show Call Activity",
+            SHOW_WATERFALL to "Show Waterfall", SHOW_CONTROLS to "Show Waterfall Controls", SHOW_STATUS to "Show Statusbar")
+
         // Generated layout (gen_pc_layout.py), PC dp
         private const val LEFT = 15f
         private const val RIGHT = 1062f
         private const val TOP = 140f
         private const val WATERFALL_BOTTOM = 672f
+        private const val TOP_NO_HEADER = 45f          // Show Frequency & Clock off: the menu bar's bottom
+        private const val BOTTOM_NO_STATUSBAR = 704f   // Show Statusbar off: the status bar's bottom
         // First setting and Reset Window Sizes: measured on Rob's layout (2026-10-20). The generated
         // layout has the PC capture's 441 / 759 / 277 / 351.
         private const val BAND_RIGHT = 375f
@@ -99,6 +111,9 @@ class Js8PcSplitters(private val window: FrameLayout, private val prefs: SharedP
         apply()
     }
 
+    /** View > Show ... changed. */
+    fun refresh() = apply()
+
     fun reset() {
         band = BAND_RIGHT; call = CALL_LEFT; text = TEXT_BOTTOM; main = MAIN_BOTTOM; wf = CONTROLS_LEFT
         prefs.edit().remove(KEY_BAND).remove(KEY_CALL).remove(KEY_TEXT).remove(KEY_MAIN).remove(KEY_WF).apply()
@@ -115,12 +130,35 @@ class Js8PcSplitters(private val window: FrameLayout, private val prefs: SharedP
 
     private fun apply() {
         clamp()
-        val midLeft = band + GAP_BAND
-        val midRight = call - GAP_CALL
-        place(v(R.id.js8_band_activity), LEFT, TOP, band - LEFT, main - TOP)
-        place(v(R.id.js8_message_window), midLeft, TOP, midRight - midLeft, text - TOP)
+        fun shown(key: String) = prefs.getBoolean(key, true)
+        fun show(view: View, on: Boolean) { view.visibility = if (on) View.VISIBLE else View.GONE }
+        val showBand = shown(SHOW_BAND)
+        val showCall = shown(SHOW_CALL)
+        val showWaterfall = shown(SHOW_WATERFALL)
+        val showControls = showWaterfall && shown(SHOW_CONTROLS)
+        show(v(R.id.js8_pc_header), shown(SHOW_FREQ))
+        show(v(R.id.js8_pc_statusbar), shown(SHOW_STATUS))
+        show(v(R.id.js8_band_activity), showBand)
+        show(v(R.id.js8_call_activity), showCall)
+        show(v(R.id.js8_pc_waterfall), showWaterfall)
+        show(v(R.id.js8_pc_waterfall_controls), showControls)
+        show(v(R.id.js8_gain_slider), showWaterfall)
+        show(bandLine, showBand)
+        show(callLine, showCall)
+        show(mainLine, showWaterfall)
+        show(wfLine, showControls)
+        // The saved splitter positions stay; a hidden panel's space goes to its neighbours (PC setSizes)
+        val top = if (shown(SHOW_FREQ)) TOP else TOP_NO_HEADER
+        val bottom = if (shown(SHOW_STATUS)) WATERFALL_BOTTOM else BOTTOM_NO_STATUSBAR
+        val main = if (showWaterfall) this.main else bottom - BUTTONS_H - BUTTONS_GAP
+        val text = this.text + (main - this.main)
+        val wf = if (showControls) this.wf else CONTROLS_RIGHT + GAP_WF
+        val midLeft = if (showBand) band + GAP_BAND else LEFT
+        val midRight = if (showCall) call - GAP_CALL else RIGHT
+        place(v(R.id.js8_band_activity), LEFT, top, band - LEFT, main - top)
+        place(v(R.id.js8_message_window), midLeft, top, midRight - midLeft, text - top)
         place(v(R.id.js8_typing_box), midLeft, text + GAP_TEXT, midRight - midLeft, main - text - GAP_TEXT)
-        place(v(R.id.js8_call_activity), call, TOP, RIGHT - call, main - TOP)
+        place(v(R.id.js8_call_activity), call, top, RIGHT - call, main - top)
         val buttonsTop = main + BUTTONS_GAP
         top(v(R.id.js8_pc_buttons), buttonsTop)
         val wfTop = buttonsTop + BUTTONS_H + WATERFALL_GAP
@@ -128,18 +166,18 @@ class Js8PcSplitters(private val window: FrameLayout, private val prefs: SharedP
             val view = v(it)
             val lp = view.layoutParams as ViewGroup.MarginLayoutParams
             lp.topMargin = px(wfTop)
-            lp.height = px(WATERFALL_BOTTOM - wfTop)
+            lp.height = px(bottom - wfTop)
             view.layoutParams = lp
         }
-        place(v(R.id.js8_pc_waterfall), LEFT, wfTop, wf - GAP_WF - LEFT, WATERFALL_BOTTOM - wfTop)
-        place(v(R.id.js8_pc_waterfall_controls), wf, wfTop, CONTROLS_RIGHT - wf, WATERFALL_BOTTOM - wfTop)
+        place(v(R.id.js8_pc_waterfall), LEFT, wfTop, wf - GAP_WF - LEFT, bottom - wfTop)
+        place(v(R.id.js8_pc_waterfall_controls), wf, wfTop, CONTROLS_RIGHT - wf, bottom - wfTop)
         // Touch strips centred on the gaps, along the whole line
-        spot(bandLine, band + GAP_BAND / 2, (TOP + main) / 2, STRIP, main - TOP)
-        spot(callLine, call - GAP_CALL / 2, (TOP + main) / 2, STRIP, main - TOP)
+        spot(bandLine, band + GAP_BAND / 2, (top + main) / 2, STRIP, main - top)
+        spot(callLine, call - GAP_CALL / 2, (top + main) / 2, STRIP, main - top)
         spot(textLine, (midLeft + midRight) / 2, text + GAP_TEXT / 2, midRight - midLeft, STRIP)
         // Under the lists: the strip stops at the buttons' top edge, so the buttons keep their taps
         place(mainLine, LEFT, buttonsTop - STRIP, RIGHT - LEFT, STRIP)
-        spot(wfLine, wf - GAP_WF / 2, (wfTop + WATERFALL_BOTTOM) / 2, STRIP, WATERFALL_BOTTOM - wfTop)
+        spot(wfLine, wf - GAP_WF / 2, (wfTop + bottom) / 2, STRIP, bottom - wfTop)
     }
 
     private fun save() = prefs.edit().putFloat(KEY_BAND, band).putFloat(KEY_CALL, call)

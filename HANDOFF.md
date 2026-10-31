@@ -563,30 +563,31 @@ Station window sideways = PC tabs, no About tab.
 
 ## Not done yet
 
+- **PC comparison batch (2026-10-31, tested on S22-Fresh, no radio):** seen working: JS8 60 send (4 s frames), Autoreply Confirmation Yes and No, Idle Timeout box at 1 minute and OK puts AUTO back, HB rate limit (second heartbeat within 55 minutes adds W8JJK to the Never acknowledge list), Restore Previous Message, press-and-hold menus (Band Activity, Typing Box, Message Window, waterfall, column headers), Sort By lists, Show Columns, Directed menu, File / View / Help / Configurations menus, View > Show panels sideways (hide and restore), Configurations Clone and Switch To, Save As picker opens, Suggest word choices with underline. `js8cfg_spellcheck` default set to true (PC).
+- **Second test pass (2026-10-31, S22-Fresh, fake rigctld on the PC, no radio):** all passed: Clone Into, Rename, Reset, Delete; Power (300 = gain 0.032, 30 dB); Remember power by band (20m / 40m); Tx delay; Hold PTT (one key-down for the whole message); Heartbeat anywhere; Poll Interval; Frequency table Insert / Delete / Reset; Notifications Select / Test / Clear (Test sound not listened to); DIRECTED.TXT (needs Write log files, same as the PC); Missing Frame Character Indicator; UI colours; sending without a callsign (identify=false); FT8Call panels; sideways Offset lock; Display tab in PC and Swipe.
+- **Fixed in that pass:** Poll Interval now reads the rig on its timer (it never did); a rig read that moves the dial now counts as a band change (Remember power by band follows it); PTT lead = Tx delay + the speed's start delay (was a fixed 500 ms); FT8Call header offset follows the real offset (stayed at 1500); Sound File box shows the file name (showed msf:1000000024).
+- Test trap (2026-10-31): `adb shell input text` can lose the end of a long text sideways; the app sends what the box holds. `adb logcat -b crash` while running as the app raised Android's "Allow Easy JS8 to access all device logs?" box; the app does not read logs.
+- **Need a real radio:** CAT button, Monitor returns to last used frequency, Handshake, Force Control Lines, Transmit Audio Source, Slope / Intercept, Channels, PTT Port. Power default 100 = 10 dB less TX audio than before.
 - HB (timed heartbeats) and ACK (heartbeat answers) not tested with real transmitting;
   debug decode injection doesn't reach the engine's auto-reply code.
 - Fixed this session: the decoder never listened for JS8 Slow (JS8Android passed speed numbers
   as decoder bits). The engine now starts with all four speeds (its timetable can only be
   narrowed later) and `configuredRxSubmodes()` narrows it for MULTI.
-- Sideways (PC and Swipe) not updated for any of this session's window changes; Swipe tab 5
-  still says **Settings** but shows Station.
-- Header **Offset** slider (sideways) is not blocked while a message waits (PC blocks it).
-- CQ button repeat menu (PC right-click: repeat every 1/5/10/15 min, Send CQ Now) not built.
-- PC keeps Call Activity and Message Window text across restarts unless **Reset the Band
-  Activity, Call Activity, and RX history at startup**; Easy JS8 starts empty and that checkbox
-  is unused. **Keep decoded messages after restart** (Phone) does nothing visible.
+- **Keep decoded messages after restart** (Phone) does nothing visible; not a PC setting, left alone (activity lists are kept by the PC's own Reset ... at startup checkbox).
+- **Checked against the code 2026-10-31:** CQ press-and-hold repeat menu built; Swipe tab 5 says Station.
 - **PTT Method, Test CAT, Test PTT (2026-10-30, Rob):** `js8cfg_ptt_method` now read by `setRigPtt` (PC default VOX). Hamlib: CAT / VOX (no key command) / DTR or RTS on the rig's own serial port (PC's separate PTT Port not built). Network: VOX = no key command, anything else = CAT. RTS rig: RTS, or DTR if picked. truSDX, QMX, UV-Pro always key over their own link. **A Hamlib or network rig left on the default VOX no longer keys by CAT.** Test CAT saves the Radio page (Cancel doesn't undo that), restarts the engine to reopen the rig, 15 s, green / red; RX put back as it was unless the rig failed (the engine won't start without its rig, so RX goes off). Test PTT red while keyed; released by the button, leaving the Radio page, or 30 s (Easy JS8's safety); greyed for Rig None and VOX. Checked on S22-Fresh with a stand-in rigctld on the PC (commands logged): T 1 / T 0 from Test PTT, 30 s release, ← Back, CQ with CAT, no T with VOX, Test CAT green, red with no server, with RX off. Not tested: a real radio, Hamlib serial, DTR / RTS lines, truSDX / QMX / UV-Pro, sideways, Swipe.
-- **Callsign lists (2026-10-30):** autoreply allow / block, heartbeat and spot lists read by the service. Autoreply lists tested; HB and spot lists not.
+- **Callsign lists (2026-10-30):** autoreply allow / block, heartbeat and spot lists read by the service. Autoreply and heartbeat lists tested (2026-10-31: K4RDX on the list gets no ACK, W1AW gets one). Spot list not run: it would send false spots to the real PSK Reporter; it uses the same `isOnCallList` check.
 - **Split Operation (2026-10-31):** `js8cfg_split` used. PC formula: XIT = (offset / 500) * 500 - 1500, TX audio = offset - XIT, TX dial = dial + XIT. Fake It sets the dial before key-on and back after key-off. Rig: network `S 1 VFOB` + `I`, Hamlib `nativeSetSplit`, split off after key-off (PC leaves it on). truSDX and QMX use Fake It for both. Tested on a stand-in rigctld at 700 and 2300 Hz; not on a radio; Hamlib split not tested; VFO B mode not set.
 - **Notifications (2026-10-31):** `tryNotify` in the service plays the phone's notification sound. PC events all fire in tests except call_old (no logged call tested). Sound not listened to.
-- **UI fonts (2026-10-31):** Table, Received, Transmitted, Composition sizes. 10 pt = the built size. Applied on the main fragment only; TX size not seen on screen; sideways not checked.
-- **Frequency Schedule (2026-10-31):** `js8cfg_schedule`, lines hz|HH:MM|HH:MM|description. Station > Frequencies: Insert ..., Delete, Switch to Frequency Now. `tryBandHop` in the service every 15 s, needs the service running. Box with 30 s countdown on the main screen only; on any other screen it changes after 30 s with no box. Tested without a rig.
+- **UI fonts (2026-10-31):** Table, Received, Transmitted, Composition sizes. 10 pt = the built size. Applied on the main fragment, the same four places as the PC (`UI_Constructor.cpp` 390-411). Checked 2026-10-31 sideways in PC mode with Table 15, Received 12, Transmitted 18, Composition 15; Swipe and FT8Call not looked at.
+- **Frequency Schedule (2026-10-31):** `js8cfg_schedule`, lines hz|HH:MM|HH:MM|description. Station > Frequencies: Insert ..., Delete, Switch to Frequency Now. `tryBandHop` in the service every 15 s, needs the service running. Box with 30 s countdown lives in `MainActivity` (2026-10-31), so it shows over every screen and comes back after a rotation or a return to the app. Not started while a message is queued or going out (PC isMessageQueuedForTransmit; `JS8EngineService.messageQueued`, set from TransmitViewModel). Checked on S22-Fresh, no rig: over Activity and Settings, through a rotation, Cancel keeps the frequency, 30 s runs out and changes it, a long message spanning the start time held the box until it finished. OK button not tapped (same call as the 30 s run-out). Service restart forgets a Cancel (PC restart too).
+- **Last Tx (2026-10-31):** PC `last_tx_label`: `js8_status_blank` shows "Last Tx: " + the last frame that finished, in every layout (`Js8ActivityViewModel.lastTx`). Seen in Swipe sideways ("Last Tx: LAST TX" for "HELLO LAST TX"). Box grows with its text, except FT8Call (160 dp, cut off). Emptied by an app restart, as the PC.
 - **Header arrows (2026-10-31):** sideways ▲▼ move the dial 250 Hz (PC). Tested without a rig.
 - **Erase ALL.TXT / Erase js8call_log.adi (2026-10-31):** Settings > Log. ALL.TXT on the phone = js8call-log.txt and js8call-log.1.txt. adi tested; js8call-log.txt erase ran with no file to delete.
 - Waterfall Controls → Display tab built; still untested with real JS8 signals: decode brackets,
-  Cumulative level, Avg N. Sideways / Swipe Display tab not checked.
+  Cumulative level, Avg N.
 - Halt / TUNE / transmit / SWL blocking not tested with a radio — test on a dummy load first.
-- Swipe Activity screen: Status Bar wider than screen (progress bar scrolls into view).
+- Swipe Activity screen: Status Bar row is wider than the screen on purpose (Rob, 2026-10-20: Last Tx runs off the right edge, the row scrolls); seen 2026-10-31, left as it is.
 
 ## Build (Windows, Git Bash, folder `E:\new-w3bguru-websites\easy js8`)
 
@@ -634,6 +635,7 @@ APK: `android/app/build/outputs/apk/debug/app-debug.apk`. Details: `build-env/bu
 - Typing Box strike-out (2026-10-21, Rob): the count left out the "CALLSIGN: " the first part starts with, so it
   ran 8 characters ahead (short messages crossed out at once). Fixed in JS8EngineService.broadcastTxFrame.
   Checked on S22-Fresh: APRS GRID part 1 strikes "@APRSIS GRID", part 2 "CM87WK91"; Message Window part by part.
+- Script traps (2026-10-31): `adb shell input keyevent 4` closes the app when no keyboard is up, and that stops the service. A swipe starting within about 150 px of the right edge is Android's Back. Sideways, taps don't line up with screenshot positions by 136 px (camera cutout bar).
 - `build-env/test/run.sh <name> install` installs, launches, saves `build-env/test/out/<name>.png`.
   `ROT=1 run.sh <name>` = sideways first (`ROT=0` upright). Rob may rotate the window by hand,
   so always pass ROT.

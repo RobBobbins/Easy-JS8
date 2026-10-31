@@ -26,6 +26,7 @@ void js8_engine_set_frequency(JS8Engine_Native* engine, uint64_t frequency_hz);
 void js8_engine_set_submodes(JS8Engine_Native* engine, int submodes);
 void js8_engine_set_output_device(JS8Engine_Native* engine, int device_id);
 void js8_engine_set_tx_boost_enabled(JS8Engine_Native* engine, bool enabled);
+void js8_engine_set_tx_output(JS8Engine_Native* engine, float gain, int channel);
 void js8_engine_set_time_drift_ms(JS8Engine_Native* engine, long long drift_ms);
 void js8_engine_set_auto_sync(JS8Engine_Native* engine, bool enabled);
 void js8_engine_set_sync_stats(JS8Engine_Native* engine, bool enabled);
@@ -83,6 +84,8 @@ std::vector<std::string> js8_engine_tx_frame_texts(JS8Engine_Native* engine);
 // Tone numbers of the frame on air (API TX.FRAME).
 std::vector<int> js8_engine_tx_current_tones(JS8Engine_Native* engine);
 // Text of each part a message would be sent as (Status Bar wpm box; PC BuildMessageFramesThread).
+bool js8_jsc_correct(std::string const& word);
+std::vector<std::string> js8_jsc_suggestions(std::string const& word, int n);
 std::vector<std::string> js8_build_frame_texts(std::string const& text, std::string const& my_call,
                                                std::string const& my_grid, std::string const& selected_call,
                                                int submode, bool force_identify);

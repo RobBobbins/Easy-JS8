@@ -62,8 +62,12 @@ class Js8ActivityViewModel(app: Application) : AndroidViewModel(app) {
     var lastTx = ""
         private set
 
+    /** PC m_lastTxMessage: the Typing Box menu's Restore Previous Message. */
+    var lastMessage = ""
+
     /** Send pressed: the Typing Box keeps [text] until it has been sent. */
     fun onTypedQueued(text: String) {
+        lastMessage = text
         _typed.value = TypedTx(text)
     }
 
@@ -78,6 +82,7 @@ class Js8ActivityViewModel(app: Application) : AndroidViewModel(app) {
                   isData: Boolean = false) {
         frameOnAir?.let { lastTx = it }
         frameOnAir = text
+        if (fullText.isNotEmpty()) lastMessage = fullText
         activity.writeTxFrame(text, offset, first = index == 0, last = index == count - 1, cfg = cfg(), isData = isData)
         // Every transmission shows in the Typing Box (Rob, 2026-10-21); what you typed is never replaced
         if (_typed.value == null && typingBoxEmpty && fullText.isNotEmpty()) {
