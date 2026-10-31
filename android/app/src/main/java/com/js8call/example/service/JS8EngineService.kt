@@ -1988,6 +1988,7 @@ class JS8EngineService : Service() {
     }
 
     private fun broadcastEngineState(state: String) {
+        updateAprsState()
         val intent = Intent(ACTION_ENGINE_STATE).apply {
             putExtra(EXTRA_STATE, state)
         }
@@ -3969,16 +3970,16 @@ class JS8EngineService : Service() {
     /** PC spot_to_aprs_relay: also needs Enable relaying inbound APRS messages to Heard List stations. */
     private fun aprsRelayOn() = spotToAprs() && prefOn("js8cfg_aprs_relay")
 
-    /** PC prepareSpotting. */
+    /** PC prepareSpotting, but only while RX is on: nothing can be transmitted with the engine off. */
     private fun updateAprsState() {
         val prefs = PreferenceManager.getDefaultSharedPreferences(this)
-        val enabled = spotToAprs()
+        val enabled = spotToAprs() && engine != null
         if (enabled) {
             aprsClient.setSkipPercent(0.25f)
             aprsClient.setServer(prefs.getString("js8cfg_aprs_server", "rotate.aprs2.net")?.trim().orEmpty(),
                 numberPref("js8cfg_aprs_port", 14580.0).toInt())
         }
-        aprsClient.setIncomingRelayEnabled(aprsRelayOn())
+        aprsClient.setIncomingRelayEnabled(enabled && aprsRelayOn())
         aprsClient.setPaused(!enabled)
     }
 
@@ -4007,7 +4008,7 @@ class JS8EngineService : Service() {
 
     /** PC AprsInboundRelay::onMessageReceived. */
     private fun onAprsMessage(from: String, to: String, message: String, messageId: String) {
-        if (!aprsRelayOn() || isOnCallList("js8cfg_spot_blacklist", to)) return
+        if (engine == null || !aprsRelayOn() || isOnCallList("js8cfg_spot_blacklist", to)) return
         val heardMs = callHeardMs?.invoke(to) ?: return
         val now = System.currentTimeMillis()
         val aging = numberPref("js8cfg_callsign_aging", 0.0).toInt()

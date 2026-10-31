@@ -136,7 +136,8 @@ values (ViewModel keyed by window).
     **Remove callsigns from call activity after:**) sends ack to APRS (every copy; 120 s repeat filter), shows a
     bold `APRS-IS Relay:` line in the Message Window and transmits `@APRSIS MSG TO:CALL TEXT DE SENDER`
     at top priority. Reconnects 5 s after a drop.
-  - Difference from the PC: **RX** off ends the service, so the APRS connection closes until **RX** is on.
+  - Difference from the PC: APRS is connected only while **RX** is on (`engine != null` in `updateAprsState`). The app
+    cannot transmit with **RX** off, so it must not take a message or send an ACK then. Tested: off = disconnected, no ACK.
   - Tested on S22-Fresh against a fake server, `scratchpad` only. Not yet tried against the real APRS-IS network.
 
 ### Lists, Message Window, sending (third session, 2026-10-19)
