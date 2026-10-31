@@ -13,6 +13,7 @@ import android.media.AudioDeviceCallback
 import android.media.AudioDeviceInfo
 import android.media.AudioManager
 import android.media.MediaRecorder
+import android.media.RingtoneManager
 import android.os.Build
 import android.os.Handler
 import android.os.HandlerThread
@@ -38,6 +39,7 @@ import com.js8call.example.MessageLogWriter
 import com.js8call.example.R
 import com.js8call.example.BuildConfig
 import com.js8call.example.api.Js8Api
+import com.js8call.example.data.Js8LogBook
 import com.js8call.example.data.Js8Mailbox
 import com.js8call.example.data.MessageRepository
 import com.js8call.example.network.PskReporterClient
@@ -149,6 +151,8 @@ class JS8EngineService : Service() {
     private var currentTxOffsetHz: Float = 1500f
     private var txMonitorActive = false
     private var txMonitorWasAudioActive = false
+    @Volatile private var testPttOn = false
+    private val testPttRelease = Runnable { testPtt(false) }
     private val pttStateLock = Any()
     @Volatile private var txPttGeneration = 0
     @Volatile private var rigPttAsserted = false
@@ -180,6 +184,8 @@ class JS8EngineService : Service() {
     private var lastTxFrequencyHz: Double = DEFAULT_AUDIO_FREQUENCY_HZ
     private var messageLogger: MessageLogWriter? = null
     private val heartbeatRegex = Regex("^\\s*([^:]+):\\s+@HB\\s+HEARTBEAT\\b", RegexOption.IGNORE_CASE)
+    private val cqRegex = Regex("^\\s*[^:]+:\\s+(@ALLCALL\\s+)?CQ\\b", RegexOption.IGNORE_CASE)
+    private val notifiedCallsigns = mutableSetOf<String>() // PC m_callActivity: new entries notify once
     private val heardCallsigns = mutableMapOf<String, Long>()
     private val heardLock = Any()
     private val relayBuffers = mutableMapOf<Int, RelayBuffer>()
@@ -276,6 +282,11 @@ class JS8EngineService : Service() {
     private var pskReporterClient: PskReporterClient? = null
     private var pskReporterEnabled = false
     private var currentDialHz: Long = 0
+    private var splitXitHz = 0 // PC m_XIT for the transmission in progress
+    private var bandHopped = true // PC m_bandHopped
+    private var bandHoppedHz = 0L // PC m_bandHoppedFreq
+    private var bandScheduleSeen = ""
+    @Volatile private var splitHeld = "none" // split mode applied at key-on, until key-off
     private var currentCallsign: String = ""
     private var currentGrid: String = ""
 
@@ -313,6 +324,7 @@ class JS8EngineService : Service() {
         createRigTransports()
         txHandlerThread.start()
         txHandler = Handler(txHandlerThread.looper)
+        heartbeatHandler.post(bandHopRunnable)
         txMonitorHandler = Handler(Looper.getMainLooper())
         (getSystemService(AUDIO_SERVICE) as AudioManager)
             .registerAudioDeviceCallback(audioDeviceCallback, mainHandler)
@@ -321,7 +333,13 @@ class JS8EngineService : Service() {
         prefs.registerOnSharedPreferenceChangeListener(preferenceChangeListener)
         messageLogger = MessageLogWriter(applicationContext)
         updateMessageLogging()
-        scheduleHeartbeat(true)
+        // HB / CQ timers and Automatic Time Drift as they were left (Rob, 2026-10-22: "all settings remembered")
+        HeartbeatTimer.load(prefs)
+        CqTimer.load(prefs)
+        autoDriftOn = prefs.getBoolean(KEY_AUTO_DRIFT_ON, false)
+        autoDriftStopAfter = prefs.getInt(KEY_AUTO_DRIFT_STOP_AFTER, 0)
+        autoDriftDecodesLeft = prefs.getInt(KEY_AUTO_DRIFT_LEFT, autoDriftStopAfter)
+        resumeTimers()
         initPskReporter()
         // Easy JS8: Station > Reporting API / WSJT-X / N3FJP / N1MM
         Js8Api.init(this)
@@ -410,17 +428,40 @@ class JS8EngineService : Service() {
             }
             // HB button, Send Heartbeat Now, API STATION.SEND_HB: a heartbeat now (PC sendHB)
             ACTION_SEND_HB -> sendHeartbeat()
+            ACTION_ERASE_LOG -> messageLogger?.erase()
+            ACTION_SCHEDULE_HOP_ANSWER -> finishScheduledHop(intent.getBooleanExtra(EXTRA_SCHEDULE_HOP_OK, false))
+            // PC manualBandHop: Switch to Frequency Now
+            ACTION_SCHEDULE_HOP_NOW -> {
+                val hz = intent.getLongExtra(EXTRA_FREQUENCY_HZ, 0L)
+                if (hz > 0L && !isTransmitActive()) {
+                    bandHopped = true
+                    bandHoppedHz = hz
+                    applyBandHop(hz)
+                }
+            }
             // CQ button timer on / off (PC cqMacroButton toggled)
             ACTION_CQ_TIMER -> {
                 CqTimer.on = intent.getBooleanExtra(EXTRA_HB_TIMER_ON, false)
                 Log.i(TAG, "CQ timer ${if (CqTimer.on) "started" else "stopped"}")
                 scheduleCq(true)
+                // PC: one or the other, starting the CQ loop cancels the HB loop (Rob, 2026-10-22)
+                if (CqTimer.on && HeartbeatTimer.on) {
+                    HeartbeatTimer.on = false
+                    Log.i(TAG, "HB timer stopped (CQ timer started)")
+                    scheduleHeartbeat(true)
+                }
             }
             // HB button timer on / off (PC hbMacroButton toggled), API STATION.SET_HB_TIMER
             ACTION_HB_TIMER -> {
                 HeartbeatTimer.on = intent.getBooleanExtra(EXTRA_HB_TIMER_ON, false)
                 Log.i(TAG, "HB timer ${if (HeartbeatTimer.on) "started" else "stopped"}")
                 scheduleHeartbeat(true)
+                // PC: one or the other, starting the HB loop cancels the CQ loop (Rob, 2026-10-22)
+                if (HeartbeatTimer.on && CqTimer.on) {
+                    CqTimer.on = false
+                    Log.i(TAG, "CQ timer stopped (HB timer started)")
+                    scheduleCq(true)
+                }
             }
             // Easy JS8 Halt button: stop the transmission now. The TX monitor sees the
             // session end, releases PTT and reports TX_STATE_FINISHED as usual.
@@ -434,6 +475,9 @@ class JS8EngineService : Service() {
                 val freq = intent.getDoubleExtra(EXTRA_TX_FREQ_HZ, currentTxOffsetHz.toDouble())
                 txHandler.post { handleTune(on, freq) }
             }
+            // Station > Radio (PC on_test_CAT_push_button_clicked / on_test_PTT_push_button_clicked)
+            ACTION_TEST_CAT -> testCat()
+            ACTION_TEST_PTT -> testPtt(intent.getBooleanExtra(EXTRA_RIG_TEST_ON, false))
         }
         return START_STICKY
     }
@@ -444,18 +488,16 @@ class JS8EngineService : Service() {
 
     override fun onDestroy() {
         super.onDestroy()
+        pendingHopHz = 0L
         Log.i(TAG, "Service destroyed")
         (getSystemService(AUDIO_SERVICE) as AudioManager)
             .unregisterAudioDeviceCallback(audioDeviceCallback)
         
         val prefs = PreferenceManager.getDefaultSharedPreferences(this)
         prefs.unregisterOnSharedPreferenceChangeListener(preferenceChangeListener)
+        // The timers stay on with their countdowns for the next start (Rob, 2026-10-22; the PC ends them)
         heartbeatHandler.removeCallbacksAndMessages(null)
-        HeartbeatTimer.on = false // the PC's HB loop ends with the program
         cqHandler.removeCallbacksAndMessages(null)
-        CqTimer.on = false
-        CqTimer.nextMs = 0L
-        HeartbeatTimer.nextMs = 0L
         messageLogger?.shutdown()
 
         stopEngine()
@@ -565,6 +607,7 @@ class JS8EngineService : Service() {
         qmxCatSession = qmxDirectSerial?.let { direct ->
             QmxCatSession(direct, object : QmxCatSession.Listener {
                 override fun onFrequency(frequencyHz: Long) {
+                    if (splitHeld != "none") return // the radio is on the TX dial for now
                     currentDialHz = frequencyHz
                     mainHandler.post { broadcastRadioFrequency(frequencyHz) }
                 }
@@ -781,6 +824,9 @@ class JS8EngineService : Service() {
                 applyFt8Setting()
                 applyTimeDriftSetting()
                 engine?.setAutoSync(autoDriftOn)
+                // The screen shows Start / Stop Automatic Time Drift as kept from the last run
+                LocalBroadcastManager.getInstance(this)
+                    .sendBroadcast(Intent(ACTION_AUTO_DRIFT).putExtra(EXTRA_AUTO_DRIFT_ON, autoDriftOn))
                 engine?.setSyncStats(syncStatsOn)
 
                 if (rigControlMode == "trusdx_serial") {
@@ -1778,6 +1824,8 @@ class JS8EngineService : Service() {
             val shutdownQmx = qmxCatSession
             val shutdownUvPro = uvProSession
             val shutdownNetwork = rigCtlClient
+            val shutdownPttMethod = pttMethod()
+            val shutdownDialHz = currentDialHz
             val shouldReleasePtt = isRigControlConnected()
             if (shutdownMode == "btech_uvpro") uvproWorkersActive.incrementAndGet()
 
@@ -1817,9 +1865,13 @@ class JS8EngineService : Service() {
                     // Captured references, not setRigPtt: the fields already
                     // hold the transports the next start will use.
                     val released = when (shutdownMode) {
-                        "network" -> shutdownNetwork?.setPtt(false) == true
-                        "hamlib_usb" -> shutdownHamlib?.setPtt(false) == true
-                        "rts_ptt" -> when (shutdownTransport) {
+                        "network" -> shutdownPttMethod == "vox" || shutdownNetwork?.setPtt(false) == true
+                        "hamlib_usb" -> when (shutdownPttMethod) {
+                            "vox" -> true
+                            "dtr", "rts" -> setSerialLine(shutdownUsb, shutdownBluetooth, shutdownPttMethod == "dtr", false)
+                            else -> shutdownHamlib?.setPtt(false) == true
+                        }
+                        "rts_ptt" -> if (shutdownPttMethod == "dtr") setSerialLine(shutdownUsb, shutdownBluetooth, true, false) else when (shutdownTransport) {
                             SerialTransport.USB -> shutdownUsb?.setRts(false) == true
                             SerialTransport.BLUETOOTH -> shutdownBluetooth?.setRts(false) == true
                             else -> false
@@ -1834,6 +1886,7 @@ class JS8EngineService : Service() {
                     } else {
                         Log.e(TAG, "Unable to confirm PTT release during shutdown")
                     }
+                    clearSplit(shutdownMode, shutdownDialHz, shutdownNetwork, shutdownHamlib, shutdownTruSdx, shutdownQmx)
                 }
                 shutdownHamlib?.close()
                 shutdownTruSdx?.stop()
@@ -1954,11 +2007,40 @@ class JS8EngineService : Service() {
         text: String, type: Int, quality: Float, mode: Int, driftMs: Int
     ) {
         updateHeardCallsign(text)
+        notifyDecode(text)
         broadcastDecode(utc, snr, dt, freq, text, type, quality, mode, driftMs)
         apiDecode(utc, snr, dt, freq, text, type, quality, mode)
         handleRelayFrame(text, snr, mode, freq, type)
         maybeHandleIncomingMessage(text, snr, freq, type, mode)
         maybeHandleAutoReply(text, snr, mode)
+    }
+
+    /** PC tryNotify: only with Enable Notifications and that event's box ticked. PC plays a file; this plays the phone's notification sound. */
+    private fun tryNotify(key: String) {
+        val prefs = PreferenceManager.getDefaultSharedPreferences(this)
+        if (!prefs.getBoolean("js8cfg_notifications", false)) return
+        if (prefs.getString("js8cfg_notify_$key", "false") != "true") return
+        Log.i(TAG, "Notify: $key")
+        RingtoneManager.getRingtone(this, RingtoneManager.getDefaultUri(RingtoneManager.TYPE_NOTIFICATION))?.play()
+    }
+
+    private fun notifyDecode(text: String) {
+        if (text.trim().substringBefore(' ').endsWith(":")) {
+            extractHeardCallsign(text)?.let { call ->
+                if (notifiedCallsigns.add(call)) tryNotify(if (Js8LogBook.workedBefore(this, call)) "call_old" else "call_new")
+            }
+        }
+        if (cqRegex.containsMatchIn(text)) {
+            tryNotify("cq")
+        } else if (parseHeartbeat(text) != null) {
+            tryNotify("hb")
+        } else {
+            val callsign = getConfiguredCallsign() ?: return
+            val directed = parseDirectedCommand(text) ?: return
+            if (!isSelfCallsign(callsign, directed.to) && !isSubscribedGroup(directed.to)) return
+            tryNotify("directed")
+            if (directed.command.uppercase() == "ACK") tryNotify("ack")
+        }
     }
 
     private fun injectDecode(intent: Intent) {
@@ -2041,7 +2123,7 @@ class JS8EngineService : Service() {
     private var syncStatsOn = false
 
     // Waterfall Controls > Timing > Start Automatic Time Drift (WideGraph::on_autoDriftButton_toggled).
-    // Not kept after a restart, like the PC button.
+    // Kept after a restart with its count (Rob, 2026-10-22; the PC button is not kept).
     private var autoDriftOn = false
     private var autoDriftStopAfter = 0
     private var autoDriftDecodesLeft = 0
@@ -2050,6 +2132,7 @@ class JS8EngineService : Service() {
         autoDriftOn = on
         autoDriftStopAfter = if (on) stopAfter.coerceAtLeast(0) else 0
         autoDriftDecodesLeft = autoDriftStopAfter
+        saveAutoDrift()
         engine?.setAutoSync(on)
         Log.i(TAG, "Automatic time drift ${if (on) "started (stop after $stopAfter)" else "stopped"}")
         LocalBroadcastManager.getInstance(this)
@@ -2066,7 +2149,7 @@ class JS8EngineService : Service() {
         driftMmaMs = (((driftMmaN - 1) * driftMmaMs) + suggestedDriftMs) / driftMmaN
         if (driftMmaN < 60) driftMmaN++
         applyTimeDrift(driftMmaMs)
-        if (autoDriftStopAfter > 0 && --autoDriftDecodesLeft <= 0) setAutoDrift(false, 0)
+        if (autoDriftStopAfter > 0 && --autoDriftDecodesLeft <= 0) setAutoDrift(false, 0) else saveAutoDrift()
     }
 
     private fun applyTimeDrift(driftMs: Long) {
@@ -2771,6 +2854,31 @@ class JS8EngineService : Service() {
         Log.i(TAG, "SCO routing disabled")
     }
 
+    private fun saveAutoDrift() = PreferenceManager.getDefaultSharedPreferences(this).edit()
+        .putBoolean(KEY_AUTO_DRIFT_ON, autoDriftOn).putInt(KEY_AUTO_DRIFT_STOP_AFTER, autoDriftStopAfter)
+        .putInt(KEY_AUTO_DRIFT_LEFT, autoDriftDecodesLeft).apply()
+
+    /**
+     * Service start: a running HB / CQ timer carries on with its countdown; if its time passed
+     * while the app was closed, it counts a full interval from now.
+     */
+    private fun resumeTimers() {
+        val now = System.currentTimeMillis() + (engine?.timeDriftMs() ?: 0L)
+        val hbNext = HeartbeatTimer.nextMs
+        if (HeartbeatTimer.on && hbNext > now) {
+            nextHeartbeatTime = hbNext
+            heartbeatHandler.removeCallbacks(heartbeatRunnable)
+            heartbeatHandler.postDelayed(heartbeatRunnable, hbNext - now)
+            Log.i(TAG, "HB timer resumed, next at ${java.util.Date(hbNext)}")
+        } else scheduleHeartbeat(true)
+        val cqNext = CqTimer.nextMs
+        if (CqTimer.on && cqNext > now) {
+            cqHandler.removeCallbacks(cqRunnable)
+            cqHandler.postDelayed(cqRunnable, cqNext - now)
+            Log.i(TAG, "CQ timer resumed, next at ${java.util.Date(cqNext)}")
+        } else scheduleCq(true)
+    }
+
     private fun checkHeartbeat() {
         // This function is now just the runnable target, actual scheduling is handled by postDelayed in scheduleHeartbeat
         sendHeartbeat()
@@ -2794,23 +2902,11 @@ class JS8EngineService : Service() {
         val now = System.currentTimeMillis() + (engine?.timeDriftMs() ?: 0L)
         val frameDuration = framePeriodMs(getPreferredTxSubmode())
 
-        // Base delay
-        var delay = if (first) {
-            // If first run, schedule for the next available slot (plus a small random wait to avoid instant blast?)
-            // actually, let's just wait one interval to be polite, or at least a few frames.
-            // Desktop does "first ? 0 : interval". 
-            // If we use 0, we transmit immediately on app start if enabled. 
-            // Let's use 10 seconds min for first run to allow system to settle.
-            10000L 
-        } else {
-            intervalMinutes * 60 * 1000L
-        }
-        
-        // Jitter: 25% chance to skip a frame (Desktop style)
-        if (Math.random() < 0.25) {
-            delay += frameDuration
-        }
-        
+        // PC TxLoop::onTxLoopPeriodChangeStart: the full interval from now, also when the timer is
+        // started again or the interval / speed changes, no random extra cycle (Rob, 2026-10-22;
+        // JS8Android sent the first one after 10 s and skipped a cycle 1 time in 4)
+        val delay = intervalMinutes * 60 * 1000L
+
         var targetTime = now + delay
         
         // Align to next frame boundary (UTC epoch)
@@ -2863,7 +2959,8 @@ class JS8EngineService : Service() {
         }
         val now = System.currentTimeMillis() + (engine?.timeDriftMs() ?: 0L)
         val frame = framePeriodMs(getPreferredTxSubmode())
-        var target = now + if (first) 10_000L else minutes * 60_000L
+        // PC TxLoop: the full interval from now, also when the timer is started again (Rob, 2026-10-22)
+        var target = now + minutes * 60_000L
         target += frame - target % frame
         target -= 2000L
         if (target <= now) target += frame
@@ -2961,7 +3058,7 @@ class JS8EngineService : Service() {
                 myGrid = grid.take(4), // PC: my_grid().left(4) before buildMessageFrames
                 selectedCall = "", // Broadcast-ish
                 submode = submode,
-                audioFrequencyHz = freq.toDouble(),
+                audioFrequencyHz = splitAudioHz(freq.toDouble()),
                 txDelaySec = 0.0,
                 forceIdentify = true, // Force ID to ensure callsign is sent
                 forceData = false
@@ -3022,7 +3119,7 @@ class JS8EngineService : Service() {
         val forceIdentify = intent.getBooleanExtra(EXTRA_TX_FORCE_IDENTIFY, false)
         val forceData = intent.getBooleanExtra(EXTRA_TX_FORCE_DATA, false)
         val effectiveForceIdentify = forceIdentify || callsign.isNotBlank()
-        val payloadText = applyGridIfHeartbeat(text, grid)
+        val payloadText = text.trim() // sent as typed, like the PC (the CQ button's CQ Message holds the grid)
 
         // Set transmit mode if configured (before queuing TX)
         val modeSet = setTransmitMode()
@@ -3042,7 +3139,7 @@ class JS8EngineService : Service() {
             myGrid = grid.take(4), // PC: my_grid().left(4) before buildMessageFrames
             selectedCall = directed,
             submode = submode,
-            audioFrequencyHz = audioFrequencyHz,
+            audioFrequencyHz = splitAudioHz(audioFrequencyHz),
             txDelaySec = txDelaySec,
             forceIdentify = effectiveForceIdentify,
             forceData = forceData
@@ -3077,7 +3174,7 @@ class JS8EngineService : Service() {
         }
         setTransmitMode()
         prepareEngineForTransmit(activeEngine)
-        if (activeEngine.startTune(audioFrequencyHz, getPreferredTxSubmode())) {
+        if (activeEngine.startTune(splitAudioHz(audioFrequencyHz), getPreferredTxSubmode())) {
             Log.i(TAG, "Tune started at $audioFrequencyHz Hz")
             broadcastTxState(TX_STATE_QUEUED)
             startTxMonitor()
@@ -3134,6 +3231,8 @@ class JS8EngineService : Service() {
         val intent = Intent(ACTION_TX_FRAME).apply {
             putExtra(EXTRA_TX_FRAME_TEXT, texts[index])
             putExtra(EXTRA_TX_FRAME_INDEX, index)
+            // Only a first part can be a header (CQ, directed); data parts join without a space
+            putExtra(EXTRA_TX_FRAME_IS_DATA, index > 0 || activeEngine.txFirstFrameIsData())
             putExtra(EXTRA_TX_FRAME_COUNT, texts.size)
             // PC setCharsSent(m_totalTxMessage.length()): text of the parts sent so far, this one included,
             // without the "CALLSIGN: " the first part starts with, which is not in the Typing Box (Rob,
@@ -3172,6 +3271,7 @@ class JS8EngineService : Service() {
             }
 
             mainHandler.post {
+                tryNotify("inbox")
                 val intent = Intent(ACTION_MESSAGE_RECEIVED).apply {
                     putExtra(EXTRA_MESSAGE_FROM, from)
                     putExtra(EXTRA_MESSAGE_TEXT, text)
@@ -3322,7 +3422,8 @@ class JS8EngineService : Service() {
             generation = rigPttDesiredGeneration
         }
 
-        val success = setRigPtt(target)
+        val success = if (target) applySplit() && setRigPtt(true) else setRigPtt(false)
+        if (!target) clearSplit(rigControlMode, currentDialHz, rigCtlClient, hamlibRigControl, trusdxSerialSession, qmxCatSession)
         var scheduleNext = false
         var completion: ((Boolean) -> Unit)? = null
         var failEnable = false
@@ -3437,6 +3538,8 @@ class JS8EngineService : Service() {
         val directed = parseDirectedCommand(text)
         
         val command = directed?.command?.uppercase()
+        // PC processCommandActivity: these lists come before the inbox, mailbox and ACK
+        if (directed != null && (command == Js8Commands.CMD_MSG || command in MAILBOX_COMMANDS) && isAutoreplyBlocked(directed.from)) return
         if (directed != null && command != null && command in MAILBOX_COMMANDS) {
             // Easy JS8 mailbox (PC processCommandActivity): MSG TO:, QUERY, QUERY MSGS
             val to = directed.to.trim().uppercase()
@@ -3734,13 +3837,13 @@ class JS8EngineService : Service() {
             warnMissingCallsign()
             return
         }
-        if (isTransmitActive()) return
 
         val heartbeat = parseHeartbeat(text)
         if (heartbeat != null) {
             // PC presentlyWantHBReplies: AUTO (checked above) + HB + ACK, both off by default
             if (!prefs.getBoolean(PREF_HB, false) || !prefs.getBoolean(PREF_HB_ACK, false)) return
             if (isSelfCallsign(callsign, heartbeat.from)) return
+            if (isAutoreplyBlocked(heartbeat.from) || isOnCallList("js8cfg_hb_blacklist", heartbeat.from)) return
             val snrText = formatSNR(snr)
             if (snrText.isEmpty()) return
             val target = heartbeat.from.trim().uppercase()
@@ -3761,6 +3864,7 @@ class JS8EngineService : Service() {
         }
 
         val directed = parseDirectedCommand(text) ?: return
+        if (isAutoreplyBlocked(directed.from)) return
         if (!shouldReplyToDirected(callsign, directed)) return
         val cmdUpper = directed.command.uppercase()
         when {
@@ -3816,6 +3920,7 @@ class JS8EngineService : Service() {
 
         val directed = parseDirectedCommand(text)
         if (directed != null && directed.command == ">") {
+            if (isAutoreplyBlocked(directed.from)) return
             val target = directed.to.trim().uppercase()
             if (isGroupTarget(target)) return
             if (!isSelfCallsign(callsign, target)) return
@@ -3953,6 +4058,22 @@ class JS8EngineService : Service() {
         return true
     }
 
+    private fun callList(key: String): Set<String> =
+        PreferenceManager.getDefaultSharedPreferences(this).getString(key, "").orEmpty().split(',', ' ')
+            .map { it.trim().uppercase() }.filter { it.isNotEmpty() }.toSet()
+
+    /** The call or its base call is on a Station callsign list (PC list.contains(call) || contains(base_callsign)). */
+    private fun isOnCallList(key: String, call: String): Boolean {
+        val list = callList(key)
+        val upper = call.trim().uppercase()
+        return upper in list || com.js8call.example.js8ui.Js8Activity.baseCall(upper) in list
+    }
+
+    /** Station > Only autoreply to / Never autoreply to these callsigns (PC auto_whitelist, auto_blacklist). */
+    private fun isAutoreplyBlocked(from: String): Boolean =
+        (callList("js8cfg_auto_whitelist").isNotEmpty() && !isOnCallList("js8cfg_auto_whitelist", from)) ||
+            isOnCallList("js8cfg_auto_blacklist", from)
+
     private fun isAutoreplyEnabled(): Boolean {
         val prefs = PreferenceManager.getDefaultSharedPreferences(this)
         return prefs.getBoolean(PREF_AUTOREPLY_ENABLED, false)
@@ -4049,6 +4170,7 @@ class JS8EngineService : Service() {
             Log.d(TAG, "PSKReporter skip: no grid in '$text'")
             return
         }
+        if (isOnCallList("js8cfg_spot_blacklist", call)) return // PC spot_blacklist
         val rfHz = currentDialHz + freq.toInt()
         if (rfHz <= 0) {
             Log.d(TAG, "PSKReporter skip: rfHz=$rfHz dialHz=$currentDialHz freq=$freq")
@@ -4378,7 +4500,7 @@ class JS8EngineService : Service() {
             myGrid = grid.take(4), // PC: my_grid().left(4) before buildMessageFrames
             selectedCall = "",
             submode = submode,
-            audioFrequencyHz = currentTxOffsetHz.toDouble(),
+            audioFrequencyHz = splitAudioHz(currentTxOffsetHz.toDouble()),
             txDelaySec = 0.0,
             forceIdentify = callsign.isNotBlank(),
             forceData = false
@@ -4420,7 +4542,7 @@ class JS8EngineService : Service() {
             myGrid = grid.take(4), // PC: my_grid().left(4) before buildMessageFrames
             selectedCall = directedCall,
             submode = submode,
-            audioFrequencyHz = currentTxOffsetHz.toDouble(),
+            audioFrequencyHz = splitAudioHz(currentTxOffsetHz.toDouble()),
             txDelaySec = 0.0,
             forceIdentify = callsign.isNotBlank(),
             forceData = forceData
@@ -4514,16 +4636,6 @@ class JS8EngineService : Service() {
         return selected + sep + trimmed
     }
 
-    private fun applyGridIfHeartbeat(text: String, grid: String): String {
-        val trimmed = text.trim()
-        if (grid.length < 4) return trimmed
-        val grid4 = grid.substring(0, 4).uppercase()
-        if (!TxMessageClassifier.shouldAppendGrid(trimmed)) return trimmed
-        val gridRegex = Regex("\\b[A-R]{2}[0-9]{2}\\b", RegexOption.IGNORE_CASE)
-        if (gridRegex.containsMatchIn(trimmed)) return trimmed
-        return "$trimmed $grid4".trim()
-    }
-
     private fun isRigControlConnected(): Boolean {
         return when (rigControlMode) {
             "network" -> rigCtlConnected
@@ -4542,15 +4654,94 @@ class JS8EngineService : Service() {
         activeEngine.setTransmitReady(!isRigPttRequired())
     }
 
+    /** Station > Radio > PTT Method (PC default VOX). truSDX, QMX and UV-Pro key over their own link. */
+    private fun pttMethod(): String =
+        PreferenceManager.getDefaultSharedPreferences(this).getString("js8cfg_ptt_method", "vox") ?: "vox"
+
     private fun setRigPtt(enabled: Boolean): Boolean {
+        val method = pttMethod()
         return when (rigControlMode) {
-            "network" -> rigCtlClient?.setPtt(enabled) == true
-            "hamlib_usb" -> hamlibRigControl?.setPtt(enabled) == true
-            "rts_ptt" -> setRtsPtt(enabled)
+            "network" -> method == "vox" || rigCtlClient?.setPtt(enabled) == true
+            "hamlib_usb" -> when (method) {
+                "vox" -> true // the radio keys itself from the audio
+                "dtr", "rts" -> setSerialLine(usbSerialBridge, bluetoothSerialBridge, method == "dtr", enabled)
+                else -> hamlibRigControl?.setPtt(enabled) == true
+            }
+            "rts_ptt" -> if (method == "dtr") setSerialLine(usbSerialBridge, bluetoothSerialBridge, true, enabled) else setRtsPtt(enabled)
             "trusdx_serial" -> trusdxSerialSession?.setPtt(enabled) == true
             "qmx_serial" -> qmxCatSession?.setPtt(enabled) == true
             "btech_uvpro" -> uvProSession?.setPtt(enabled) == true
             else -> false
+        }
+    }
+
+    /** DTR or RTS on the serial port the rig is open on (only one of the two bridges has a port). */
+    private fun setSerialLine(usb: UsbSerialBridge?, bluetooth: BluetoothSerialBridge?, dtr: Boolean, enabled: Boolean): Boolean {
+        val usbOk = if (dtr) usb?.setDtr(enabled) else usb?.setRts(enabled)
+        if (usbOk == true) return true
+        return (if (dtr) bluetooth?.setDtr(enabled) else bluetooth?.setRts(enabled)) == true
+    }
+
+    private fun broadcastRigTest(kind: String, ok: Boolean, on: Boolean, text: String) {
+        val intent = Intent(ACTION_RIG_TEST).apply {
+            putExtra(EXTRA_RIG_TEST_KIND, kind)
+            putExtra(EXTRA_RIG_TEST_OK, ok)
+            putExtra(EXTRA_RIG_TEST_ON, on)
+            putExtra(EXTRA_RIG_TEST_TEXT, text)
+        }
+        LocalBroadcastManager.getInstance(this).sendBroadcast(intent)
+    }
+
+    /** Test CAT: connect again with the saved Radio settings (the rig is only opened at engine start). */
+    private fun testCat() {
+        val wasRunning = engine != null || engineStartInProgress
+        if (isTransmitActive()) {
+            broadcastRigTest(RIG_TEST_CAT, false, false, "Can't test the rig while transmitting")
+            return
+        }
+        if (testPttOn) testPtt(false)
+        stopEngine()
+        updateDialFromPrefs()
+        startForegroundService()
+        startEngine()
+        val deadline = System.currentTimeMillis() + RIG_TEST_TIMEOUT_MS
+        mainHandler.post(object : Runnable {
+            override fun run() {
+                val connected = isRigControlConnected()
+                if (!connected && System.currentTimeMillis() < deadline) {
+                    mainHandler.postDelayed(this, 250)
+                    return
+                }
+                broadcastRigTest(RIG_TEST_CAT, connected, false, if (connected) "Rig connected" else "Rig did not connect")
+                if (!wasRunning) { // RX was off: leave it off
+                    stopEngine()
+                    stopSelf()
+                }
+            }
+        })
+    }
+
+    /** Test PTT: key the radio with no audio; released by the button, leaving the page, or after 30 s. */
+    private fun testPtt(on: Boolean) {
+        mainHandler.removeCallbacks(testPttRelease)
+        val refused = when {
+            !on -> null
+            isListenOnly() -> "SWL (Listening only) is checked"
+            isTransmitActive() -> "Can't test PTT while transmitting"
+            !isRigControlConnected() -> "Rig not connected: press Test CAT first"
+            else -> null
+        }
+        if (refused != null) {
+            broadcastRigTest(RIG_TEST_PTT, false, false, refused)
+            return
+        }
+        txHandler.post {
+            val ok = setRigPtt(on)
+            testPttOn = on && ok
+            mainHandler.post {
+                if (testPttOn) mainHandler.postDelayed(testPttRelease, RIG_TEST_PTT_MAX_MS)
+                broadcastRigTest(RIG_TEST_PTT, ok, testPttOn, if (ok) "" else "PTT command failed")
+            }
         }
     }
 
@@ -4567,7 +4758,137 @@ class JS8EngineService : Service() {
         return result
     }
 
+    private val bandHopRunnable = object : Runnable {
+        override fun run() {
+            tryBandHop()
+            heartbeatHandler.postDelayed(this, BAND_HOP_CHECK_MS - System.currentTimeMillis() % BAND_HOP_CHECK_MS)
+        }
+    }
+    private val bandHopTimeout = Runnable { finishScheduledHop(true) }
+
+    /** PC tryBandHop: the latest schedule line whose window holds the time now, unless the operator has moved off it. */
+    private fun tryBandHop() {
+        val prefs = PreferenceManager.getDefaultSharedPreferences(this)
+        if (!prefs.getBoolean("js8cfg_auto_switch_bands", false)) return
+        updateDialFromPrefs()
+        if (bandHoppedHz != 0L && currentDialHz != bandHoppedHz) bandHopped = false
+        val schedule = prefs.getString("js8cfg_schedule", "").orEmpty()
+        if (schedule != bandScheduleSeen) { // PC band_schedule_changed
+            bandScheduleSeen = schedule
+            bandHopped = true
+        }
+        if (pendingHopHz != 0L || isTransmitActive() || messageQueued) return
+
+        fun minutes(s: String) = s.take(2).toInt() * 60 + s.takeLast(2).toInt()
+        val nowMs = System.currentTimeMillis() % 86_400_000L
+        val now = nowMs / 60_000.0
+        val hz = schedule.split('\n').filter { it.isNotBlank() }.map { it.split('|') }
+            .sortedWith(compareBy({ minutes(it[1]) }, { minutes(it[2]) }))
+            .lastOrNull {
+                val at = minutes(it[1])
+                val until = minutes(it[2])
+                (at <= now && now <= until) || (until < at && (at <= now || now <= until))
+            }?.get(0)?.toLongOrNull() ?: return
+
+        val noOverride = bandHopped || hz != bandHoppedHz
+        if (!noOverride || hz == currentDialHz) return
+        bandHopped = false
+        bandHoppedHz = hz
+        pendingHopHz = hz
+        pendingHopEndMs = System.currentTimeMillis() + BAND_HOP_COUNTDOWN_MS
+        Log.i(TAG, "Scheduled frequency change to $hz Hz in 30 s")
+        LocalBroadcastManager.getInstance(this).sendBroadcast(Intent(ACTION_SCHEDULE_HOP).putExtra(EXTRA_FREQUENCY_HZ, hz))
+        heartbeatHandler.postDelayed(bandHopTimeout, BAND_HOP_COUNTDOWN_MS)
+    }
+
+    /** OK, or the 30 seconds ran out (the PC box clicks its default OK). Cancel stays put. */
+    private fun finishScheduledHop(ok: Boolean) {
+        heartbeatHandler.removeCallbacks(bandHopTimeout)
+        val hz = pendingHopHz
+        pendingHopHz = 0L
+        if (hz == 0L || !ok) return
+        bandHopped = true
+        applyBandHop(hz)
+    }
+
+    private fun applyBandHop(hz: Long) {
+        Log.i(TAG, "Frequency changed to $hz Hz by the schedule")
+        PreferenceManager.getDefaultSharedPreferences(this).edit().putString("last_frequency", hz.toString()).apply()
+        currentDialHz = hz
+        setFrequency(hz)
+        broadcastRadioFrequency(hz)
+    }
+
+    private fun setRigFrequency(frequencyHz: Long): Boolean = when (rigControlMode) {
+        "network" -> rigCtlClient?.setFrequency(frequencyHz) == true
+        "hamlib_usb" -> hamlibRigControl?.setFrequency(frequencyHz) == true
+        "trusdx_serial" -> trusdxSerialSession?.setFrequency(frequencyHz) == true
+        "qmx_serial" -> qmxCatSession?.setFrequency(frequencyHz) == true
+        else -> false
+    }
+
+    /**
+     * Station > Rig Options > Split Operation for this rig. Rig needs a split command, which
+     * only the network and Hamlib links have; truSDX and QMX use Fake It. Radios the app can't
+     * tune, or an unknown dial, stay on None (PC: split_mode() false with no rig).
+     */
+    private fun splitMode(): String {
+        val mode = PreferenceManager.getDefaultSharedPreferences(this).getString("js8cfg_split", "none") ?: "none"
+        if (currentDialHz <= 0L) return "none"
+        return when (rigControlMode) {
+            "network", "hamlib_usb" -> mode
+            "trusdx_serial", "qmx_serial" -> if (mode == "none") "none" else "emulate"
+            else -> "none"
+        }
+    }
+
+    /** PC setXIT: audio stays in 1500-2000 Hz and the TX dial moves by the rest. */
+    private fun splitAudioHz(offsetHz: Double): Double {
+        splitXitHz = if (splitMode() == "none") 0 else (offsetHz.toInt() / 500) * 500 - 1500
+        if (splitXitHz != 0) Log.i(TAG, "Split: offset $offsetHz audio ${offsetHz - splitXitHz} XIT $splitXitHz")
+        return offsetHz - splitXitHz
+    }
+
+    /** Runs on txHandler just before key-on. */
+    private fun applySplit(): Boolean {
+        val mode = splitMode()
+        val txHz = currentDialHz + splitXitHz
+        val ok = when (mode) {
+            "emulate" -> setRigFrequency(txHz) // PC EmulateSplitTransceiver
+            "rig" -> when (rigControlMode) {
+                "network" -> rigCtlClient?.setSplit(txHz, true) == true
+                else -> hamlibRigControl?.setSplit(txHz, true) == true
+            }
+            else -> true
+        }
+        if (ok) splitHeld = mode
+        return ok
+    }
+
+    /** Runs on txHandler after key-off. Takes references because shutdown has already cleared the fields. */
+    private fun clearSplit(
+        mode: String,
+        dialHz: Long,
+        network: RigCtlClient?,
+        hamlib: HamlibRigControl?,
+        trusdx: TruSdxSerialSession?,
+        qmx: QmxCatSession?
+    ) {
+        val held = splitHeld
+        splitHeld = "none"
+        when (held) {
+            "emulate" -> when (mode) {
+                "network" -> network?.setFrequency(dialHz)
+                "hamlib_usb" -> hamlib?.setFrequency(dialHz)
+                "trusdx_serial" -> trusdx?.setFrequency(dialHz)
+                "qmx_serial" -> qmx?.setFrequency(dialHz)
+            }
+            "rig" -> if (mode == "network") network?.setSplit(0, false) else hamlib?.setSplit(0, false)
+        }
+    }
+
     private fun setFrequency(frequencyHz: Long) {
+        if (splitHeld == "emulate") return // key-off tunes to currentDialHz
         if (!isRigControlConnected()) {
             Log.d(TAG, "Cannot set frequency: rig control not connected")
             // A configured rig with no link is a failure to report; with rig
@@ -4581,15 +4902,7 @@ class JS8EngineService : Service() {
 
         // Run on background thread
         Thread {
-            val success = when (rigControlMode) {
-                "network" -> rigCtlClient?.setFrequency(frequencyHz) == true
-                "hamlib_usb" -> hamlibRigControl?.setFrequency(frequencyHz) == true
-                "rts_ptt" -> false
-                "trusdx_serial" -> trusdxSerialSession?.setFrequency(frequencyHz) == true
-                "qmx_serial" -> qmxCatSession?.setFrequency(frequencyHz) == true
-                "btech_uvpro" -> false
-                else -> false
-            }
+            val success = setRigFrequency(frequencyHz)
 
             mainHandler.post {
                 if (success) {
@@ -4693,6 +5006,7 @@ class JS8EngineService : Service() {
         const val EXTRA_TX_FRAME_COUNT = "tx_frame_count"
         const val EXTRA_TX_FRAME_CHARS_SENT = "tx_frame_chars_sent"
         const val EXTRA_TX_FRAME_FULL_TEXT = "tx_frame_full_text"
+        const val EXTRA_TX_FRAME_IS_DATA = "tx_frame_is_data"
         const val ACTION_RADIO_FREQUENCY = "com.js8call.example.ACTION_RADIO_FREQUENCY"
         const val ACTION_MESSAGE_RECEIVED = "com.js8call.example.ACTION_MESSAGE_RECEIVED"
         const val ACTION_QUEUE_TX = "com.js8call.example.ACTION_QUEUE_TX"
@@ -4701,6 +5015,9 @@ class JS8EngineService : Service() {
         const val ACTION_TIME_DRIFT = "com.js8call.example.ACTION_TIME_DRIFT"
         /** Start / stop Automatic Time Drift (EXTRA_AUTO_DRIFT_ON, EXTRA_AUTO_DRIFT_STOP_AFTER; 0 = no stop). */
         const val ACTION_SET_AUTO_DRIFT = "com.js8call.example.ACTION_SET_AUTO_DRIFT"
+        private const val KEY_AUTO_DRIFT_ON = "js8cfg_auto_drift_on"
+        private const val KEY_AUTO_DRIFT_STOP_AFTER = "js8cfg_auto_drift_stop_after_run"
+        private const val KEY_AUTO_DRIFT_LEFT = "js8cfg_auto_drift_left"
         /** Broadcast: Automatic Time Drift started or stopped (EXTRA_AUTO_DRIFT_ON). */
         const val ACTION_AUTO_DRIFT = "com.js8call.example.ACTION_AUTO_DRIFT"
         const val EXTRA_AUTO_DRIFT_ON = "auto_drift_on"
@@ -4709,11 +5026,34 @@ class JS8EngineService : Service() {
         const val ACTION_SET_SYNC_STATS = "com.js8call.example.ACTION_SET_SYNC_STATS"
         const val EXTRA_SYNC_STATS_ON = "sync_stats_on"
         const val ACTION_RIG_STATUS = "com.js8call.example.ACTION_RIG_STATUS"
+        const val ACTION_TEST_CAT = "com.js8call.example.ACTION_TEST_CAT"
+        const val ACTION_TEST_PTT = "com.js8call.example.ACTION_TEST_PTT"
+        const val ACTION_RIG_TEST = "com.js8call.example.ACTION_RIG_TEST"
+        const val EXTRA_RIG_TEST_KIND = "rig_test_kind"
+        const val EXTRA_RIG_TEST_OK = "rig_test_ok"
+        const val EXTRA_RIG_TEST_ON = "rig_test_on"
+        const val EXTRA_RIG_TEST_TEXT = "rig_test_text"
+        const val RIG_TEST_CAT = "cat"
+        const val RIG_TEST_PTT = "ptt"
+        private const val RIG_TEST_TIMEOUT_MS = 15_000L
+        private const val RIG_TEST_PTT_MAX_MS = 30_000L
         const val ACTION_DEBUG_INJECT_DECODE = "com.js8call.example.ACTION_DEBUG_INJECT_DECODE"
         const val ACTION_DEBUG_FT8_WAV = "com.js8call.example.ACTION_DEBUG_FT8_WAV"
         const val ACTION_HALT_TX = "com.js8call.example.ACTION_HALT_TX"
         const val ACTION_TUNE = "com.js8call.example.ACTION_TUNE"
         const val ACTION_SEND_HB = "com.js8call.example.ACTION_SEND_HB"
+        const val ACTION_ERASE_LOG = "com.js8call.example.ACTION_ERASE_LOG"
+        const val ACTION_SCHEDULE_HOP = "com.js8call.example.ACTION_SCHEDULE_HOP"
+        const val ACTION_SCHEDULE_HOP_ANSWER = "com.js8call.example.ACTION_SCHEDULE_HOP_ANSWER"
+        const val ACTION_SCHEDULE_HOP_NOW = "com.js8call.example.ACTION_SCHEDULE_HOP_NOW"
+        const val EXTRA_SCHEDULE_HOP_OK = "schedule_hop_ok"
+        /** Waiting out the Scheduled Frequency Change countdown; 0 = none. */
+        @Volatile var pendingHopHz = 0L
+        @Volatile var pendingHopEndMs = 0L
+        /** A message is queued or going out (the queue lives in TransmitViewModel). */
+        @Volatile var messageQueued = false
+        private const val BAND_HOP_CHECK_MS = 15_000L
+        private const val BAND_HOP_COUNTDOWN_MS = 30_000L
         const val ACTION_HB_TIMER = "com.js8call.example.ACTION_HB_TIMER"
         /** CQ button timer; on / off in EXTRA_HB_TIMER_ON. */
         const val ACTION_CQ_TIMER = "com.js8call.example.ACTION_CQ_TIMER"

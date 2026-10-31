@@ -24,7 +24,8 @@
         <TextView
             android:id="@+id/js8_status_blank"
             style="@style/Js8StatusLabel"
-            android:layout_width="173dp"
+            android:layout_width="wrap_content"
+            android:minWidth="173dp"
             android:layout_marginStart="9dp" />
 
         <TextView

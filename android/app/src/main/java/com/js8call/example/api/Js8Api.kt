@@ -142,9 +142,20 @@ object Js8Api {
         return if (bool(p, KEY_DYNAMIC_INFO, false) && dynamicStatus.isNotEmpty()) dynamicStatus else saved
     }
 
-    internal fun setDynamicGrid(v: String) { dynamicGrid = v.trim() }
-    internal fun setDynamicInfo(v: String) { dynamicInfo = v.trim() }
-    internal fun setDynamicStatus(v: String) { dynamicStatus = v.trim() }
+    // Kept after a restart (Rob, 2026-10-22: "all settings remembered"; the PC forgets them)
+    private const val KEY_DYN_GRID = "js8cfg_api_dyn_grid"
+    private const val KEY_DYN_INFO = "js8cfg_api_dyn_info"
+    private const val KEY_DYN_STATUS = "js8cfg_api_dyn_status"
+
+    internal fun setDynamicGrid(v: String) { dynamicGrid = v.trim(); saveDynamic() }
+    internal fun setDynamicInfo(v: String) { dynamicInfo = v.trim(); saveDynamic() }
+    internal fun setDynamicStatus(v: String) { dynamicStatus = v.trim(); saveDynamic() }
+
+    private fun saveDynamic() {
+        if (app == null) return
+        prefs().edit().putString(KEY_DYN_GRID, dynamicGrid).putString(KEY_DYN_INFO, dynamicInfo)
+            .putString(KEY_DYN_STATUS, dynamicStatus).apply()
+    }
 
     // ---- Start ----------------------------------------------------------------------------------
 
@@ -177,6 +188,9 @@ object Js8Api {
         val p = prefs()
         p.registerOnSharedPreferenceChangeListener(prefsListener)
         dynamicWasOn = bool(p, KEY_DYNAMIC_INFO, false)
+        dynamicGrid = p.getString(KEY_DYN_GRID, "").orEmpty()
+        dynamicInfo = p.getString(KEY_DYN_INFO, "").orEmpty()
+        dynamicStatus = p.getString(KEY_DYN_STATUS, "").orEmpty()
         lastBand = BandUtils.bandLabelForFrequencyHz(dialHz())
         apply()
         net.postDelayed(pulse, PULSE_MS)
@@ -224,7 +238,7 @@ object Js8Api {
         cfg = c
         // Configuration.cpp: checking the box clears an old grid from the API
         val dynamicOn = bool(p, KEY_DYNAMIC_INFO, false)
-        if (dynamicOn && !dynamicWasOn) dynamicGrid = ""
+        if (dynamicOn && !dynamicWasOn) { dynamicGrid = ""; saveDynamic() }
         dynamicWasOn = dynamicOn
         net.post {
             udp.port = if (c.jsonConflicts) 0 else c.udpPort

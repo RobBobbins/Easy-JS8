@@ -89,6 +89,14 @@ class RigCtlClient(
         return response.startsWith("RPRT 0")
     }
 
+    /** Split on with the TX VFO at txFrequencyHz, or split off. */
+    fun setSplit(txFrequencyHz: Long, enabled: Boolean): Boolean {
+        val vfo = sendCommand(if (enabled) "S 1 VFOB" else "S 0 VFOA") ?: return false
+        if (!vfo.startsWith("RPRT 0") || !enabled) return vfo.startsWith("RPRT 0")
+        val response = sendCommand("I $txFrequencyHz") ?: return false
+        return response.startsWith("RPRT 0")
+    }
+
     fun setPtt(enabled: Boolean): Boolean {
         val response = sendCommand("T ${if (enabled) 1 else 0}") ?: return false
         return response.startsWith("RPRT 0")

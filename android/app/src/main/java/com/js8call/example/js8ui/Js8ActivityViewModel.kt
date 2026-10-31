@@ -19,6 +19,26 @@ class Js8ActivityViewModel(app: Application) : AndroidViewModel(app) {
 
     private fun cfg() = Js8Activity.Config(PreferenceManager.getDefaultSharedPreferences(getApplication()))
 
+    // Band / Call Activity and the Message Window kept across restarts (Rob, 2026-10-22), like the PC
+    // unless "Reset the Band Activity, Call Activity, and RX history at startup" is ticked
+    private val store = java.io.File(app.filesDir, "js8_activity.json")
+    private val saver = android.os.Handler(android.os.Looper.getMainLooper())
+    private val save = Runnable {
+        val json = activity.toJson().toString()
+        Thread { runCatching { store.writeText(json) } }.start()
+    }
+
+    init {
+        val reset = PreferenceManager.getDefaultSharedPreferences(app).getBoolean("js8cfg_reset_activity", false)
+        if (reset) store.delete()
+        else runCatching { activity.fromJson(org.json.JSONObject(store.readText())) }
+    }
+
+    override fun onCleared() {
+        saver.removeCallbacks(save)
+        save.run()
+    }
+
     fun onFrame(m: DecodedMessage) {
         if (activity.onFrame(m, myOffset, cfg())) changed()
     }
@@ -37,6 +57,11 @@ class Js8ActivityViewModel(app: Application) : AndroidViewModel(app) {
     /** The typed message finished (or was halted): the Typing Box still has to be emptied. */
     var typedClearPending = false
 
+    private var frameOnAir: String? = null
+    /** PC last_tx_label: the last frame that finished going out (stopTx). */
+    var lastTx = ""
+        private set
+
     /** Send pressed: the Typing Box keeps [text] until it has been sent. */
     fun onTypedQueued(text: String) {
         _typed.value = TypedTx(text)
@@ -49,8 +74,11 @@ class Js8ActivityViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     /** A part of any of our transmissions started going out (heartbeats and replies too). */
-    fun onTxFrame(text: String, index: Int, count: Int, charsSent: Int, offset: Int, fullText: String = "") {
-        activity.writeTxFrame(text, offset, first = index == 0, last = index == count - 1, cfg = cfg())
+    fun onTxFrame(text: String, index: Int, count: Int, charsSent: Int, offset: Int, fullText: String = "",
+                  isData: Boolean = false) {
+        frameOnAir?.let { lastTx = it }
+        frameOnAir = text
+        activity.writeTxFrame(text, offset, first = index == 0, last = index == count - 1, cfg = cfg(), isData = isData)
         // Every transmission shows in the Typing Box (Rob, 2026-10-21); what you typed is never replaced
         if (_typed.value == null && typingBoxEmpty && fullText.isNotEmpty()) {
             _typed.value = TypedTx(fullText, onAir = true, charsSent = charsSent, auto = true)
@@ -68,7 +96,10 @@ class Js8ActivityViewModel(app: Application) : AndroidViewModel(app) {
 
     /** Transmission finished or failed: the typed message (if it was on air) leaves the box. */
     fun onTxEnded() {
+        frameOnAir?.let { lastTx = it }
+        frameOnAir = null
         if (_typed.value?.onAir == true) clearTyped()
+        changed()
     }
 
     /** Halt, or the message is done: free and empty the Typing Box (PC resetMessageUI). */
@@ -77,5 +108,10 @@ class Js8ActivityViewModel(app: Application) : AndroidViewModel(app) {
         _typed.value = null
     }
 
-    fun changed() { _version.value = (_version.value ?: 0) + 1 }
+    fun changed() {
+        _version.value = (_version.value ?: 0) + 1
+        // Saved a few seconds after the last change, not on every frame
+        saver.removeCallbacks(save)
+        saver.postDelayed(save, 3000)
+    }
 }

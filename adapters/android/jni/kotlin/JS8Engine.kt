@@ -278,6 +278,11 @@ class JS8Engine private constructor(
         return withNativeHandleOr(0) { nativeGetTxFramesStarted(it) }
     }
 
+    /** True when the message's first part is plain text, not a CQ, heartbeat or directed header. */
+    fun txFirstFrameIsData(): Boolean {
+        return withNativeHandleOr(false) { nativeGetTxFirstFrameIsData(it) }
+    }
+
     /**
      * Milliseconds until scheduled TX audio begins, or -1 when no TX is active.
      */
@@ -401,6 +406,7 @@ class JS8Engine private constructor(
     private external fun nativeIsTransmittingAudio(handle: Long): Boolean
     private external fun nativeGetTxFrameTexts(handle: Long): Array<String>
     private external fun nativeGetTxFramesStarted(handle: Long): Int
+    private external fun nativeGetTxFirstFrameIsData(handle: Long): Boolean
     private external fun nativeGetTxFrameTones(handle: Long): IntArray
     private external fun nativeSetFt8Enabled(handle: Long, enabled: Boolean)
     private external fun nativeDebugFt8Recording(handle: Long, samples: ShortArray)

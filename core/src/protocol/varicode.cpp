@@ -122,7 +122,7 @@ constexpr std::uint16_t nmaxgrid = static_cast<std::uint16_t>((1 << 15) - 1);
 const std::regex kGridPattern(R"(^[A-R]{2}[0-9]{2}([A-X]{2})?$)", std::regex::icase);
 // Capture groups: 1=type, 2=grid
 const std::regex kHeartbeatRe(
-    R"(^\s*(?:[@](?:ALLCALL|HB)\s+)?(CQ CQ CQ|CQ DX|CQ QRP|CQ CONTEST|CQ FIELD|CQ FD|CQ CQ|CQ|HB ALT|HB|HEARTBEAT(?!\s+SNR))(?:\s+([A-R]{2}[0-9]{2}))?.*$)",
+    R"(^\s*(?:[@](?:ALLCALL|HB)\s+)?(CQ CQ CQ|CQ DX|CQ QRP|CQ CONTEST|CQ FIELD|CQ FD|CQ CQ|CQ|HB|HEARTBEAT(?!\s+SNR))(?:\s([A-R]{2}[0-9]{2}))?\b)",
     std::regex::icase);
 // Capture groups: 1=callsign, 2=grid, 3=cmd, 4=num
 const std::regex kCompoundRe(
@@ -851,7 +851,7 @@ void set_backend(Backend const& backend) { g_backend = backend; }
 // until the full core implementation is completed.
 std::string pack_heartbeat_message(std::string const& text, std::string const& callsign, int* n) {
   std::smatch match;
-  if (!std::regex_match(text, match, kHeartbeatRe)) {
+  if (!std::regex_search(text, match, kHeartbeatRe)) {
     if (g_backend.pack_heartbeat_message) return g_backend.pack_heartbeat_message(text, callsign, n);
     if (n) *n = 0;
     return {};

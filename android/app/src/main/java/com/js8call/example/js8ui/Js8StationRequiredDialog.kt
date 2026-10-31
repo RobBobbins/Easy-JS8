@@ -36,7 +36,8 @@ class Js8StationRequiredDialog : DialogFragment() {
         super.onDismiss(dialog)
         if (openSettings) {
             openSettings = false
-            (parentFragment as? Js8MainFragment)?.openStation()
+            // Straight to General > Station Details, where callsign and grid go (Rob, 2026-10-22)
+            (parentFragment as? Js8MainFragment)?.openStation(page = Js8SettingsFragment.GENERAL_PAGE)
         }
     }
 }

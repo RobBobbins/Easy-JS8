@@ -107,7 +107,8 @@ class MainActivity : AppCompatActivity() {
                         intent.getIntExtra(JS8EngineService.EXTRA_TX_FRAME_COUNT, 1),
                         intent.getIntExtra(JS8EngineService.EXTRA_TX_FRAME_CHARS_SENT, 0),
                         intent.getDoubleExtra(JS8EngineService.EXTRA_TX_OFFSET_HZ, 0.0).toInt(),
-                        intent.getStringExtra(JS8EngineService.EXTRA_TX_FRAME_FULL_TEXT).orEmpty()
+                        intent.getStringExtra(JS8EngineService.EXTRA_TX_FRAME_FULL_TEXT).orEmpty(),
+                        intent.getBooleanExtra(JS8EngineService.EXTRA_TX_FRAME_IS_DATA, false)
                     )
                 }
                 ACTION_PROCESS_TX_QUEUE -> {
@@ -187,6 +188,52 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    // ---- Scheduled Frequency Change (PC tryBandHop's SelfDestructMessageBox), over every screen --
+
+    private var hopDialog: androidx.appcompat.app.AlertDialog? = null
+    private var hopCountdown: Runnable? = null
+    private val hopUi = android.os.Handler(android.os.Looper.getMainLooper())
+
+    private val hopReceiver = object : BroadcastReceiver() {
+        override fun onReceive(context: Context, intent: Intent) = showScheduledHop()
+    }
+
+    private fun answerScheduledHop(ok: Boolean) {
+        startService(Intent(this, JS8EngineService::class.java).apply {
+            action = JS8EngineService.ACTION_SCHEDULE_HOP_ANSWER
+            putExtra(JS8EngineService.EXTRA_SCHEDULE_HOP_OK, ok)
+        })
+    }
+
+    private fun closeHopDialog() {
+        hopCountdown?.let { hopUi.removeCallbacks(it) }
+        hopCountdown = null
+        hopDialog?.dismiss()
+        hopDialog = null
+    }
+
+    /** The change the service is counting down, if any; also after a rotation or a return to the app. */
+    private fun showScheduledHop() {
+        closeHopDialog()
+        val hz = JS8EngineService.pendingHopHz
+        if (hz == 0L) return
+        val mhz = String.format(java.util.Locale.US, "%.6f", hz / 1_000_000.0)
+        fun left() = ((JS8EngineService.pendingHopEndMs - System.currentTimeMillis()) / 1000).toInt()
+        fun text() = "A scheduled frequency change has arrived. The rig frequency will be changed to $mhz MHz in ${left()} second(s)."
+        val dialog = androidx.appcompat.app.AlertDialog.Builder(this).setTitle("Scheduled Frequency Change").setMessage(text())
+            .setPositiveButton(android.R.string.ok) { _, _ -> closeHopDialog(); answerScheduledHop(true) }
+            .setNegativeButton(android.R.string.cancel) { _, _ -> closeHopDialog(); answerScheduledHop(false) }
+            .setCancelable(false).show()
+        hopDialog = dialog
+        hopCountdown = object : Runnable {
+            override fun run() {
+                if (left() <= 0 || JS8EngineService.pendingHopHz == 0L) { closeHopDialog(); return } // the service changes it on its own 30 second timer
+                dialog.setMessage(text())
+                hopUi.postDelayed(this, 1000)
+            }
+        }.also { hopUi.postDelayed(it, 1000) }
+    }
+
     companion object {
         private const val REQUEST_RECORD_AUDIO = 1
         private const val REQUEST_BLUETOOTH_CONNECT = 3
@@ -234,6 +281,11 @@ class MainActivity : AppCompatActivity() {
         transmitViewModel = ViewModelProvider(this)[TransmitViewModel::class.java]
         js8ActivityViewModel = ViewModelProvider(this)[com.js8call.example.js8ui.Js8ActivityViewModel::class.java]
         decodeViewModel.loadPersistedDecodesIfEnabled()
+
+        // PC isMessageQueuedForTransmit, for the service's Scheduled Frequency Change check
+        transmitViewModel.txState.observe(this) {
+            JS8EngineService.messageQueued = it != com.js8call.example.model.TransmitState.IDLE
+        }
 
         // Easy JS8: Station > Reporting API (and WSJT-X, N3FJP, N1MM)
         Js8Api.init(this)
@@ -287,6 +339,9 @@ class MainActivity : AppCompatActivity() {
         }
         LocalBroadcastManager.getInstance(this)
             .registerReceiver(monitorReceiver, monitorFilter)
+        LocalBroadcastManager.getInstance(this)
+            .registerReceiver(hopReceiver, IntentFilter(JS8EngineService.ACTION_SCHEDULE_HOP))
+        showScheduledHop()
     }
 
     override fun onStop() {
@@ -296,6 +351,9 @@ class MainActivity : AppCompatActivity() {
             .unregisterReceiver(decodeReceiver)
         LocalBroadcastManager.getInstance(this)
             .unregisterReceiver(monitorReceiver)
+        LocalBroadcastManager.getInstance(this)
+            .unregisterReceiver(hopReceiver)
+        closeHopDialog()
         decodeViewModel.persistDecodesOnStop()
         if (isFinishing && !isChangingConfigurations) {
             Js8Api.closing() // PC closeEvent: STATION.CLOSING

@@ -39,6 +39,25 @@ class MessageLogWriter(private val context: Context) {
         executor.shutdown()
     }
 
+    /** Erase ALL.TXT: the log and its rotated copy. The next line starts a new file. */
+    fun erase() {
+        executor.execute {
+            logTarget = null
+            for (name in listOf(LOG_NAME, LOG_BACKUP_NAME)) {
+                try {
+                    if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+                        findMediaStoreEntry(name)?.let { resolver.delete(it, null, null) }
+                    } else {
+                        File(File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), LOG_DIR), name).delete()
+                    }
+                } catch (e: Exception) {
+                    Log.w(TAG, "Failed erasing $name", e)
+                }
+            }
+            Log.i(TAG, "Log erased")
+        }
+    }
+
     fun logRx(text: String, snr: Int, freqHz: Float, mode: Int, from: String?) {
         if (!enabled) return
         val timestamp = formatTimestamp()

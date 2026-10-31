@@ -143,6 +143,13 @@ object Js8SettingsSchema {
         }
     }
 
+    /** PC set_rig_invariants: Test CAT needs a rig, Test PTT also a PTT Method other than VOX. */
+    fun rigTestEnabled(d: Draft, action: String): Boolean {
+        if (rigIs(d, "none")) return false
+        if (action == "test_cat" || rigIs(d, "trusdx_serial", "qmx_serial", "btech_uvpro", "rts_ptt")) return true
+        return (d.values["js8cfg_ptt_method"] ?: d.prefs.getString("js8cfg_ptt_method", "vox")) != "vox"
+    }
+
     private fun rigIs(d: Draft, vararg types: String): Boolean {
         val v = d.values[RIG] ?: loadRig(d.prefs)
         return types.any { t -> if (t == "hamlib") v.startsWith("hamlib:") else v == t }
@@ -210,7 +217,8 @@ object Js8SettingsSchema {
         )),
         // From Menu > View (Rob, 2026-10-19). The Clear buttons act at once, not on OK.
         Section("View", null, listOf(
-            check("js8cfg_show_hb_acks", "Show Band Heartbeats and ACKs", false),
+            // PC default on (BandHBActivityVisible, true) (Rob, 2026-10-22)
+            check("js8cfg_show_hb_acks", "Show Band Heartbeats and ACKs", true),
             // Band Activity columns, upright (Rob, 2026-10-19); same setting as press-and-hold on the header
             check("js8_table_${BAND_TABLE_UPRIGHT}_col_offset", "Show Offset in Band Activity", false),
             check("js8_table_${BAND_TABLE_UPRIGHT}_col_snr", "Show SNR in Band Activity", false),
@@ -219,11 +227,14 @@ object Js8SettingsSchema {
             ButtonRow(listOf("Clear Band Activity" to "clear_band")),
             ButtonRow(listOf("Clear Call Activity" to "clear_call")),
             ButtonRow(listOf("Clear RX Activity" to "clear_rx")),
-            ButtonRow(listOf("Clear All Activity" to "clear_all"))
+            ButtonRow(listOf("Clear All Activity" to "clear_all")),
+            // Upright and Swipe dividers back to the layout's sizes (Rob, 2026-10-22); PC mode: View menu
+            ButtonRow(listOf("Reset Window Sizes" to "reset_window_sizes"))
         )),
         // From the PC's Log menu (Rob, 2026-10-20): Export Log... opens Export Options
         Section("Log", null, listOf(
-            ButtonRow(listOf("Export Log..." to "export_log"))
+            ButtonRow(listOf("Export Log..." to "export_log")),
+            ButtonRow(listOf("Erase ALL.TXT" to "erase_all_txt", "Erase js8call_log.adi" to "erase_adi"))
         ))
     )
 
@@ -490,6 +501,9 @@ object Js8SettingsSchema {
     /** Saved Messages default list (Configuration.cpp: "TNX 73 GL"). */
     const val SAVED_MESSAGES_KEY = "js8cfg_saved_messages"
     const val SAVED_MESSAGES_DEFAULT = "TNX 73 GL"
+
+    /** Frequency Schedule, one line each: hz|HH:MM|HH:MM|description. */
+    const val SCHEDULE_KEY = "js8cfg_schedule"
 
     /** Notification events (Configuration.cpp notifyRows). */
     val NOTIFY_EVENTS = listOf(

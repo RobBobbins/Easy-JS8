@@ -28,7 +28,7 @@
             android:layout_marginStart="6dp"
             android:text="JS8 Normal" />
 
-        <!-- PC Last Tx (not filled yet) -->
+        <!-- PC Last Tx -->
         <TextView
             android:id="@+id/js8_status_blank"
             style="@style/Js8FrameText"

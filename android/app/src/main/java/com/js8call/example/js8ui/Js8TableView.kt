@@ -57,7 +57,9 @@ class Js8TableView @JvmOverloads constructor(
         /** Text color for one column (e.g. red for a blocked station's icon). */
         val colors: Map<String, Int> = emptyMap(),
         /** Center this column's text (Age, icon). */
-        val center: Set<String> = emptySet()
+        val center: Set<String> = emptySet(),
+        /** Kept above the sorted rows whatever the sort, lower first (@ALLCALL and groups, then messages). */
+        val pin: Int = 0
     )
 
     var tableKey: String = ""
@@ -73,13 +75,15 @@ class Js8TableView @JvmOverloads constructor(
     private var sortedRows: List<Row> = emptyList()
     private var sortKey: String? = null
     private var sortAscending = true
+    /** Sort used until a header is tapped (Band / Call Activity: last heard, recent first, Rob 2026-10-22). */
+    var defaultSortKey: String? = null
 
     private val dp = resources.displayMetrics.density
     private val font: Typeface? = ResourcesCompat.getFont(context, R.font.selawik)
     private val boldFont: Typeface = Typeface.create(font, Typeface.BOLD)
-    private val textSizePx = resources.getDimension(R.dimen.js8_text)
+    private var textSizePx = resources.getDimension(R.dimen.js8_text)
     private val headerHeight = resources.getDimensionPixelSize(R.dimen.js8_list_header_height)
-    private val rowHeight = resources.getDimensionPixelSize(R.dimen.js8_list_row_height)
+    private var rowHeight = resources.getDimensionPixelSize(R.dimen.js8_list_row_height)
 
     private val hScroll = HorizontalScrollView(context).apply {
         isFillViewport = true
@@ -108,8 +112,27 @@ class Js8TableView @JvmOverloads constructor(
     fun setColumns(key: String, cols: List<Column>) {
         tableKey = key
         columns = cols
+        // The last header tapped, kept after a restart (Rob, 2026-10-22: "all settings remembered")
+        val p = PreferenceManager.getDefaultSharedPreferences(context)
+        sortKey = p.getString(sortPref(), null) ?: defaultSortKey
+        sortAscending = p.getBoolean(sortPref() + "_asc", true)
+        rebuildHeader()
+        applySort()
+    }
+
+    /** Configuration > Colors > Font: 1 is the size this table was built for. */
+    fun setTextScale(scale: Float) {
+        val px = resources.getDimension(R.dimen.js8_text) * scale
+        if (px == textSizePx) return
+        textSizePx = px
+        rowHeight = (resources.getDimensionPixelSize(R.dimen.js8_list_row_height) * scale).toInt()
+        measure.textSize = px
+        header.layoutParams = header.layoutParams.apply { height = (headerHeight * scale).toInt() }
+        measureContents()
         rebuildHeader()
     }
+
+    private fun sortPref() = "js8_table_${tableKey}_sort"
 
     /** Change one header label (desktop shows "Callsigns (N)"). */
     fun setHeaderLabel(key: String, label: String) {
@@ -229,19 +252,24 @@ class Js8TableView @JvmOverloads constructor(
 
     private fun onHeaderTap(col: Column) {
         if (sortKey == col.key) sortAscending = !sortAscending else { sortKey = col.key; sortAscending = true }
+        PreferenceManager.getDefaultSharedPreferences(context).edit()
+            .putString(sortPref(), sortKey).putBoolean(sortPref() + "_asc", sortAscending).apply()
         applySort()
     }
 
     @Suppress("UNCHECKED_CAST")
     private fun applySort() {
         val key = sortKey
-        showRows(if (key == null) rows else {
+        // Pinned rows (@ALLCALL, groups, messages) stay on top in their own order
+        val pinned = rows.filter { it.pin > 0 }.sortedBy { it.pin }
+        val rest = rows.filter { it.pin == 0 }
+        showRows(pinned + if (key == null) rest else {
             val cmp = Comparator<Row> { a, b ->
                 val av = (a.sortValues[key] ?: a.values[key] ?: "") as Comparable<Any>
                 val bv = (b.sortValues[key] ?: b.values[key] ?: "") as Comparable<Any>
                 try { av.compareTo(bv) } catch (_: ClassCastException) { av.toString().compareTo(bv.toString()) }
             }
-            if (sortAscending) rows.sortedWith(cmp) else rows.sortedWith(cmp.reversed())
+            if (sortAscending) rest.sortedWith(cmp) else rest.sortedWith(cmp.reversed())
         })
     }
 
@@ -283,6 +311,7 @@ class Js8TableView @JvmOverloads constructor(
             val vis = visibleColumns()
             val widths = columnWidths()
             val rv = holder.rowView
+            if (rv.layoutParams.height != rowHeight) rv.layoutParams = rv.layoutParams.apply { height = rowHeight }
             // Same number of cells: change them in place (no new views, so nothing jumps)
             if (rv.childCount != vis.size) {
                 rv.removeAllViews()
@@ -303,6 +332,7 @@ class Js8TableView @JvmOverloads constructor(
                 val tv = rv.getChildAt(i) as TextView
                 val text = row.values[col.key].orEmpty()
                 if (tv.text.toString() != text) tv.text = text
+                if (tv.textSize != textSizePx) tv.setTextSize(TypedValue.COMPLEX_UNIT_PX, textSizePx)
                 if (tv.typeface != face) tv.typeface = face
                 tv.setTextColor(row.colors[col.key] ?: ContextCompat.getColor(context, R.color.js8_list_text))
                 val g = Gravity.CENTER_VERTICAL or when {

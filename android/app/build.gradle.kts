@@ -17,7 +17,7 @@ android {
 
     defaultConfig {
         applicationId = "com.easyjs8.app"
-        minSdk = 26
+        minSdk = 24 // Android 7.0: Galaxy S6 active (Rob, 2026-10-22); was 26
         targetSdk = 34
         versionCode = 3
         versionName = "1.0"

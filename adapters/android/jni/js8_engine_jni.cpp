@@ -45,6 +45,7 @@ JNIEXPORT jboolean JNICALL Java_com_js8call_core_JS8Engine_nativeIsTransmitting(
 JNIEXPORT jboolean JNICALL Java_com_js8call_core_JS8Engine_nativeIsTransmittingAudio(JNIEnv*, jobject, jlong);
 JNIEXPORT jobjectArray JNICALL Java_com_js8call_core_JS8Engine_nativeGetTxFrameTexts(JNIEnv*, jobject, jlong);
 JNIEXPORT jint JNICALL Java_com_js8call_core_JS8Engine_nativeGetTxFramesStarted(JNIEnv*, jobject, jlong);
+JNIEXPORT jboolean JNICALL Java_com_js8call_core_JS8Engine_nativeGetTxFirstFrameIsData(JNIEnv*, jobject, jlong);
 JNIEXPORT jintArray JNICALL Java_com_js8call_core_JS8Engine_nativeGetTxFrameTones(JNIEnv*, jobject, jlong);
 JNIEXPORT jobjectArray JNICALL Java_com_js8call_core_JS8Engine_nativeBuildFrameTexts(JNIEnv*, jclass, jstring, jstring, jstring, jstring, jint, jboolean);
 JNIEXPORT void JNICALL Java_com_js8call_core_JS8Engine_nativeSetFt8Enabled(JNIEnv*, jobject, jlong, jboolean);
@@ -1051,6 +1052,19 @@ int js8_engine_tx_frames_started(JS8Engine_Native* engine) {
   return engine->engine->tx_frames_started();
 }
 
+bool js8_engine_tx_first_frame_is_data(JS8Engine_Native* engine) {
+  if (!engine || !engine->engine) return false;
+  auto const frames = engine->engine->tx_message_frames();
+  if (frames.empty()) return false;
+  js8core::events::Decoded decoded;
+  decoded.data = frames.front().first;
+  decoded.type = frames.front().second;
+  std::vector<JS8Engine_Native::CompoundCall> compound_calls;
+  int type = 0;
+  render_decoded_text(compound_calls, decoded, &type);
+  return (type & 0b100) != 0;
+}
+
 void js8_engine_set_tx_ready(JS8Engine_Native* engine, bool ready) {
   if (!engine || !engine->engine) return;
   engine->engine->set_tx_ready(ready);
@@ -1120,6 +1134,8 @@ int js8_register_natives(JavaVM* vm, JNIEnv* env) {
      (void*)Java_com_js8call_core_JS8Engine_nativeGetTxFrameTexts},
     {"nativeGetTxFramesStarted", "(J)I",
      (void*)Java_com_js8call_core_JS8Engine_nativeGetTxFramesStarted},
+    {"nativeGetTxFirstFrameIsData", "(J)Z",
+     (void*)Java_com_js8call_core_JS8Engine_nativeGetTxFirstFrameIsData},
     {"nativeGetTxFrameTones", "(J)[I",
      (void*)Java_com_js8call_core_JS8Engine_nativeGetTxFrameTones},
     {"nativeBuildFrameTexts", "(Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;IZ)[Ljava/lang/String;",

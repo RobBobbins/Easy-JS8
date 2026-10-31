@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- Swipe Status Bar (Rob, 2026-10-20): Receiving | cycle progress (in the PC's empty box's place,
      as upright) | JS8 Normal | Freq | Auto Reply | wpm | Last Tx. Receiving 110 dp, progress
-     100 dp, wpm 150 dp so all fit (Rob, 2026-10-20). Last Tx is not filled yet and sits off the
+     100 dp, wpm 150 dp so all fit (Rob, 2026-10-20). Last Tx sits off the
      right edge; the row scrolls sideways. PC mode keeps js8_status_bar.xml (PC order). -->
 <HorizontalScrollView xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
@@ -56,11 +56,12 @@
             android:layout_marginStart="9dp"
             android:visibility="gone" />
 
-        <!-- PC Last Tx (not filled yet) -->
+        <!-- PC Last Tx -->
         <TextView
             android:id="@+id/js8_status_blank"
             style="@style/Js8StatusLabel"
-            android:layout_width="173dp"
+            android:layout_width="wrap_content"
+            android:minWidth="173dp"
             android:layout_marginStart="9dp"
             android:layout_marginEnd="22dp" />
     </LinearLayout>

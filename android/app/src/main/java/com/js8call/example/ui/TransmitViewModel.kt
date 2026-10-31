@@ -91,7 +91,7 @@ class TransmitViewModel(application: Application) : AndroidViewModel(application
         // CQ Message from Settings (PC default "CQ CQ CQ <MYGRID4>"), macros expanded
         val prefs = androidx.preference.PreferenceManager.getDefaultSharedPreferences(getApplication())
         val cq = com.js8call.example.js8ui.Js8Macros.expand(
-            prefs.getString("js8cfg_cq_message", "CQ CQ CQ <MYGRID4>").orEmpty(), prefs)
+            prefs.getString("js8cfg_cq_message", "CQ CQ CQ <MYGRID4>").orEmpty().ifBlank { "CQ CQ CQ <MYGRID4>" }, prefs)
         queueMessage(cq.ifBlank { "CQ CQ CQ" }, priority = 1)
     }
 

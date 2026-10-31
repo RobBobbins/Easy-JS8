@@ -83,7 +83,8 @@ class Js8Page(private val context: Context) {
         gravity = Gravity.CENTER_VERTICAL
         isSingleLine = true
         inputType = type
-        importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_NO
+        // Android 8.0+ only (the app runs on 7.0 since 2026-10-22)
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_NO
     }
 
     /** Label above its control, like the Station window upright. */

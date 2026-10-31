@@ -373,8 +373,8 @@ class Js8Activity {
      * (PC prepareNextMessageFrame -> displayTextForFreq): the first part starts a line,
      * later parts join it, the last one ends it with the EOT mark.
      */
-    fun writeTxFrame(text: String, offset: Int, first: Boolean, last: Boolean, cfg: Config) =
-        writeRx(text, offset, System.currentTimeMillis(), isTx = true, newLine = first, isLast = last, cfg = cfg)
+    fun writeTxFrame(text: String, offset: Int, first: Boolean, last: Boolean, cfg: Config, isData: Boolean = false) =
+        writeRx(text, offset, System.currentTimeMillis(), isTx = true, newLine = first, isLast = last, cfg = cfg, isData = isData)
 
     /** Band Activity row text for one offset, with the hide rules of displayBandActivity.cpp. */
     fun bandRowText(offset: Int, now: Long, agingMin: Int, showHb: Boolean, selected: Boolean, eot: String): Pair<String, ActivityDetail?> {
@@ -417,4 +417,62 @@ class Js8Activity {
     fun clearBand() = bandActivity.clear()
     fun clearCalls() = callActivity.clear()
     fun clearRx() { rxLines.clear(); openRxLine.clear() }
+
+    /**
+     * Band Activity, Call Activity and the Message Window as JSON, kept across restarts like the PC
+     * (Rob, 2026-10-22: "all settings remembered"; PC: unless "Reset the Band Activity, Call Activity,
+     * and RX history at startup").
+     */
+    fun toJson(): org.json.JSONObject {
+        val band = org.json.JSONArray()
+        bandActivity.forEach { (off, list) ->
+            list.forEach { d ->
+                band.put(org.json.JSONObject().put("offset", off).put("text", d.text).put("snr", d.snr).put("utc", d.utcMs)
+                    .put("tdrift", d.tdrift.toDouble()).put("submode", d.submode).put("bits", d.bits)
+                    .put("directed", d.isDirected).put("data", d.isDataFrame))
+            }
+        }
+        val calls = org.json.JSONArray()
+        callActivity.values.forEach { c ->
+            calls.put(org.json.JSONObject().put("call", c.call).put("grid", c.grid).put("snr", c.snr).put("offset", c.offset)
+                .put("utc", c.utcMs).put("tdrift", c.tdrift.toDouble()).put("submode", c.submode).put("cq", c.cqMs).put("ack", c.ackMs))
+        }
+        val rx = org.json.JSONArray()
+        rxLines.forEach { l ->
+            rx.put(org.json.JSONObject().put("utc", l.utcMs).put("offset", l.offset).put("tx", l.isTx).put("text", l.text.toString())
+                .put("boldFirst", l.bold?.first ?: -1).put("boldLast", l.bold?.last ?: -1))
+        }
+        return org.json.JSONObject().put("band", band).put("calls", calls).put("rx", rx)
+    }
+
+    /** Puts back what [toJson] saved; Message Window lines come back finished (no more frames join them). */
+    fun fromJson(o: org.json.JSONObject) {
+        bandActivity.clear(); callActivity.clear(); clearRx()
+        o.optJSONArray("band")?.let { arr ->
+            for (i in 0 until arr.length()) {
+                val j = arr.getJSONObject(i)
+                val off = j.getInt("offset")
+                bandActivity.getOrPut(off) { mutableListOf() }.add(ActivityDetail(off, j.getString("text"), j.getInt("snr"),
+                    j.getLong("utc"), j.getDouble("tdrift").toFloat(), j.getInt("submode"), j.getInt("bits"),
+                    j.getBoolean("directed"), j.getBoolean("data")))
+            }
+        }
+        o.optJSONArray("calls")?.let { arr ->
+            for (i in 0 until arr.length()) {
+                val j = arr.getJSONObject(i)
+                val c = j.getString("call")
+                callActivity[c] = CallDetail(c, j.getString("grid"), j.getInt("snr"), j.getInt("offset"), j.getLong("utc"),
+                    j.getDouble("tdrift").toFloat(), j.getInt("submode"), j.getLong("cq"), j.getLong("ack"))
+            }
+        }
+        o.optJSONArray("rx")?.let { arr ->
+            for (i in 0 until arr.length()) {
+                val j = arr.getJSONObject(i)
+                rxLines.add(RxLine(j.getLong("utc"), j.getInt("offset"), j.getBoolean("tx"), StringBuilder(j.getString("text")), true).apply {
+                    val f = j.optInt("boldFirst", -1)
+                    if (f >= 0) bold = f..j.optInt("boldLast", f)
+                })
+            }
+        }
+    }
 }

@@ -23,7 +23,7 @@ Advanced (with a rig picked the first row is Rig | CAT Control | PTT Method | Mo
 hold, same height across each row (see LAYOUT.md). Checked with Rig None and Hamlib NET (then Cancel).
 Station > Audio sideways packed the same way (see LAYOUT.md); checked in Swipe's Station screen only
 (scrolls a little there; PC / FT8Call mode not looked at). Rob has not said whether other Station pages should get the same.
-**Next:** "CQ CQ API TEST" losing words (wpm box upright and the double send done 2026-10-22). Committed: fourth session 7717b9d8, Timing tab
+**Next:** see "Not done yet". Committed: fourth session 7717b9d8, Timing tab
 71a831f2, Display first part 7d421c12, Display bigger group 1b4c3056, engine waterfall detail d265512c.
 
 ## What this is
@@ -340,7 +340,6 @@ Rob's rule: **every menu has the same items in every layout; only the look diffe
 - Station sideways: tabs replaced by the page list in the sixth session (see "Settings window sizes").
 - Header Offset slider: locked while a message waits or is sent (same rule as waterfall taps).
   Not tested (needs a queued message).
-- Still open: header ▲▼ beside the frequency do nothing (no code behind them).
 - **wpm box** (PC `wpm_label`, `updateTextStatsDisplay`): PC mode only so far, after the progress
   bar (`js8_status_wpm`, 150 dp, 9 dp gap). "12.0wpm / 58.0cpm" for the Typing
   Box text, counted 100 ms after typing stops, hidden while the box is empty. Engine: new static
@@ -404,7 +403,8 @@ Station window sideways = PC tabs, no About tab.
   follows (Typing Box, speed, offset, filter, groups, TUNE, Halt). Settings page upright and PC mode.
   **JTAlert on Rob's PC listens on 2237**: the emulator's WSJT-X test ran on 2239 after the first 2 min.
   Not tested: a real API program, a real phone, multicast, screen off, Swipe.
-- Seen while testing, not API: "CQ CQ API TEST" went out as "@ALLCALL CQ CQ" (the words after
+- **Typed text sent as typed (fixed 2026-10-30, Rob: "do what the windows program does"):** core `kHeartbeatRe` now the PC's `heartbeat_re` (no "HB ALT"), found with regex_search, so words after CQ / HB go out and "HBO IS GOOD" is plain text. JS8Android's `applyGridIfHeartbeat` removed: no grid added to typed CQ / HB; the CQ button's CQ Message holds the grid, blank CQ Message = "CQ CQ CQ <MYGRID4>" (PC). Message Window: data parts join without a false space (`JS8Engine.txFirstFrameIsData`, `EXTRA_TX_FRAME_IS_DATA`). Android 7.0 minimum (minSdk 24, Galaxy S6, 2026-10-22) not tested on Android 7. Checked on S22-Fresh, no radio: "@ALLCALL CQ CQ API TEST", "HBO IS GOOD", CQ button "@ALLCALL CQ CQ CQ CM87", "@HB HEARTBEAT CM87".
+- Seen while testing, not API (fixed, line above): "CQ CQ API TEST" went out as "@ALLCALL CQ CQ" (the words after
   CQ CQ dropped). Not looked into.
 
 ### LOG, mailbox, export (seventh session, 2026-10-20, Rob said LETS GO)
@@ -457,7 +457,8 @@ Station window sideways = PC tabs, no About tab.
   Now the output is stopped after the lock is let go, and the timed heartbeat runs on the Js8Tx thread like
   typed messages. Checked on S22-Fresh: Halt during a typed message x3, during a timed heartbeat, during
   TUNE x3; heartbeat after a Halt went out in full; no freeze.
-- **Found while testing, not changed:** an auto reply to a query heard while Easy JS8 is transmitting
+- **Auto reply while transmitting fixed (2026-10-30, PC: check is #if 0, reply queued, processTxQueue waits for the frames to finish):** `isTransmitActive` check removed from `maybeHandleAutoReply`. Checked on S22-Fresh: "K4RDX: VE3TST SNR?" injected during part 3 of a long message -> message intact, then "VE3TST: K4RDX SNR -05". Relay sends (two `isTransmitActive` checks returning false in JS8EngineService) not changed, not checked against the PC. Old note:
+- **Found while testing, since fixed (line above):** an auto reply to a query heard while Easy JS8 is transmitting
   (e.g. "K4RDX: VE3TST SNR?") is dropped, not queued (`maybeHandleAutoReply`: `if (isTransmitActive()) return`).
   PC behaviour not checked yet. MSG ACKs and mailbox replies are queued.
 
@@ -499,6 +500,55 @@ Station window sideways = PC tabs, no About tab.
   the timer and kept the time, Start CQ Timer shown with a time, back to On demand.
 - Countdown upright (Rob): only the seconds while counting ("570", "now"), PC mode and Swipe keep
   "HB (570)" / "CQ (570)". Checked on S22 upright with both timers running.
+- Upright HB label (2026-10-22, Rob: "it either says HB or the time, that's it"): never "HB + ACK" upright
+  (was cut off as "HB + /"); PC mode, FT8Call, Swipe keep it. Checked on S22-Fresh with AUTO + ACK on: "HB",
+  then "35" with the timer running.
+- HB and CQ timer start (2026-10-22, Rob: "do both like the PC"): the first send is a full interval after
+  starting (PC TxLoop::onTxLoopPeriodChangeStart), also after stop / start and interval / speed changes; was
+  10 s (JS8Android). JS8Android's random extra cycle (1 in 4 heartbeats) removed. Checked on S22-Fresh: HB 907,
+  stop + start 898 (15 min), CQ 5 min 302; upright CQ shows only the seconds like HB.
+- First load / "Enter callsign and gridsquare in the settings" OK (2026-10-22, Rob): Station opens on
+  **General** (Station Details at the top), not the page list (`Js8SettingsFragment.GENERAL_PAGE`). Checked on
+  S22-Fresh after clearing the app's data; the dialog's OK not reached in a test (same call).
+- Acquire GPS uses GPS and Wi-Fi / cell together (2026-10-22, Rob: "can it do both?"): first answer shown at
+  once, a GPS answer replaces a Wi-Fi / cell one and ends the search, Wi-Fi / cell alone stays (search ends
+  after 2 min), nothing = "No position". Approximate-only permission still gets Wi-Fi / cell. Checked on
+  S22-Fresh: GPS answer CM87WK91. The emulator has no Wi-Fi / cell source: that part is untested.
+- Settings window upright, everything under ← Back centred (2026-10-22, Rob): headings, checkboxes, buttons,
+  each label over its box; Speed frame full width, its list centred inside as one block (`centreUpright`).
+  Station window and sideways unchanged. Checked on S22-Fresh, whole page.
+- **Remembered after a restart (2026-10-22, Rob: "all settings remembered"; the PC forgets 2-5):**
+  1. List sort: Band / Call Activity start last heard first (PC Sort By "recent first"); a tapped header is kept
+     per table (`js8_table_<key>_sort` / `_asc`, `Js8TableView`). @ALLCALL, groups, then message rows stay on
+     top (`Row.pin`).
+  2. HB / CQ timers with their countdown (`HeartbeatTimer` / `CqTimer` save on every change; service
+     `resumeTimers`: a countdown that ran out while closed starts a full interval).
+  3. Start Automatic Time Drift and its count (`js8cfg_auto_drift_on/_stop_after_run/_left`); the screen is told
+     when the receiver starts.
+  4. AUTO as left: Turn autoreply on at startup ticked = on, unticked = as it was (was: off).
+  5. API station grid / info / status (`js8cfg_api_dyn_*`). Not tested (needs an API program).
+  6. Band / Call Activity and the Message Window: `files/js8_activity.json`, saved 3 s after a change, loaded at
+     start unless "Reset the Band Activity, Call Activity, and RX history at startup" (PC rule). Phone >
+     "Keep decoded messages after restart" still unused.
+  Checked on S22-Fresh with a force stop: lists, sort (Call by callsign), Message Window, HB countdown (549),
+  AUTO on, Automatic Time Drift on. Not kept: which Waterfall Controls tab is open.
+- Show Band Heartbeats and ACKs: default ticked like the PC (BandHBActivityVisible true) (2026-10-22).
+- **Line dividers (2026-10-22, Rob: "not corners, the line"):** each line between two windows is its handle:
+  a 12 dp touch strip along the whole line, a thin grey bar in the gap (`Js8LineHandle` in `Js8LineDividers.kt`).
+  - PC mode / FT8Call: the corner spots, STATUS / Saved spot and waterfall spot are gone; five lines (Band |
+    Message Window, Message Window | Call, Message Window / Typing Box, under the lists (stops at the buttons'
+    top), waterfall | Waterfall Controls). Same keys, limits and View > Reset Window Sizes (`Js8PcSplitters`).
+  - Upright: Band | Call (Call Activity width), under the lists, under the Message Window, above the waterfall
+    (its top follows the finger, the page scrolls so its bottom stays). Keys `js8cfg_up_split_*` (dp).
+  - Swipe Activity screen: Band | middle, middle | Call, Message Window / Typing Box (layout weights,
+    `js8cfg_sw_split_*`). Dragging a line doesn't swipe the page.
+  - Settings > View > **Reset Window Sizes** (under Clear All Activity): upright and Swipe only, at once.
+  Checked on S22-Fresh: every upright and Swipe line, four PC lines (not Call | Message Window, not FT8Call),
+  sizes saved, reset. Rob: "we'll fix it later if it's a problem" (touches near window edges grab the line).
+- One timer at a time (2026-10-22, Rob: "make it like pc"): starting the CQ timer stops the HB timer and the
+  other way round (PC UI_Constructor.cpp "disable HB loop while CQ loop runs and vice versa"), in the service's
+  ACTION_CQ_TIMER / ACTION_HB_TIMER, so menus, taps and the API all do it. Checked on S22-Fresh: HB on, CQ 5 min
+  -> HB plain (302 on CQ); HB on again -> CQ plain (904 on HB).
 
 ## Choices made without Rob confirming yet
 
@@ -521,13 +571,18 @@ Station window sideways = PC tabs, no About tab.
 - Sideways (PC and Swipe) not updated for any of this session's window changes; Swipe tab 5
   still says **Settings** but shows Station.
 - Header **Offset** slider (sideways) is not blocked while a message waits (PC blocks it).
-- Log menu items Erase ALL.TXT / Erase js8call_log.adi not built (Rob: maybe later, Settings > Log).
 - CQ button repeat menu (PC right-click: repeat every 1/5/10/15 min, Send CQ Now) not built.
 - PC keeps Call Activity and Message Window text across restarts unless **Reset the Band
   Activity, Call Activity, and RX history at startup**; Easy JS8 starts empty and that checkbox
   is unused. **Keep decoded messages after restart** (Phone) does nothing visible.
-- Saved but not used: autoreply allow/block lists, PTT method, split, notifications, UI fonts,
-  frequency schedule, Test CAT / Test PTT.
+- **PTT Method, Test CAT, Test PTT (2026-10-30, Rob):** `js8cfg_ptt_method` now read by `setRigPtt` (PC default VOX). Hamlib: CAT / VOX (no key command) / DTR or RTS on the rig's own serial port (PC's separate PTT Port not built). Network: VOX = no key command, anything else = CAT. RTS rig: RTS, or DTR if picked. truSDX, QMX, UV-Pro always key over their own link. **A Hamlib or network rig left on the default VOX no longer keys by CAT.** Test CAT saves the Radio page (Cancel doesn't undo that), restarts the engine to reopen the rig, 15 s, green / red; RX put back as it was unless the rig failed (the engine won't start without its rig, so RX goes off). Test PTT red while keyed; released by the button, leaving the Radio page, or 30 s (Easy JS8's safety); greyed for Rig None and VOX. Checked on S22-Fresh with a stand-in rigctld on the PC (commands logged): T 1 / T 0 from Test PTT, 30 s release, ← Back, CQ with CAT, no T with VOX, Test CAT green, red with no server, with RX off. Not tested: a real radio, Hamlib serial, DTR / RTS lines, truSDX / QMX / UV-Pro, sideways, Swipe.
+- **Callsign lists (2026-10-30):** autoreply allow / block, heartbeat and spot lists read by the service. Autoreply lists tested; HB and spot lists not.
+- **Split Operation (2026-10-31):** `js8cfg_split` used. PC formula: XIT = (offset / 500) * 500 - 1500, TX audio = offset - XIT, TX dial = dial + XIT. Fake It sets the dial before key-on and back after key-off. Rig: network `S 1 VFOB` + `I`, Hamlib `nativeSetSplit`, split off after key-off (PC leaves it on). truSDX and QMX use Fake It for both. Tested on a stand-in rigctld at 700 and 2300 Hz; not on a radio; Hamlib split not tested; VFO B mode not set.
+- **Notifications (2026-10-31):** `tryNotify` in the service plays the phone's notification sound. PC events all fire in tests except call_old (no logged call tested). Sound not listened to.
+- **UI fonts (2026-10-31):** Table, Received, Transmitted, Composition sizes. 10 pt = the built size. Applied on the main fragment only; TX size not seen on screen; sideways not checked.
+- **Frequency Schedule (2026-10-31):** `js8cfg_schedule`, lines hz|HH:MM|HH:MM|description. Station > Frequencies: Insert ..., Delete, Switch to Frequency Now. `tryBandHop` in the service every 15 s, needs the service running. Box with 30 s countdown on the main screen only; on any other screen it changes after 30 s with no box. Tested without a rig.
+- **Header arrows (2026-10-31):** sideways ▲▼ move the dial 250 Hz (PC). Tested without a rig.
+- **Erase ALL.TXT / Erase js8call_log.adi (2026-10-31):** Settings > Log. ALL.TXT on the phone = js8call-log.txt and js8call-log.1.txt. adi tested; js8call-log.txt erase ran with no file to delete.
 - Waterfall Controls → Display tab built; still untested with real JS8 signals: decode brackets,
   Cumulative level, Avg N. Sideways / Swipe Display tab not checked.
 - Halt / TUNE / transmit / SWL blocking not tested with a radio — test on a dummy load first.

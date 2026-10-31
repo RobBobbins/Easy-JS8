@@ -8,7 +8,7 @@ android {
     compileSdk = 34
 
     defaultConfig {
-        minSdk = 26  // Android 8.0 (required for Oboe)
+        minSdk = 24  // Android 7.0: Galaxy S6 active (Rob, 2026-10-22); Oboe runs on 4.1+
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         consumerProguardFiles("consumer-rules.pro")

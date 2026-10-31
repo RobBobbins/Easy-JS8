@@ -82,6 +82,13 @@ class HamlibRigControl {
     }
 
     @Synchronized
+    fun setSplit(txFrequencyHz: Long, enabled: Boolean): Boolean {
+        val active = handle
+        if (active == 0L) return false
+        return nativeSetSplit(active, txFrequencyHz, enabled)
+    }
+
+    @Synchronized
     fun setPtt(enabled: Boolean): Boolean {
         val active = handle
         if (active == 0L) return false
@@ -122,6 +129,7 @@ class HamlibRigControl {
     private external fun nativeClose(handle: Long)
     private external fun nativeSetFrequency(handle: Long, frequencyHz: Long): Boolean
     private external fun nativeSetPtt(handle: Long, enabled: Boolean): Boolean
+    private external fun nativeSetSplit(handle: Long, txFrequencyHz: Long, enabled: Boolean): Boolean
     private external fun nativeSetMode(handle: Long, mode: String, passband: Int): Boolean
     private external fun nativeGetLastError(): String
 }

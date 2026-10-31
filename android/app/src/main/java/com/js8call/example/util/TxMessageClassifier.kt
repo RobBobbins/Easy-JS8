@@ -5,10 +5,6 @@ object TxMessageClassifier {
         return isAllCall(text) || isCqMessage(text) || isHeartbeatMessage(text)
     }
 
-    fun shouldAppendGrid(text: String): Boolean {
-        return isCqMessage(text) || isHeartbeatMessage(text)
-    }
-
     fun isHeartbeatMessage(text: String): Boolean {
         val trimmed = text.trim()
         return hasTokenPrefix(trimmed, "HB") ||

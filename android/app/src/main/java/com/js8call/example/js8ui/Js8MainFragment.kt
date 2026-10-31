@@ -98,6 +98,9 @@ class Js8MainFragment : Fragment() {
     private var inbox: Js8TableView? = null
     private lateinit var messageWindow: TextView
     private lateinit var typingBox: EditText
+    private var messageWindowPx = 0f
+    private var typingBoxPx = 0f
+    private var txTextScale = 1f // Transmitted: Font against Received: Font
     private lateinit var statusState: TextView
     private lateinit var statusFreq: TextView
     private lateinit var statusAutoReply: TextView
@@ -208,6 +211,11 @@ class Js8MainFragment : Fragment() {
         }
         if (ft8call) messageWindow.setTypeface(messageWindow.typeface, android.graphics.Typeface.BOLD_ITALIC)
         typingBox = view.findViewById(R.id.js8_typing_box)
+        messageWindowPx = messageWindow.textSize
+        // PC dialFreqUpButton / dialFreqDownButton (sideways header; upright has no arrows)
+        view.findViewById<View?>(R.id.js8_freq_up)?.setOnClickListener { stepDial(250) }
+        view.findViewById<View?>(R.id.js8_freq_down)?.setOnClickListener { stepDial(-250) }
+        typingBoxPx = typingBox.textSize
         statusState = view.findViewById(R.id.js8_status_state)
         statusFreq = view.findViewById(R.id.js8_status_freq)
         statusAutoReply = view.findViewById(R.id.js8_status_autoreply)
@@ -239,6 +247,11 @@ class Js8MainFragment : Fragment() {
 
         setUpSwipe(view)
         splitters = view.findViewById<android.widget.FrameLayout?>(R.id.js8_pc_window)?.let { Js8PcSplitters(it, prefs()) }
+        // Upright and Swipe: the lines between windows can be dragged (Rob, 2026-10-22)
+        when {
+            isUprightLayout() -> Js8LineDividers.setUpUpright(view, prefs())
+            view.findViewById<View?>(R.id.js8_pager) != null -> Js8LineDividers.setUpSwipe(view, prefs())
+        }
         setUpTables()
         // PC onRigStateChanged when the rig first comes online: RX on unless "Receiver (RX) off at startup",
         // TX on unless "Transmitter (TX) off at startup" (Rob, 2026-10-21: RX was off after every fresh start)
@@ -301,7 +314,9 @@ class Js8MainFragment : Fragment() {
             if (!p.contains(Js8SettingsSchema.AUTOREPLY_STARTUP_KEY)) {
                 e.putBoolean(Js8SettingsSchema.AUTOREPLY_STARTUP_KEY, p.getBoolean(Js8SettingsSchema.AUTOREPLY_KEY, false))
             }
-            val startAuto = (p.getBoolean(Js8SettingsSchema.AUTOREPLY_STARTUP_KEY, p.getBoolean(Js8SettingsSchema.AUTOREPLY_KEY, false))) &&
+            // Ticked: AUTO on. Unticked: AUTO as it was left (Rob, 2026-10-22: "all settings remembered";
+            // the PC turns it off)
+            val startAuto = (p.getBoolean(Js8SettingsSchema.AUTOREPLY_STARTUP_KEY, false) || p.getBoolean(Js8SettingsSchema.AUTOREPLY_KEY, false)) &&
                 p.getString("callsign", "").orEmpty().isNotBlank() && p.getString("grid", "").orEmpty().isNotBlank()
             e.putBoolean(Js8SettingsSchema.AUTOREPLY_KEY, startAuto).apply()
             // UI_Constructor::checkStartupWarnings: no callsign or grid opens Station
@@ -363,6 +378,16 @@ class Js8MainFragment : Fragment() {
         activityVm.changed() // groups and @ALLCALL in Call Activity
     }
 
+    /** Settings > Colors font sizes. 10 pt, the default on those buttons, is the size the screens were laid out for. */
+    private fun applyUiFonts(prefs: android.content.SharedPreferences) {
+        fun scale(key: String) = (prefs.getString("js8cfg_ui_$key", null)?.toFloatOrNull() ?: 10f) / 10f
+        bandActivity.setTextScale(scale("table_font"))
+        callActivity.setTextScale(scale("table_font"))
+        messageWindow.setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX, messageWindowPx * scale("rx_font"))
+        typingBox.setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX, typingBoxPx * scale("compose_font"))
+        txTextScale = scale("tx_font") / scale("rx_font")
+    }
+
     override fun onResume() {
         super.onResume()
         val prefs = PreferenceManager.getDefaultSharedPreferences(requireContext())
@@ -380,6 +405,7 @@ class Js8MainFragment : Fragment() {
         }
         waterfall.txOffsetHz = monitorVm.getTxOffset() // a rebuilt screen starts on 1500 otherwise
         renderOffsetBox()
+        applyUiFonts(prefs)
         ui.post(tick)
     }
 
@@ -421,6 +447,10 @@ class Js8MainFragment : Fragment() {
         // Upright keeps its own Band Activity columns: Offset and SNR hidden at first, shown again from
         // Settings > View (Rob, 2026-10-19). Sideways keeps the PC defaults.
         val upright = resources.configuration.orientation != Configuration.ORIENTATION_LANDSCAPE
+        // Both lists start with the last heard on top (PC Sort By "Last heard timestamp (recent first)",
+        // Rob 2026-10-22); a header tapped is kept after a restart
+        bandActivity.defaultSortKey = "timestamp"
+        callActivity.defaultSortKey = "timestamp"
         bandActivity.setColumns(if (upright) Js8SettingsSchema.BAND_TABLE_UPRIGHT else "band", listOf(
             Js8TableView.Column("offset", "Offset", 48, defaultVisible = !upright, numeric = true, menuLabel = "Frequency Offset"),
             Js8TableView.Column("timestamp", "Age", 36, numeric = true, menuLabel = "Last heard timestamp"),
@@ -612,7 +642,7 @@ class Js8MainFragment : Fragment() {
         val a = activityVm.activity
         val cfg = Js8Activity.Config(prefs())
         val now = System.currentTimeMillis()
-        val showHb = boolPref("js8cfg_show_hb_acks", false)
+        val showHb = boolPref("js8cfg_show_hb_acks", true) // PC default on
         val cqColor = Color.parseColor("#66FF66")       // colorCQ
         val myCallColor = Color.parseColor("#FF6666")   // colorMyCall
         val primary = colorPref("js8cfg_ui_primary_bg", "#F1C40F")
@@ -659,8 +689,8 @@ class Js8MainFragment : Fragment() {
         }
         callActivity.setHeaderLabel("callsign", if (calls.isEmpty()) "Callsigns" else "Callsigns (${calls.size})")
         val groupRows = buildList {
-            if (!cfg.avoidAllcall) add(Js8TableView.Row("@ALLCALL", mapOf("callsign" to "@ALLCALL")))
-            cfg.groups.sorted().forEach { add(Js8TableView.Row(it, mapOf("callsign" to it))) }
+            if (!cfg.avoidAllcall) add(Js8TableView.Row("@ALLCALL", mapOf("callsign" to "@ALLCALL"), pin = 1))
+            cfg.groups.sorted().forEach { add(Js8TableView.Row(it, mapOf("callsign" to it), pin = 2)) }
         }
         val callRows = calls.sortedBy { it.call }.map { d ->
             val hasMessage = d.call in unreadFrom
@@ -701,7 +731,8 @@ class Js8MainFragment : Fragment() {
                     else -> null
                 },
                 colors = if (isBlocked) mapOf("icon" to Color.RED) else emptyMap(),
-                center = setOf("icon", "timestamp", "submode", "log")
+                center = setOf("icon", "timestamp", "submode", "log"),
+                pin = if (hasMessage) 3 else 0 // messages pinned to the top (displayCallActivity)
             )
         }
         // messages pinned to the top (displayCallActivity)
@@ -719,6 +750,7 @@ class Js8MainFragment : Fragment() {
             val textStart = sb.length
             sb.append(line.text.toString().trimEnd())
             sb.setSpan(android.text.style.ForegroundColorSpan(if (line.isTx) txFg else rxFg), start, sb.length, 0)
+            if (line.isTx && txTextScale != 1f) sb.setSpan(android.text.style.RelativeSizeSpan(txTextScale), start, sb.length, 0)
             // FT8 transmitting callsign in bold
             line.bold?.let { b ->
                 if (textStart + b.last < sb.length) {
@@ -728,7 +760,7 @@ class Js8MainFragment : Fragment() {
         }
         // Only when the text changed: setting it throws the box back to the top (the bounce Rob saw
         // every 5 seconds). The jump to the newest line happens before the box is drawn.
-        val shown = "$rxFg/$txFg/$sb"
+        val shown = "$rxFg/$txFg/$txTextScale/$sb"
         if (shown == messageWindowShown) return
         messageWindowShown = shown
         messageWindow.text = sb
@@ -932,7 +964,7 @@ class Js8MainFragment : Fragment() {
             if (childFragmentManager.findFragmentByTag(Js8StationRequiredDialog.TAG) == null) {
                 Js8StationRequiredDialog().show(childFragmentManager, Js8StationRequiredDialog.TAG)
             }
-        } else openStation()
+        } else openStation(page = Js8SettingsFragment.GENERAL_PAGE) // straight to Station Details (Rob, 2026-10-22)
         return false
     }
 
@@ -1251,6 +1283,12 @@ class Js8MainFragment : Fragment() {
         applyOffset(hz.toFloat())
     }
 
+    private fun stepDial(hz: Long) {
+        dialHz += hz
+        prefs().edit().putString(Js8SettingsSchema.FREQUENCY_KEY, dialHz.toString()).apply()
+        renderFrequency()
+    }
+
     /**
      * Waterfall Controls > QSY (UI_Constructor::qsy): the dial moves by offset - center, so the
      * signal at the offset is heard at center, and the offset becomes center. The dial goes to
@@ -1447,7 +1485,8 @@ class Js8MainFragment : Fragment() {
         // presentlyWantHBReplies: AUTO + ACK, and no QSO under way when HB pauses for QSOs
         val ack = boolPref(Js8SettingsSchema.AUTOREPLY_KEY, false) && boolPref(Js8SettingsSchema.HB_ACK_KEY, false) &&
             (!boolPref("js8cfg_heartbeat_qso_pause", true) || selectedCall == null)
-        val base = if (ack) "HB + ACK" else "HB"
+        // Upright: only "HB" or the seconds, the small button can't hold "HB + ACK" (Rob, 2026-10-22)
+        val base = if (ack && !isUprightLayout()) "HB + ACK" else "HB"
         val text = if (timer.on) {
             val secs = Math.round((timer.nextMs - now) / 1000.0)
             val count = if (timer.nextMs > 0 && secs > 0) "$secs" else "now"
@@ -1753,7 +1792,11 @@ class Js8MainFragment : Fragment() {
 
     private fun observe() {
         // New decodes are gathered and drawn by the clock tick (PC: m_rxDisplayDirty)
-        activityVm.version.observe(viewLifecycleOwner) { requestRender() }
+        activityVm.version.observe(viewLifecycleOwner) {
+            requestRender()
+            view?.findViewById<TextView?>(R.id.js8_status_blank)?.text =
+                activityVm.lastTx.takeIf { it.isNotEmpty() }?.let { "Last Tx: $it" }.orEmpty()
+        }
         activityVm.typed.observe(viewLifecycleOwner) { renderTyped(it) }
         observeInbox()
         monitorVm.status.observe(viewLifecycleOwner) { status ->

@@ -3,10 +3,14 @@ package com.js8call.example.js8ui
 import android.Manifest
 import android.annotation.SuppressLint
 import android.app.Application
+import android.content.BroadcastReceiver
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
+import android.content.Intent
+import android.content.IntentFilter
 import android.content.pm.PackageManager
+import android.content.res.ColorStateList
 import android.content.res.Configuration
 import android.graphics.Color
 import android.graphics.Typeface
@@ -39,6 +43,8 @@ import androidx.appcompat.app.AlertDialog
 import androidx.appcompat.widget.AppCompatButton
 import androidx.core.content.ContextCompat
 import androidx.core.content.res.ResourcesCompat
+import androidx.localbroadcastmanager.content.LocalBroadcastManager
+import com.js8call.example.service.JS8EngineService
 import androidx.core.widget.CompoundButtonCompat
 import androidx.fragment.app.Fragment
 import androidx.lifecycle.AndroidViewModel
@@ -69,6 +75,9 @@ class Js8SettingsViewModel(app: Application) : AndroidViewModel(app) {
     /** Station upright: the page shown (General, Radio, ...), or null for the list of pages. */
     var page: String? = null
     var diagnostics = ""
+    /** Test CAT result (PC: button green / red); null = not tried. */
+    var testCat: Boolean? = null
+    var testPtt = false
 
     /** Small box beside Acquire GPS: "", "Acquiring…", the grid found, or "No position". */
     val gpsText = MutableLiveData("")
@@ -79,11 +88,13 @@ class Js8SettingsViewModel(app: Application) : AndroidViewModel(app) {
     private val handler = Handler(Looper.getMainLooper())
     private val locationManager get() = getApplication<Application>().getSystemService(Context.LOCATION_SERVICE) as LocationManager
     private var listener: LocationListener? = null
+    // 2 minutes up: keep a Wi-Fi / cell grid if one came, else "No position"
     private val timeout = Runnable { finishGps(null) }
 
     /**
-     * Asks the phone's GPS for a new position (GPS only, no Wi-Fi / cell position).
-     * Shows the grid of the first fix, or "No position" after 2 minutes.
+     * Asks the phone for a new position from GPS and Wi-Fi / cell at the same time (Rob, 2026-10-22).
+     * The first answer is shown at once; a GPS answer replaces a Wi-Fi / cell one and ends the
+     * search. Without GPS the Wi-Fi / cell grid stays; nothing at all after 2 minutes = "No position".
      * Returns false when the phone's location is off.
      */
     @SuppressLint("MissingPermission")
@@ -92,34 +103,46 @@ class Js8SettingsViewModel(app: Application) : AndroidViewModel(app) {
         gpsGrid = null
         val lm = locationManager
         val gps = LocationManager.GPS_PROVIDER
-        if (!runCatching { lm.isProviderEnabled(gps) }.getOrDefault(false)) { gpsText.value = "No position"; return false }
+        val net = LocationManager.NETWORK_PROVIDER
+        val enabled = listOf(gps, net).filter { runCatching { lm.isProviderEnabled(it) }.getOrDefault(false) }
+        if (enabled.isEmpty()) { gpsText.value = "No position"; return false }
         // A GPS fix the phone got in the last 2 minutes is used at once
-        val recent = runCatching { lm.getLastKnownLocation(gps) }.getOrNull()
-        if (recent != null && System.currentTimeMillis() - recent.time <= GPS_TIMEOUT_MS) { finishGps(recent); return true }
+        fun recent(provider: String) = runCatching { lm.getLastKnownLocation(provider) }.getOrNull()
+            ?.takeIf { System.currentTimeMillis() - it.time <= GPS_TIMEOUT_MS }
+        if (gps in enabled) recent(gps)?.let { finishGps(it); return true }
 
         gpsText.value = "Acquiring…"
+        if (net in enabled) recent(net)?.let { showGps(it) }
         val l = object : LocationListener {
-            override fun onLocationChanged(location: Location) = finishGps(location)
+            override fun onLocationChanged(location: Location) {
+                if (location.provider == gps) finishGps(location) else showGps(location)
+            }
             override fun onProviderEnabled(provider: String) = Unit
             override fun onProviderDisabled(provider: String) = Unit
             @Deprecated("Deprecated in Java")
             override fun onStatusChanged(provider: String?, status: Int, extras: Bundle?) = Unit
         }
         listener = l
-        try {
-            lm.requestLocationUpdates(gps, 0L, 0f, l, Looper.getMainLooper())
-        } catch (_: SecurityException) {
-            finishGps(null); return true
-        } catch (_: IllegalArgumentException) {
-            finishGps(null); return true
+        // Each source on its own: approximate-only permission refuses GPS but allows Wi-Fi / cell
+        val listening = enabled.count { provider ->
+            runCatching { lm.requestLocationUpdates(provider, 0L, 0f, l, Looper.getMainLooper()) }.isSuccess
         }
+        if (listening == 0) { finishGps(null); return true }
         handler.postDelayed(timeout, GPS_TIMEOUT_MS)
         return true
     }
 
+    /** A Wi-Fi / cell answer: shown, GPS still listened for (no GPS listening = done). */
+    private fun showGps(location: Location) {
+        gpsGrid = Js8Grid.fromLatLon(location.latitude, location.longitude)
+        gpsText.value = gpsGrid
+        val gpsOn = runCatching { locationManager.isProviderEnabled(LocationManager.GPS_PROVIDER) }.getOrDefault(false)
+        if (!gpsOn) stopGps()
+    }
+
     private fun finishGps(location: Location?) {
         stopGps()
-        gpsGrid = location?.let { Js8Grid.fromLatLon(it.latitude, it.longitude) }
+        location?.let { gpsGrid = Js8Grid.fromLatLon(it.latitude, it.longitude) }
         gpsText.value = gpsGrid ?: "No position"
     }
 
@@ -158,6 +181,8 @@ class Js8SettingsFragment : Fragment() {
         const val ARG_WINDOW = "window"
         /** Station: last page of the list, not a settings section. */
         const val ABOUT_PAGE = "About"
+        /** Where callsign and grid are entered (Station Details), opened when they are missing. */
+        const val GENERAL_PAGE = "General"
         /** Station: page to open on (PC mode menu bar Help opens About). */
         const val ARG_PAGE = "page"
     }
@@ -296,8 +321,26 @@ class Js8SettingsFragment : Fragment() {
     private fun swlChecked(): Boolean =
         (draft.values[Js8SettingsSchema.SWL_KEY] ?: draft.prefs.getBoolean(Js8SettingsSchema.SWL_KEY, false).toString()) == "true"
 
+    private val rigTestReceiver = object : BroadcastReceiver() {
+        override fun onReceive(c: Context, i: Intent) {
+            val ok = i.getBooleanExtra(JS8EngineService.EXTRA_RIG_TEST_OK, false)
+            if (i.getStringExtra(JS8EngineService.EXTRA_RIG_TEST_KIND) == JS8EngineService.RIG_TEST_CAT) vm.testCat = ok
+            else vm.testPtt = i.getBooleanExtra(JS8EngineService.EXTRA_RIG_TEST_ON, false)
+            i.getStringExtra(JS8EngineService.EXTRA_RIG_TEST_TEXT)?.takeIf { it.isNotEmpty() }?.let { toast(it) }
+            render()
+        }
+    }
+
+    override fun onResume() {
+        super.onResume()
+        LocalBroadcastManager.getInstance(requireContext())
+            .registerReceiver(rigTestReceiver, IntentFilter(JS8EngineService.ACTION_RIG_TEST))
+    }
+
     override fun onPause() {
         vm.values.clear(); vm.values.putAll(draft.values)
+        LocalBroadcastManager.getInstance(requireContext()).unregisterReceiver(rigTestReceiver)
+        if (vm.testPtt) { vm.testPtt = false; sendTestPtt(false) } // never leave the radio keyed
         super.onPause()
     }
 
@@ -348,6 +391,7 @@ class Js8SettingsFragment : Fragment() {
             }
         }
         draft.values[Js8SettingsSchema.SAVED_MESSAGES_KEY]?.let { e.putString(Js8SettingsSchema.SAVED_MESSAGES_KEY, it) }
+        draft.values[Js8SettingsSchema.SCHEDULE_KEY]?.let { e.putString(Js8SettingsSchema.SCHEDULE_KEY, it) }
         draft.values.filterKeys { it.startsWith("js8cfg_notify_") || it.startsWith("js8cfg_ui_") || it == "js8cfg_pills" ||
             it == com.js8call.example.api.Js8Api.KEY_WSJTX_INTERFACES }
             .forEach { (k, v) -> e.putString(k, v) }
@@ -377,6 +421,7 @@ class Js8SettingsFragment : Fragment() {
     // ---- Layout -------------------------------------------------------------------------------
 
     private fun render() {
+        if (vm.testPtt && vm.page != "Radio") { vm.testPtt = false; sendTestPtt(false) } // left the Radio page
         content.removeAllViews()
         requiredBoxes.clear()
         if (station) renderStationPage() else renderList()
@@ -493,8 +538,42 @@ class Js8SettingsFragment : Fragment() {
             val (left, right) = twoColumns(col)
             sections.take(2).forEach { section(left, it) }
             sections.drop(2).forEach { section(right, it) }
-        } else for (s in sections) section(col, s)
+        } else {
+            for (s in sections) section(col, s)
+            centreUpright(col)
+        }
         content.addView(ScrollView(requireContext()).apply { addView(col) })
+    }
+
+    /**
+     * Settings window upright: everything under ← Back centred on the page (Rob, 2026-10-22), like
+     * the upright Waterfall Controls: headings, checkboxes, buttons, and each label centred over its
+     * box. Frames (Speed) keep the full width, their list centred inside as one block.
+     */
+    private fun centreUpright(col: LinearLayout) {
+        for (i in 0 until col.childCount) {
+            val v = col.getChildAt(i)
+            if (v is FrameLayout) {
+                val box = v.getChildAt(0) as? LinearLayout ?: continue
+                for (j in 0 until box.childCount) centreChild(box.getChildAt(j))
+                continue
+            }
+            centreChild(v)
+            if (v is LinearLayout && v.orientation == LinearLayout.VERTICAL) v.gravity = Gravity.CENTER_HORIZONTAL
+            // Button rows: no space after the last button, so the row is centred on the buttons
+            if (v is LinearLayout && v.orientation == LinearLayout.HORIZONTAL && v.childCount > 0) {
+                val last = v.getChildAt(v.childCount - 1)
+                (last.layoutParams as? ViewGroup.MarginLayoutParams)?.let { it.marginEnd = 0; last.layoutParams = it }
+            }
+        }
+    }
+
+    private fun centreChild(v: View) {
+        val lp = v.layoutParams as? LinearLayout.LayoutParams
+            ?: LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+        lp.width = ViewGroup.LayoutParams.WRAP_CONTENT
+        lp.gravity = Gravity.CENTER_HORIZONTAL
+        v.layoutParams = lp
     }
 
     /** Two columns side by side, half the width each, tops level. */
@@ -869,7 +948,8 @@ class Js8SettingsFragment : Fragment() {
         hint = f.hint
         inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS or
             (if (f.upper) InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS else 0)
-        importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_NO
+        // Android 8.0+ only (the app runs on 7.0 since 2026-10-22)
+        if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_NO
         if (f.maxLength > 0) filters = arrayOf(InputFilter.LengthFilter(f.maxLength))
         if (f.key == "grid") gridBox = this as EditText
         if (f.required) { requiredBoxes += this; markRequired(this) }
@@ -1058,8 +1138,14 @@ class Js8SettingsFragment : Fragment() {
     private fun buttonRow(item: ButtonRow): View {
         val row = LinearLayout(requireContext()).apply { orientation = LinearLayout.HORIZONTAL; setPadding(0, px(6), 0, px(6)) }
         item.buttons.forEach { (lab, action) ->
-            row.addView(button(lab) { onAction(action) },
-                LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, px(28)).apply { marginEnd = px(8) })
+            val b = button(lab) { onAction(action) }
+            if (action == "test_cat" || action == "test_ptt") {
+                b.isEnabled = Js8SettingsSchema.rigTestEnabled(draft, action)
+                val tint = if (action == "test_cat") vm.testCat?.let { if (it) Color.rgb(0, 128, 0) else Color.RED }
+                    else if (vm.testPtt) Color.RED else null
+                if (tint != null) { b.backgroundTintList = ColorStateList.valueOf(tint); b.setTextColor(Color.WHITE) }
+            }
+            row.addView(b, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, px(28)).apply { marginEnd = px(8) })
         }
         return row
     }
@@ -1094,9 +1180,29 @@ class Js8SettingsFragment : Fragment() {
                 activityVm().activity.clearBand(); activityVm().activity.clearCalls(); activityVm().activity.clearRx()
                 activityVm().changed(); toast("All Activity cleared")
             }
-            "test_cat", "test_ptt" -> toast("Test CAT / Test PTT are not built yet")
+            "reset_window_sizes" -> { Js8LineDividers.reset(draft.prefs); toast("Window sizes reset") }
+            "test_cat" -> {
+                // The rig opens from saved settings: the PC tests the window's values, so save the Radio page first
+                val e = draft.prefs.edit()
+                allFields(sections.filter { it.tab == "Radio" }.flatMap { it.items }).forEach { f ->
+                    draft.values[f.key]?.let { v -> f.save(e, v, requireContext()) }
+                }
+                e.commit()
+                vm.testCat = null
+                render()
+                requireContext().startService(Intent(requireContext(), JS8EngineService::class.java).setAction(JS8EngineService.ACTION_TEST_CAT))
+            }
+            "test_ptt" -> sendTestPtt(!vm.testPtt)
             // Settings > Log > Export Log...: the Export Options page
             "export_log" -> findNavController().navigate(R.id.navigation_js8_export)
+            // PC Log menu. ALL.TXT is js8call-log.txt on the phone (and its rotated copy)
+            "erase_all_txt" -> confirmErase("Are you sure you want to erase file ALL.TXT? On the phone it is js8call-log.txt.") {
+                requireContext().startService(Intent(requireContext(), JS8EngineService::class.java).setAction(JS8EngineService.ACTION_ERASE_LOG))
+            }
+            "erase_adi" -> confirmErase("Are you sure you want to erase file js8call_log.adi?") {
+                com.js8call.example.data.Js8LogBook.adifFile(requireContext()).delete()
+                com.js8call.example.data.Js8LogBook.forget()
+            }
             "diag_run" -> { vm.diagnostics = diagnostics(); render() }
             "diag_copy" -> {
                 val cm = requireContext().getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
@@ -1104,6 +1210,11 @@ class Js8SettingsFragment : Fragment() {
                 toast("Copied")
             }
         }
+    }
+
+    private fun sendTestPtt(on: Boolean) {
+        requireContext().startService(Intent(requireContext(), JS8EngineService::class.java)
+            .setAction(JS8EngineService.ACTION_TEST_PTT).putExtra(JS8EngineService.EXTRA_RIG_TEST_ON, on))
     }
 
     private fun toast(t: String) = Toast.makeText(requireContext(), t, Toast.LENGTH_SHORT).show()
@@ -1150,11 +1261,7 @@ class Js8SettingsFragment : Fragment() {
             Js8TableView.Column("freq", "Frequency", 90), Js8TableView.Column("mhz", "Frequency (MHz)", 120),
             Js8TableView.Column("desc", "Description", 120, stretch = true)
         ), frequencyRows(), 160)
-        "schedule_table" -> table("cfg_sched", listOf(
-            Js8TableView.Column("band", "Band", 60), Js8TableView.Column("mhz", "Freq. (MHz)", 90),
-            Js8TableView.Column("at", "Switch at (UTC)", 110), Js8TableView.Column("until", "Until (UTC)", 90),
-            Js8TableView.Column("desc", "Description", 120, stretch = true)
-        ), emptyList(), 110)
+        "schedule_table" -> scheduleTable()
         "saved_messages" -> savedMessages()
         "notifications_table" -> notifications()
         "wsjtx_interfaces" -> wsjtxInterfaces()
@@ -1210,6 +1317,94 @@ class Js8SettingsFragment : Fragment() {
                 "desc" to ""
             ))
         }
+    }
+
+    private fun confirmErase(message: String, erase: () -> Unit) {
+        AlertDialog.Builder(requireContext()).setTitle("Confirm Erase").setMessage(message)
+            .setPositiveButton("Yes") { _, _ -> erase() }.setNegativeButton("No", null).show()
+    }
+
+    /** PC stations_table_view and its right-click menu: Insert ..., Delete, Switch to Frequency Now. */
+    private fun scheduleTable(): View {
+        val key = Js8SettingsSchema.SCHEDULE_KEY
+        fun current(): MutableList<String> = (draft.values[key] ?: draft.prefs.getString(key, "")).orEmpty()
+            .split('\n').filter { it.isNotBlank() }.toMutableList()
+        fun rows(items: List<String>) = items.mapIndexed { i, line ->
+            val p = line.split('|', limit = 4)
+            val hz = p[0].toLongOrNull() ?: 0L
+            Js8TableView.Row("$i", mapOf(
+                "band" to com.js8call.example.util.BandUtils.bandLabelForFrequencyHz(hz),
+                "mhz" to String.format(Locale.US, "%.6f", hz / 1_000_000.0),
+                "at" to p.getOrElse(1) { "" }, "until" to p.getOrElse(2) { "" }, "desc" to p.getOrElse(3) { "" }
+            ))
+        }
+        val list = table("cfg_sched", listOf(
+            Js8TableView.Column("band", "Band", 60), Js8TableView.Column("mhz", "Freq. (MHz)", 90),
+            Js8TableView.Column("at", "Switch at (UTC)", 110), Js8TableView.Column("until", "Until (UTC)", 90),
+            Js8TableView.Column("desc", "Description", 120, stretch = true)
+        ), rows(current()), 110)
+        list.onRowClick = { list.selectedRowId = it.id }
+        fun refresh(items: List<String>) {
+            draft.values[key] = items.joinToString("\n")
+            list.selectedRowId = null
+            list.setRows(rows(items))
+        }
+        val col = column()
+        val buttons = LinearLayout(requireContext()).apply { orientation = LinearLayout.HORIZONTAL }
+        buttons.addView(button("Insert ...") { insertSchedule { line ->
+            refresh((current() + line).sortedBy { it.split('|').getOrElse(1) { "" } })
+        } }, LinearLayout.LayoutParams(0, px(30), 1f))
+        buttons.addView(button("Delete") {
+            val sel = list.selectedRowId?.toIntOrNull() ?: return@button
+            refresh(current().filterIndexed { i, _ -> i != sel })
+        }, LinearLayout.LayoutParams(0, px(30), 1f).apply { marginStart = px(6) })
+        col.addView(buttons)
+        col.addView(button("Switch to Frequency Now") {
+            val sel = list.selectedRowId?.toIntOrNull() ?: return@button
+            val hz = current().getOrNull(sel)?.substringBefore('|')?.toLongOrNull() ?: return@button
+            requireContext().startService(Intent(requireContext(), JS8EngineService::class.java).apply {
+                action = JS8EngineService.ACTION_SCHEDULE_HOP_NOW
+                putExtra(JS8EngineService.EXTRA_FREQUENCY_HZ, hz)
+            })
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, px(30)).apply { topMargin = px(6) })
+        col.addView(list)
+        return col
+    }
+
+    /** PC StationDialog "Add Station". The band comes from the frequency, as the PC saves it. */
+    private fun insertSchedule(onAdd: (String) -> Unit) {
+        val box = column().apply { setPadding(px(16), px(8), px(16), 0) }
+        fun field(name: String, type: Int): EditText {
+            box.addView(label(name).apply { setTextColor(Color.BLACK) })
+            return styledField(EditText(requireContext())).apply { inputType = type; box.addView(this) } as EditText
+        }
+        val number = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL
+        val time = InputType.TYPE_CLASS_DATETIME or InputType.TYPE_DATETIME_VARIATION_TIME
+        val mhz = field("Freq (MHz):", number)
+        val at = field("Switch at (UTC, HH:MM):", time)
+        val until = field("Until (UTC, HH:MM):", time)
+        val desc = field("Description:", InputType.TYPE_CLASS_TEXT)
+        val dialog = AlertDialog.Builder(requireContext()).setTitle("Add Station").setView(box)
+            .setPositiveButton(android.R.string.ok, null).setNegativeButton(android.R.string.cancel, null).create()
+        dialog.setCanceledOnTouchOutside(false)
+        dialog.setOnShowListener {
+            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
+                val clock = Regex("([01]\\d|2[0-3]):[0-5]\\d")
+                val hz = mhz.text.toString().trim().toDoubleOrNull()?.let { Math.round(it * 1_000_000.0) } ?: 0L
+                val a = at.text.toString().trim()
+                val u = until.text.toString().trim()
+                when {
+                    hz <= 0L -> mhz.error = "MHz"
+                    !clock.matches(a) -> at.error = "HH:MM"
+                    !clock.matches(u) -> until.error = "HH:MM"
+                    else -> {
+                        onAdd("$hz|$a|$u|" + desc.text.toString().replace('|', ' ').replace('\n', ' ').trim())
+                        dialog.dismiss()
+                    }
+                }
+            }
+        }
+        dialog.show()
     }
 
     private fun savedMessages(): View {

@@ -461,6 +461,15 @@ Java_com_js8call_core_JS8Engine_nativeGetTxFramesStarted(
   return js8_engine_tx_frames_started(engine);
 }
 
+JNIEXPORT jboolean JNICALL
+Java_com_js8call_core_JS8Engine_nativeGetTxFirstFrameIsData(
+    JNIEnv* /* env */,
+    jobject /* thiz */,
+    jlong handle) {
+  JS8Engine_Native* engine = reinterpret_cast<JS8Engine_Native*>(handle);
+  return js8_engine_tx_first_frame_is_data(engine) ? JNI_TRUE : JNI_FALSE;
+}
+
 JNIEXPORT jintArray JNICALL
 Java_com_js8call_core_JS8Engine_nativeGetTxFrameTones(
     JNIEnv* env,

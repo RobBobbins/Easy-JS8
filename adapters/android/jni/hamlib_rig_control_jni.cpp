@@ -402,6 +402,29 @@ Java_com_js8call_core_HamlibRigControl_nativeSetPtt(JNIEnv* /*env*/,
   return ret == RIG_OK ? JNI_TRUE : JNI_FALSE;
 }
 
+extern "C" JNIEXPORT jboolean JNICALL
+Java_com_js8call_core_HamlibRigControl_nativeSetSplit(JNIEnv* /*env*/,
+                                                      jobject /*thiz*/,
+                                                      jlong handle_value,
+                                                      jlong tx_frequency_hz,
+                                                      jboolean enabled) {
+  if (!handle_value) return JNI_FALSE;
+  auto* handle = reinterpret_cast<HamlibRigHandle*>(handle_value);
+  std::lock_guard<std::mutex> lock(handle->mutex);
+  if (!handle->rig) return JNI_FALSE;
+  int ret = rig_set_split_vfo(handle->rig, RIG_VFO_CURR,
+                              enabled == JNI_TRUE ? RIG_SPLIT_ON : RIG_SPLIT_OFF,
+                              enabled == JNI_TRUE ? RIG_VFO_B : RIG_VFO_A);
+  if (ret == RIG_OK && enabled == JNI_TRUE) {
+    ret = rig_set_split_freq(handle->rig, RIG_VFO_CURR,
+                             static_cast<freq_t>(tx_frequency_hz));
+  }
+  if (ret != RIG_OK) {
+    log_error("rig split failed: ", rigerror(ret));
+  }
+  return ret == RIG_OK ? JNI_TRUE : JNI_FALSE;
+}
+
 extern "C" JNIEXPORT jstring JNICALL
 Java_com_js8call_core_HamlibRigControl_nativeGetLastError(JNIEnv* env,
                                                           jobject /*thiz*/) {
