@@ -445,7 +445,7 @@ object Js8SettingsSchema {
         // Sideways layout on its own page after Audio, shown only sideways (Rob, 2026-10-21; was on UI)
         Section(LAYOUT_PAGE, null, listOf(
             Group(null, listOf(
-                choice(Js8MainFragment.PREF_LANDSCAPE_LAYOUT, "Sideways layout:", "pc", listOf("PC" to "pc", "Swipe" to "swipe", "FT8Call" to "ft8call"))
+                choice(Js8MainFragment.PREF_LANDSCAPE_LAYOUT, "Sideways layout:", "pc", listOf("PC" to "pc", "Pages" to "swipe", "FT8Call" to "ft8call"))
             ))
         )),
         Section("Reporting", null, listOf(

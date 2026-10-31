@@ -122,7 +122,7 @@
     </string-array>
     <string-array name="js8_landscape_layout_entries">
         <item>PC</item>
-        <item>Swipe</item>
+        <item>Pages</item>
     </string-array>
     <string-array name="js8_landscape_layout_values">
         <item>pc</item>
