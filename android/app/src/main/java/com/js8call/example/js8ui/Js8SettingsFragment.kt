@@ -523,11 +523,13 @@ class Js8SettingsFragment : Fragment() {
             right = column()
             col.addView(LinearLayout(requireContext()).apply {
                 orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL // the shorter left column centres against Features
                 addView(left, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
                 addView(right, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
             })
         }
-        if (!sideways) line("About Easy JS8", size = 1.2f, bold = true, top = 10) // sideways: in the top row
+        if (sideways) line("Easy JS8", size = 1.2f, bold = true, parent = left)
+        else line("About Easy JS8", size = 1.2f, bold = true, top = 10) // sideways: in the top row
         line("by VA3OSO", parent = left)
         line("Version ${BuildConfig.VERSION_NAME} (build ${BuildConfig.VERSION_CODE})", parent = left)
         line("Built ${BuildConfig.BUILD_DATE}", parent = left)
@@ -539,7 +541,8 @@ class Js8SettingsFragment : Fragment() {
         line("Licence: GPLv3. No warranty.")
         line("Credits", size = 1.1f, bold = true, top = 16)
         line("WSJT-X: Joe Taylor K1JT and the WSJT Development Group")
-        line("JS8Call: Jordan Sherer KN4CRD and the JS8Call-improved team (AC9KH, W6BAZ, KJ4CTD, K0OG, DJ3EI, K4RWR)", top = 6)
+        line("JS8Call: Jordan Sherer KN4CRD", top = 6)
+        line("JS8Call-improved team: AC9KH, W6BAZ, KJ4CTD, K0OG, DJ3EI, K4RWR, KN4CRD", top = 6)
         line("JS8Android: https://github.com/JS8Call-improved/Android-port", top = 6)
         line("ft8_lib (FT8 decodes): Kārlis Goba, MIT licence", top = 6)
         line("Fonts: Selawik, Cascadia Mono (SIL Open Font Licence)", top = 6)
