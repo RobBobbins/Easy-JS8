@@ -508,20 +508,33 @@ class Js8SettingsFragment : Fragment() {
 
     /** Station > About: version, features over JS8Android, source, licence, credits (Rob, 2026-10-19). */
     private fun renderAbout(col: LinearLayout) {
-        fun line(text: String, size: Float = 1f, bold: Boolean = false, top: Int = 0) =
-            col.addView(label(text, size, bold).apply {
+        // Centred (Rob, 2026-10-31); sideways the top lines and Features sit in two columns
+        fun line(text: String, size: Float = 1f, bold: Boolean = false, top: Int = 0, parent: LinearLayout = col) =
+            parent.addView(label(text, size, bold).apply {
+                gravity = Gravity.CENTER_HORIZONTAL
                 setPadding(0, px(top), 0, px(3))
                 setLinkTextColor(color(R.color.js8_blue))
                 android.text.util.Linkify.addLinks(this, android.text.util.Linkify.WEB_URLS) // tap opens the browser
+            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        var left = col
+        var right = col
+        if (sideways) {
+            left = column()
+            right = column()
+            col.addView(LinearLayout(requireContext()).apply {
+                orientation = LinearLayout.HORIZONTAL
+                addView(left, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+                addView(right, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
             })
+        }
         if (!sideways) line("About Easy JS8", size = 1.2f, bold = true, top = 10) // sideways: in the top row
-        line("by VA3OSO")
-        line("Version ${BuildConfig.VERSION_NAME} (build ${BuildConfig.VERSION_CODE})")
-        line("Built ${BuildConfig.BUILD_DATE}")
-        line("Easy JS8 is a fork of JS8Android.", top = 12)
-        line("Features", size = 1.1f, bold = true, top = 16)
+        line("by VA3OSO", parent = left)
+        line("Version ${BuildConfig.VERSION_NAME} (build ${BuildConfig.VERSION_CODE})", parent = left)
+        line("Built ${BuildConfig.BUILD_DATE}", parent = left)
+        line("Easy JS8 is a fork of JS8Android.", top = 12, parent = left)
+        line("Features", size = 1.1f, bold = true, top = if (sideways) 0 else 16, parent = right)
         listOf("Traditional style", "Upright and sideways layouts", "SWL mode", "JS8 Slow decoding",
-            "APRS forms", "FT8 decodes").forEach { line("  •  $it") }
+            "APRS forms", "FT8 decodes").forEach { line("  •  $it", parent = right) }
         line("Source: https://github.com/RobBobbins/Easy-JS8", top = 16)
         line("Licence: GPLv3. No warranty.")
         line("Credits", size = 1.1f, bold = true, top = 16)
