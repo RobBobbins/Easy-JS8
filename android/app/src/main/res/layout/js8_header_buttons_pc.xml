@@ -1,6 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- PC mode header buttons (Rob, 2026-10-20): RX TX Settings / SPOT LOG TUNE, all six the same
-     size, 72 x 24 dp (upright and Swipe keep js8_header_buttons.xml, 87:87:217 as on the PC). -->
+<!-- PC mode header buttons (Rob, 2026-10-31): RX TX mode / SPOT LOG Settings TUNE, 72 x 24 dp. The
+     mode button holds the PC's mode text and spans Settings and TUNE; its size never changes. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="wrap_content"
     android:layout_height="wrap_content"
@@ -30,17 +30,19 @@
         <androidx.appcompat.widget.AppCompatButton
             android:id="@+id/js8_btn_mode"
             style="@style/Js8HeaderModeButton"
-            android:layout_width="72dp"
+            android:layout_width="156dp"
             android:layout_height="24dp"
             android:autoSizeMaxTextSize="14.3dp"
-            android:autoSizeMinTextSize="8dp"
+            android:autoSizeMinTextSize="6dp"
             android:autoSizeStepGranularity="0.5dp"
             android:autoSizeTextType="uniform"
             android:maxLines="1"
             android:singleLine="false"
             android:gravity="center"
             android:layout_marginStart="12dp"
-            android:text="Settings" />
+            android:paddingStart="2dp"
+            android:paddingEnd="2dp"
+            android:text="NORMAL+MULTI" />
     </LinearLayout>
 
     <LinearLayout
@@ -65,6 +67,21 @@
             android:layout_height="24dp"
             android:layout_marginStart="12dp"
             android:text="LOG" />
+
+        <androidx.appcompat.widget.AppCompatButton
+            android:id="@+id/js8_btn_settings"
+            style="@style/Js8HeaderModeButton"
+            android:layout_width="72dp"
+            android:layout_height="24dp"
+            android:autoSizeMaxTextSize="14.3dp"
+            android:autoSizeMinTextSize="8dp"
+            android:autoSizeStepGranularity="0.5dp"
+            android:autoSizeTextType="uniform"
+            android:maxLines="1"
+            android:singleLine="false"
+            android:gravity="center"
+            android:layout_marginStart="12dp"
+            android:text="Settings" />
 
         <androidx.appcompat.widget.AppCompatButton
             android:id="@+id/js8_btn_tune"

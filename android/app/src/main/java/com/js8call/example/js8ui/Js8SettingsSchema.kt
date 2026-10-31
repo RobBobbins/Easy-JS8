@@ -191,11 +191,11 @@ object Js8SettingsSchema {
     fun settingsSections(confirm: Boolean): List<Section> = listOf(
         // The rest of the PC Mode menu (Rob, 2026-10-19). Same keys the engine reads.
         Section("Operation", null, listOf(
-            check(MULTI_KEY, "Enable Simultaneous Decoding of All Speeds (MULTI)", true),
-            check(AUTOREPLY_KEY, if (confirm) "Enable Autoreply with Confirmation (AUTO+CONF)" else "Enable Autoreply (AUTO)", false),
-            check(HB_KEY, "Enable Heartbeat Networking (HB)", false),
+            check(MULTI_KEY, MULTI_LABEL, true),
+            check(AUTOREPLY_KEY, autoreplyLabel(confirm), false),
+            check(HB_KEY, HB_LABEL, false),
             // PC prepareHeartbeatMode: enabled only with HB and AUTO
-            Field(HB_ACK_KEY, "Enable Heartbeat Acknowledgments (ACK)", Kind.CHECK, "false",
+            Field(HB_ACK_KEY, HB_ACK_LABEL, Kind.CHECK, "false",
                 active = { d -> d.bool(Field(AUTOREPLY_KEY, "", Kind.CHECK, "false")) && d.bool(Field(HB_KEY, "", Kind.CHECK, "false")) })
         )),
         Section("Mode", null, listOf(
@@ -247,6 +247,12 @@ object Js8SettingsSchema {
     /** Js8TableView key of the upright Band Activity (its columns are js8_table_<key>_col_<column>). */
     const val BAND_TABLE_UPRIGHT = "band_upright"
     const val MULTI_KEY = "js8cfg_multi"
+    const val MULTI_LABEL = "Enable Simultaneous Decoding of All Speeds (MULTI)"
+    const val AUTOREPLY_CONFIRM_KEY = "js8cfg_autoreply_confirmation"
+    const val HB_LABEL = "Enable Heartbeat Networking (HB)"
+    const val HB_ACK_LABEL = "Enable Heartbeat Acknowledgments (ACK)"
+    /** PC on_menuModeJS8_aboutToShow: the item's text follows the confirmation setting. */
+    fun autoreplyLabel(confirm: Boolean) = if (confirm) "Enable Autoreply with Confirmation (AUTO+CONF)" else "Enable Autoreply (AUTO)"
     /** Live AUTO switch: the engine's autoreply_enabled. */
     const val AUTOREPLY_KEY = "autoreply_enabled"
     /** Station > Turn autoreply on at startup: AUTO is set from it when the app starts. */

@@ -108,15 +108,15 @@
 
         <include
             layout="@layout/js8_call_clock_block_ft8call"
-            android:layout_width="727dp"
+            android:layout_width="665dp"
             android:layout_height="match_parent"
             android:layout_marginStart="127dp" />
 
         <include
             layout="@layout/js8_header_buttons_ft8call"
-            android:layout_width="190dp"
+            android:layout_width="252dp"
             android:layout_height="match_parent"
-            android:layout_marginStart="857dp" />
+            android:layout_marginStart="795dp" />
     </FrameLayout>
 
     <!-- Band Activity -->

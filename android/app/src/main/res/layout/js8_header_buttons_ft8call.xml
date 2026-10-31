@@ -1,8 +1,8 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- FT8Call layout header, right box (Rob, 2026-10-20; FT8Call v0.4.2): our six buttons as small
-     boxes, 2 x 3, on black. Same buttons and order as js8_header_buttons_pc.xml. -->
+<!-- FT8Call layout header, right box (Rob, 2026-10-20; FT8Call v0.4.2): our buttons as small
+     boxes on black. Same buttons and order as js8_header_buttons_pc.xml. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
-    android:layout_width="190dp"
+    android:layout_width="252dp"
     android:layout_height="match_parent"
     android:background="@drawable/js8_ft8call_box"
     android:gravity="center"
@@ -34,11 +34,19 @@
         <androidx.appcompat.widget.AppCompatButton
             android:id="@+id/js8_btn_mode"
             style="@style/Js8HeaderModeButton"
-            android:layout_width="56dp"
+            android:layout_width="118dp"
             android:layout_height="22dp"
             android:layout_marginStart="6dp"
-            android:text="Settings"
-            android:textSize="11dp" />
+            android:autoSizeMaxTextSize="11dp"
+            android:autoSizeMinTextSize="5dp"
+            android:autoSizeStepGranularity="0.5dp"
+            android:autoSizeTextType="uniform"
+            android:gravity="center"
+            android:maxLines="1"
+            android:singleLine="false"
+            android:paddingStart="2dp"
+            android:paddingEnd="2dp"
+            android:text="NORMAL+MULTI" />
     </LinearLayout>
 
     <LinearLayout
@@ -64,6 +72,15 @@
             android:layout_height="22dp"
             android:layout_marginStart="6dp"
             android:text="LOG"
+            android:textSize="11dp" />
+
+        <androidx.appcompat.widget.AppCompatButton
+            android:id="@+id/js8_btn_settings"
+            style="@style/Js8HeaderModeButton"
+            android:layout_width="56dp"
+            android:layout_height="22dp"
+            android:layout_marginStart="6dp"
+            android:text="Settings"
             android:textSize="11dp" />
 
         <androidx.appcompat.widget.AppCompatButton

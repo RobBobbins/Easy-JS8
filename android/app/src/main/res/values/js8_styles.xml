@@ -92,4 +92,13 @@
         <item name="android:textAppearanceSmallPopupMenu">@style/Js8PopupMenuText</item>
         <item name="android:listPreferredItemHeightSmall">36dp</item>
     </style>
+    <!-- Mode menu: small enough that the PC's long item names show in full (Rob, 2026-10-31) -->
+    <style name="Js8ModeMenuText" parent="Js8PopupMenuText">
+        <item name="android:textSize">9.5dp</item>
+    </style>
+    <style name="ThemeOverlay.Js8ModeMenu" parent="">
+        <item name="android:textAppearanceLargePopupMenu">@style/Js8ModeMenuText</item>
+        <item name="android:textAppearanceSmallPopupMenu">@style/Js8ModeMenuText</item>
+        <item name="android:listPreferredItemHeightSmall">32dp</item>
+    </style>
 </resources>

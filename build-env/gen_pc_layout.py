@@ -68,20 +68,20 @@ PC_HEADER = """    <!-- Header -->
             android:layout_marginStart="24dp" />
 
         <!-- Callsign over clock, centred between the frequency block (ends 283 dp) and the
-             buttons (start 784 dp), and top to bottom (Rob, 2026-10-20) -->
+             buttons (start 700 dp), and top to bottom (Rob, 2026-10-20) -->
         <include
             layout="@layout/js8_call_clock_block"
             android:layout_width="268dp"
             android:layout_height="wrap_content"
             android:layout_gravity="center_vertical"
-            android:layout_marginStart="400dp" />
+            android:layout_marginStart="358dp" />
 
-        <!-- Six equal buttons, right edge where the PC's block ends (1024 dp), centred in the header -->
+        <!-- Header buttons, right edge where the PC's block ends (1024 dp), centred in the header -->
         <include
             layout="@layout/js8_header_buttons_pc"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
-            android:layout_marginStart="784dp"
+            android:layout_marginStart="700dp"
             android:layout_marginTop="14dp" />
     </FrameLayout>
 """
@@ -102,15 +102,15 @@ FT8CALL_HEADER = """    <!-- Header: FT8Call's three black boxes -->
 
         <include
             layout="@layout/js8_call_clock_block_ft8call"
-            android:layout_width="727dp"
+            android:layout_width="665dp"
             android:layout_height="match_parent"
             android:layout_marginStart="127dp" />
 
         <include
             layout="@layout/js8_header_buttons_ft8call"
-            android:layout_width="190dp"
+            android:layout_width="252dp"
             android:layout_height="match_parent"
-            android:layout_marginStart="857dp" />
+            android:layout_marginStart="795dp" />
     </FrameLayout>
 """
 

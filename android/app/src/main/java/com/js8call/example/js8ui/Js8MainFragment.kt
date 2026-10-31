@@ -632,6 +632,64 @@ class Js8MainFragment : Fragment() {
         waterfall.setCyclePeriod(progress.period)
         requestTextStats()
         renderHb()
+        renderModeButton()
+    }
+
+    /** PC updateModeButtonText: the speed and what is on, on the header's mode button. */
+    private fun renderModeButton() {
+        val button = view?.findViewById<TextView?>(R.id.js8_btn_mode) ?: return
+        val submode = Js8Activity.txSubmode(prefs().getInt(Js8SettingsSchema.TX_SUBMODE_KEY, 0))
+        var text = Js8Activity.modeName(submode)
+        if (boolPref(Js8SettingsSchema.MULTI_KEY, true)) text += "+MULTI"
+        if (boolPref(Js8SettingsSchema.AUTOREPLY_KEY, false)) text += if (boolPref(Js8SettingsSchema.AUTOREPLY_CONFIRM_KEY, true)) "+AUTO+CONF" else "+AUTO"
+        if (hbShown()) text += if (wantHbReplies()) "+HB+ACK" else "+HB"
+        if (button.text.toString() != text) button.text = text
+    }
+
+    /** PC menuModeJS8. Each item takes effect at once, and Settings shows the same values. */
+    private fun showModeMenu(anchor: View) {
+        val speedGroup = 1; val multiGroup = 2; val optionGroup = 3
+        val idMulti = 101; val idAuto = 102; val idHb = 103; val idAck = 104
+        val state = transmitVm.txState.value
+        // on_menuModeJS8_aboutToShow: no speed change while a message is queued or being sent
+        val canChangeSpeed = state != TransmitState.TRANSMITTING && state != TransmitState.QUEUED &&
+            transmitVm.queue.value.isNullOrEmpty()
+        val submode = Js8Activity.txSubmode(prefs().getInt(Js8SettingsSchema.TX_SUBMODE_KEY, 0))
+        val auto = boolPref(Js8SettingsSchema.AUTOREPLY_KEY, false)
+        val hb = boolPref(Js8SettingsSchema.HB_KEY, false)
+        val menu = android.widget.PopupMenu(android.view.ContextThemeWrapper(requireContext(), R.style.ThemeOverlay_Js8ModeMenu), anchor)
+        androidx.core.view.MenuCompat.setGroupDividerEnabled(menu.menu, true)
+        Js8SettingsSchema.SPEEDS.forEachIndexed { i, (label, value) ->
+            menu.menu.add(speedGroup, value.toInt(), i, label).apply {
+                isChecked = value.toInt() == submode
+                isEnabled = canChangeSpeed
+            }
+        }
+        menu.menu.setGroupCheckable(speedGroup, true, true)
+        fun option(group: Int, id: Int, label: String, checked: Boolean) =
+            menu.menu.add(group, id, id, label).apply { isCheckable = true; isChecked = checked }
+        option(multiGroup, idMulti, Js8SettingsSchema.MULTI_LABEL, boolPref(Js8SettingsSchema.MULTI_KEY, true))
+        option(optionGroup, idAuto, Js8SettingsSchema.autoreplyLabel(boolPref(Js8SettingsSchema.AUTOREPLY_CONFIRM_KEY, true)), auto)
+        // prepareHeartbeatMode: HB needs a speed that sends heartbeats, ACK also needs HB and AUTO
+        option(optionGroup, idHb, Js8SettingsSchema.HB_LABEL, hb).isEnabled =
+            submode in setOf(Js8Activity.SUBMODE_NORMAL, Js8Activity.SUBMODE_FAST, Js8Activity.SUBMODE_SLOW)
+        option(optionGroup, idAck, Js8SettingsSchema.HB_ACK_LABEL, boolPref(Js8SettingsSchema.HB_ACK_KEY, false)).isEnabled = hbShown() && auto
+        menu.setOnMenuItemClickListener { item ->
+            val key = when (item.itemId) {
+                idMulti -> Js8SettingsSchema.MULTI_KEY
+                idAuto -> Js8SettingsSchema.AUTOREPLY_KEY
+                idHb -> Js8SettingsSchema.HB_KEY
+                idAck -> Js8SettingsSchema.HB_ACK_KEY
+                else -> null
+            }
+            if (key == null) jumpToSpeed(item.itemId)
+            else {
+                prefs().edit().putBoolean(key, !item.isChecked).apply()
+                refreshFromPrefs()
+            }
+            true
+        }
+        menu.show()
     }
 
     // ---- Status Bar wpm box (PC mode) ---------------------------------------------------
@@ -919,8 +977,10 @@ class Js8MainFragment : Fragment() {
         requireView().findViewById<View>(R.id.js8_btn_cat).setOnClickListener {
             requireContext().startService(Intent(requireContext(), JS8EngineService::class.java).setAction(JS8EngineService.ACTION_READ_RIG))
         }
-        // Settings button, where the PC has its mode button (Rob, 2026-10-19)
-        requireView().findViewById<View>(R.id.js8_btn_mode).setOnClickListener { openSettings() }
+        // Settings button (Rob, 2026-10-31)
+        requireView().findViewById<View>(R.id.js8_btn_settings).setOnClickListener { openSettings() }
+        // Mode button: UI_Constructor modeButton press pops up menuModeJS8
+        requireView().findViewById<View>(R.id.js8_btn_mode).setOnClickListener { showModeMenu(it) }
         // PC mode menu bar: the same windows as upright, no separate Menu page (Rob, 2026-10-20:
         // every menu has the same items in every layout). File = the PC's File > Settings (Station);
         // Configurations, Mode and Control items are in the Settings window; Help > About is in Station.
@@ -1157,7 +1217,8 @@ class Js8MainFragment : Fragment() {
         }
         typingBox.setOnLongClickListener { showTypingMenu(it); true }
         messageWindow.setOnLongClickListener { showMessageWindowMenu(it); true }
-        // Up and down drags scroll the box, not the page it sits in; sideways drags stay with the Swipe tabs
+        // Up and down drags scroll the box, not the page it sits in; sideways drags stay with the Swipe tabs.
+        // Upright: every drag that starts in the box stays with the box, from the first touch (Rob, 2026-10-31)
         var downX = 0f
         var downY = 0f
         messageWindow.setOnTouchListener { v, ev ->
@@ -1165,6 +1226,7 @@ class Js8MainFragment : Fragment() {
                 android.view.MotionEvent.ACTION_DOWN -> {
                     downX = ev.x
                     downY = ev.y
+                    if (isUprightLayout()) v.parent?.requestDisallowInterceptTouchEvent(true)
                 }
                 android.view.MotionEvent.ACTION_MOVE ->
                     if ((v.canScrollVertically(1) || v.canScrollVertically(-1)) &&
@@ -1822,14 +1884,16 @@ class Js8MainFragment : Fragment() {
         }
     }
 
+    /** presentlyWantHBReplies: AUTO + ACK, nothing waiting to send, and no QSO under way when HB pauses for QSOs. */
+    private fun wantHbReplies() = boolPref(Js8SettingsSchema.AUTOREPLY_KEY, false) && boolPref(Js8SettingsSchema.HB_ACK_KEY, false) &&
+        activityVm.typed.value == null && (!boolPref("js8cfg_heartbeat_qso_pause", true) || selectedCall == null)
+
     /** updateHBButtonDisplay: "HB" / "HB + ACK", "(seconds)" to the next one while the timer runs. */
     private fun renderHbLabel(now: Long) {
         val hb = view?.findViewById<TextView?>(R.id.js8_btn_hb) ?: return
         if (hb.visibility != View.VISIBLE) return
         val timer = com.js8call.example.service.HeartbeatTimer
-        // presentlyWantHBReplies: AUTO + ACK, and no QSO under way when HB pauses for QSOs
-        val ack = boolPref(Js8SettingsSchema.AUTOREPLY_KEY, false) && boolPref(Js8SettingsSchema.HB_ACK_KEY, false) &&
-            (!boolPref("js8cfg_heartbeat_qso_pause", true) || selectedCall == null)
+        val ack = wantHbReplies()
         // Upright: only "HB" or the seconds, the small button can't hold "HB + ACK" (Rob, 2026-10-22)
         val base = if (ack && !isUprightLayout()) "HB + ACK" else "HB"
         val text = if (timer.on) {
@@ -2064,6 +2128,7 @@ class Js8MainFragment : Fragment() {
         Js8Api.setSelectedCall(selectedCall) // API: STATION.STATUS SELECTED, RX.GET_CALL_SELECTED
         selectedCall?.let { if (it !in callSelectedTime) callSelectedTime[it] = System.currentTimeMillis() }
         requestTextStats() // the directed callsign changes the parts (PC m_txTextDirtyLastSelectedCall)
+        renderModeButton() // +HB+ACK follows the selection (presentlyWantHBReplies)
         val has = selectedCall != null
         val v = requireView()
         val swl = listenOnly()
@@ -2144,7 +2209,7 @@ class Js8MainFragment : Fragment() {
             view?.findViewById<TextView?>(R.id.js8_status_blank)?.text =
                 activityVm.lastTx.takeIf { it.isNotEmpty() }?.let { "Last Tx: $it" }.orEmpty()
         }
-        activityVm.typed.observe(viewLifecycleOwner) { renderTyped(it) }
+        activityVm.typed.observe(viewLifecycleOwner) { renderTyped(it); renderModeButton() }
         observeInbox()
         monitorVm.status.observe(viewLifecycleOwner) { status ->
             val running = status.state == EngineState.RUNNING || status.state == EngineState.STARTING

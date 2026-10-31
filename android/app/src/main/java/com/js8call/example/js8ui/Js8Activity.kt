@@ -98,6 +98,15 @@ class Js8Activity {
         /** Speeds the engine can send; anything else goes out as Normal (getPreferredTxSubmode). */
         fun txSubmode(stored: Int) = if (stored in setOf(SUBMODE_NORMAL, SUBMODE_FAST, SUBMODE_TURBO, SUBMODE_SLOW, SUBMODE_ULTRA)) stored else SUBMODE_NORMAL
 
+        /** Mode button text starts with this (JS8::Submode::name). */
+        fun modeName(submode: Int) = when (submode) {
+            SUBMODE_FAST -> "FAST"
+            SUBMODE_TURBO -> "JS8 40"
+            SUBMODE_SLOW -> "SLOW"
+            SUBMODE_ULTRA -> "JS8 60"
+            else -> "NORMAL"
+        }
+
         /** Status bar mode label (updateModeButtonText). */
         fun modeLabel(submode: Int) = when (submode) {
             SUBMODE_FAST -> "JS8 Fast"
