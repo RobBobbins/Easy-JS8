@@ -153,6 +153,9 @@ public:
   // Waterfall Controls > Timing > Start Automatic Time Drift (PC WideGraph::isAutoSyncEnabled):
   // Normal and Slow are decoded every second instead of once per cycle.
   virtual void set_auto_sync(bool /*enabled*/) {}
+  // PC decoder range (mainwindow.cpp decode): filter limits, or 0-5000 Hz with the filter off;
+  // candidates nearest the offset are tried first.
+  virtual void set_decode_range(int /*low_hz*/, int /*high_hz*/, int /*offset_hz*/) {}
 
   // Positive = engine clock ahead of system clock; takes effect at the next captured buffer.
   virtual void set_time_drift_ms(std::int64_t drift_ms) = 0;

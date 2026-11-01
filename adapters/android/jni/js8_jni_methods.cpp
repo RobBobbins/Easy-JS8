@@ -280,6 +280,18 @@ Java_com_js8call_core_JS8Engine_nativeSetAutoSync(
   js8_engine_set_auto_sync(engine, static_cast<bool>(enabled));
 }
 
+JNIEXPORT void JNICALL
+Java_com_js8call_core_JS8Engine_nativeSetDecodeRange(
+    JNIEnv* /* env */,
+    jobject /* thiz */,
+    jlong handle,
+    jint low_hz,
+    jint high_hz,
+    jint offset_hz) {
+  JS8Engine_Native* engine = reinterpret_cast<JS8Engine_Native*>(handle);
+  js8_engine_set_decode_range(engine, low_hz, high_hz, offset_hz);
+}
+
 JNIEXPORT jlong JNICALL
 Java_com_js8call_core_JS8Engine_nativeGetTimeDriftMs(
     JNIEnv* /* env */,

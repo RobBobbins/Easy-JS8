@@ -74,8 +74,10 @@ class Js8PcSplitters(private val window: FrameLayout, private val prefs: SharedP
         private const val MIN_WATERFALL_W = 267f
         private const val MIN_CONTROLS_W = 67f
 
-        /** Touch strip along each line, PC dp (about 12 dp on the phone when the window is fitted). */
-        private const val STRIP = 24f
+        /** Touch strip along each line, PC dp (about 24 dp on the phone when the window is fitted; Rob, 2026-10-31). */
+        private const val STRIP = 48f
+        /** The bar under the lists, PC dp above the buttons. */
+        private const val MAIN_BAR_ABOVE_BUTTONS = 12f
         /** Bar drawn along each line, PC dp. */
         private const val BAR = 4f
     }
@@ -96,6 +98,7 @@ class Js8PcSplitters(private val window: FrameLayout, private val prefs: SharedP
     private val wfLine = line(true) { wf += it }
 
     init {
+        mainLine.barCentrePx = (STRIP - MAIN_BAR_ABOVE_BUTTONS) * density
         listOf(bandLine, callLine, textLine, mainLine, wfLine).forEach { window.addView(it) }
         apply()
     }

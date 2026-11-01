@@ -131,11 +131,11 @@ class Js8ApiCommands(private val context: Context) {
                 ))
                 return
             }
-            "STATION.GET_SPOT" -> { reply("STATION.SPOT", "", mapOf("value" to bool("psk_reporter", false), "_ID" to id)); return }
+            "STATION.GET_SPOT" -> { reply("STATION.SPOT", "", mapOf("value" to bool("psk_reporter", true), "_ID" to id)); return }
             "STATION.SET_SPOT" -> {
                 setPref("psk_reporter", ApiMessage.toBool(message.value))
                 refresh()
-                reply("STATION.SPOT", "", mapOf("value" to bool("psk_reporter", false), "_ID" to id))
+                reply("STATION.SPOT", "", mapOf("value" to bool("psk_reporter", true), "_ID" to id))
                 return
             }
             "STATION.GET_CONFIG" -> {

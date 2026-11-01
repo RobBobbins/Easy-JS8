@@ -332,6 +332,11 @@ class JS8Engine private constructor(
         withNativeHandle { nativeSetAutoSync(it, enabled) }
     }
 
+    /** Decoder range in Hz and the offset whose candidates are tried first. */
+    fun setDecodeRange(lowHz: Int, highHz: Int, offsetHz: Int) {
+        withNativeHandle { nativeSetDecodeRange(it, lowHz, highHz, offsetHz) }
+    }
+
     /** Current clock drift offset in milliseconds. */
     fun timeDriftMs(): Long {
         return withNativeHandleOr(0L) { nativeGetTimeDriftMs(it) }
@@ -438,6 +443,7 @@ class JS8Engine private constructor(
     private external fun nativeSetTimeDriftMs(handle: Long, driftMs: Long)
     private external fun nativeGetTimeDriftMs(handle: Long): Long
     private external fun nativeSetAutoSync(handle: Long, enabled: Boolean)
+    private external fun nativeSetDecodeRange(handle: Long, lowHz: Int, highHz: Int, offsetHz: Int)
     private external fun nativeSetSyncStats(handle: Long, enabled: Boolean)
 
     /**

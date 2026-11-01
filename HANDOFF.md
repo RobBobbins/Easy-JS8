@@ -574,6 +574,8 @@ Station window sideways = PC tabs, no About tab.
 
 ## Not done yet
 
+- **Audit work (2026-10-31, Rob):** `AUDIT-3.0.3.md` is now the work list, [x] = done; order: section 1, sections 2 and 4, section 3 defaults to the PC, decoder stages, the rest. Done, not committed: decoder range and priority (`applyDecodeRange`, default filter 500-2500 Hz as the PC), MSG / mailbox / relay checksums (`checkedMsgText`; no text or @APRSIS = no check), buffers close at 60 s, drop at 90 s, match range per speed, first frame clears a buffer, commands answered on the last frame (`deferAutoReply`), relay through `queueAutoReply`, no replies with text in the Typing Box or a message to me arriving. Checked on S22-Fresh, no radio: log shows 500-2500 Hz and the saved offset; good MSG in one and two frames accepted, corrupt ones rejected. Not run: relay, the two reply gates, @APRSIS MSG TO: result, 60 s close. Injected MSG tests now need a real checksum.
+- **Audit work, second batch (2026-10-31):** QUERY CALL (mailbox path, `heardStation`, `sinceText`), queries to my groups, one @ALLCALL / heartbeat reply per station in 15 minutes, HEARING? always replies and follows **Remove callsigns from call activity after:**, @HB counts as @ALLCALL, @APRSIS MSG TO: in the text, ACK rules (speed, open buffer, Pause while a call is selected, group MSG ID, the PC's stray bracket), heartbeat offset (`heartbeatOffsetHz`, PC findFreeFreqOffset). `JS8EngineService.typingBoxEmpty` ignores the app's own text shown there. Checked on S22-Fresh with AUTO on, no radio: SNR?, QUERY CALL, HEARING?, relay, @TESTG SNR?, no reply with HELLOBOX typed. Not run: 15-minute limit, QUERY MSGS to @HB, every heartbeat ACK rule, heartbeat offset, timed HB waiting. Difference from the PC: a timed HB waits in the service, it does not enter the queue, so it still ignores text in the Typing Box. S22-Fresh now has AUTO on, Autoreply Confirmation off, relay on, group @TESTG, HELLOBOX in the Typing Box.
 - **Open list, in order (2026-10-31):** first GitHub release with `version.txt`; real APRS and JS8NET network tests; real radio items last, including HB, ACK and the waterfall with real JS8 signals. The privacy cleanup is Rob's decision. No test traffic to real networks from the emulator.
 - **JS8NET spotting (2026-10-31):** `network/SpotClient.kt`, port of the PC's SpotClient: UDP JSON to `spot.js8call.com:50000`, queue sent once a minute, one host lookup. On with **Enable spotting to reporting networks**. `spotDecode` in the service: RX.SPOT for each "CALL:" frame, RX.DIRECTED for commands to @groups, multi-part ones joined with the checksum checked. Difference from the PC: spots are not held back for 4/5 of a cycle after a band change. PATH is always empty (relay calls are not parsed for this). **Trap:** debug pref `debug_spot_host` sends spots elsewhere; S22-Fresh has it set to 10.0.2.2. Set it before installing on any emulator with SPOT on, or test spots reach the real JS8NET. Tested against scratchpad `fakespot.py`: RX.LOCAL, spot, CQ, SNR? to @JS8NET, joined MSG, bad checksum dropped, spot blacklist, SPOT off. Not tried against the real server.
 - **Own @APRSIS messages (checked 2026-10-31):** the PC has no direct send: its own @APRSIS messages only go on the air, same as the app. Nothing to change.
@@ -609,6 +611,18 @@ Station window sideways = PC tabs, no About tab.
   Cumulative level, Avg N.
 - Halt / TUNE / transmit / SWL blocking not tested with a radio — test on a dummy load first.
 - Swipe Activity screen: Status Bar row is wider than the screen on purpose (Rob, 2026-10-20: Last Tx runs off the right edge, the row scrolls); seen 2026-10-31, left as it is.
+
+## Audit work state (2026-10-31)
+
+- `AUDIT-3.0.3.md`: 54 ticked, 123 open. Nothing committed.
+- Inbox Frequency stays offset Hz: the message store has no dial frequency, the PC format needs a database change. Status label shows "Tx: <typed text>", not the frame being sent; "Decoding" not added.
+- Decoder: PC 3.0.3 frequency and timing tracking, whitening with LLR erasure, soft combining and LDPC feedback are in `core/src/decoder/` (`FrequencyTracker.*`, `whitening_processor.h`, `soft_combiner.h`, `ldpc_feedback.h`: PC files with Qt removed, environment switches at PC defaults).
+- Decoder test (made-up signals, 60 to 100 frames per case, run on S22-Fresh with a test program, 2026-10-31): single frames 1 to 3 of 60 fewer than the old decoder at -18 to -20 dB, one frame repeated 4 times 15 of 60 against 11, CPU about 30% more. Plain noise only, no real HF audio, no phone CPU figure.
+- Injected MSG tests need a checksum over the whole message, for relay including the destination: `K4RDX HI THERE`.
+- RX.DIRECTED and DIRECTED.TXT: buffered commands now wait for the last frame and checksum. DIRECTED.TXT needs `log_messages_to_file` on.
+- Decided: **File > Station…** stays (Rob, 2026-10-19). **About** stays, it opens the Easy JS8 About. **Directed to CALL** falls back to **Directed** where the button is too narrow. Send shows Send, Ready, Sending with no seconds yet.
+- Rob, 2026-10-31: come back to the decoder stages; they are committed, the question of keeping them is open until they are tried on real signals.
+- Lines 404-406 above are out of date, see audit section 15.
 
 ## Build (Windows, Git Bash, folder `E:\new-w3bguru-websites\easy js8`)
 

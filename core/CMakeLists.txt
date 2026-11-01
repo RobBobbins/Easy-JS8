@@ -2,6 +2,7 @@ add_library(js8core STATIC EXCLUDE_FROM_ALL
   src/placeholder.cpp
   src/engine/engine.cpp
   src/decoder/legacy_decoder.cpp
+  src/decoder/FrequencyTracker.cpp
   src/dsp/flatten.cpp
   src/dsp/resampler.cpp
   src/tx/modulator.cpp

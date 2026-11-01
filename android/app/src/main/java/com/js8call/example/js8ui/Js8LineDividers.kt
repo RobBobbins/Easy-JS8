@@ -24,6 +24,8 @@ import kotlin.math.roundToInt
 class Js8LineHandle(context: Context, private val sideways: Boolean, private val barPx: Float) : View(context) {
     var onMove: (Float) -> Unit = {}
     var onEnd: () -> Unit = {}
+    /** Middle of the bar across the strip, px; null = the strip's middle. */
+    var barCentrePx: Float? = null
     private val bar = Paint().apply { color = Color.parseColor("#8A8A8A") }
     private var last = 0f
 
@@ -49,13 +51,13 @@ class Js8LineHandle(context: Context, private val sideways: Boolean, private val
             val l = (width - barPx) / 2f
             canvas.drawRect(l, 0f, l + barPx, height.toFloat(), bar)
         } else {
-            val t = (height - barPx) / 2f
+            val t = (barCentrePx ?: (height / 2f)) - barPx / 2f
             canvas.drawRect(0f, t, width.toFloat(), t + barPx, bar)
         }
     }
 
     companion object {
-        const val STRIP_DP = 12f
+        const val STRIP_DP = 24f // Rob, 2026-10-31: 12 was hard to grab
         const val BAR_DP = 3f
     }
 }

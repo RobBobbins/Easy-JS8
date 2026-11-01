@@ -87,6 +87,7 @@ class Js8RulerView @JvmOverloads constructor(context: Context, attrs: AttributeS
         textAlign = Paint.Align.CENTER
     }
     private val tick = Paint().apply { color = Color.BLACK; strokeWidth = dp(1f) }
+    private val gray = Paint().apply { color = android.graphics.Color.rgb(149, 165, 166) }
     private val yellow = Paint().apply { color = ContextCompat.getColor(context, R.color.js8_ruler_band_yellow) }
     private val green = Paint().apply { color = ContextCompat.getColor(context, R.color.js8_ruler_band_green) }
 
@@ -96,10 +97,12 @@ class Js8RulerView @JvmOverloads constructor(context: Context, attrs: AttributeS
         val strip = dp(4f)
         canvas.drawRect(0f, 0f, w, h, bg)
         val endHz = startHz + w * hzPerPixel
-        // Band strip: yellow below 1000 Hz, green from 1000 Hz (as in the PC capture)
-        val x1000 = ((1000f - startHz) / hzPerPixel).coerceIn(0f, w)
-        canvas.drawRect(0f, h - strip, x1000, h, yellow)
-        canvas.drawRect(x1000, h - strip, w, h, green)
+        // PC JS8 sub-bands: gray 0-4000 Hz, yellow 500-3000 Hz, green 1000-2500 Hz
+        fun band(fromHz: Float, toHz: Float, paint: Paint) = canvas.drawRect(
+            ((fromHz - startHz) / hzPerPixel).coerceIn(0f, w), h - strip, ((toHz - startHz) / hzPerPixel).coerceIn(0f, w), h, paint)
+        band(0f, 4000f, gray)
+        band(500f, 3000f, yellow)
+        band(1000f, 2500f, green)
         // Label every 100 Hz like the desktop when there is room (about 60 dp per label),
         // otherwise every 200/250/500/1000 Hz; ticks every quarter of a label step.
         val labelStep = listOf(100, 200, 250, 500, 1000).first { it / hzPerPixel >= dp(60f) || it == 1000 }

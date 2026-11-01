@@ -60,11 +60,14 @@ class Js8WaterfallControls(
         private const val CENTER_MAX = 5000
         private const val FILTER_CENTER_MIN = 120
         private const val FILTER_CENTER_MAX = 4880
-        const val FILTER_WIDTH_MIN = 120
         private const val FILTER_WIDTH_MAX = 5000
         private const val DRIFT_MAX = 30000
         private const val AUTO_AFTER_MAX = 1024
     }
+
+    /** PC setFilterMinimumBandwidth: the speed's bandwidth plus twice its receive threshold. */
+    var filterWidthMin = 70
+        private set
 
     private val ui = Handler(Looper.getMainLooper())
     private fun <T : View> v(id: Int): T? = root.findViewById(id)
@@ -72,7 +75,7 @@ class Js8WaterfallControls(
     private var center = prefs.getInt(KEY_CENTER, 1500).coerceIn(CENTER_MIN, CENTER_MAX)
     private var filterOn = prefs.getBoolean(KEY_FILTER_ENABLED, true)
     private var filterCenter = prefs.getInt(KEY_FILTER_CENTER, 1500).coerceIn(FILTER_CENTER_MIN, FILTER_CENTER_MAX)
-    private var filterWidth = prefs.getInt(KEY_FILTER_WIDTH, 2000).coerceIn(FILTER_WIDTH_MIN, FILTER_WIDTH_MAX)
+    private var filterWidth = prefs.getInt(KEY_FILTER_WIDTH, 2000).coerceIn(filterWidthMin, FILTER_WIDTH_MAX)
 
     private var autoStop = prefs.getBoolean(KEY_AUTO_DRIFT_STOP, true)
     private var autoAfter = prefs.getInt(KEY_AUTO_DRIFT_AFTER, 1).coerceIn(1, AUTO_AFTER_MAX)
@@ -85,7 +88,7 @@ class Js8WaterfallControls(
         onValueChanged = { setFilterCenter(it) }
     }
     private val widthKnob = v<Js8KnobView>(R.id.js8_wf_filter_width_knob)?.apply {
-        minimum = FILTER_WIDTH_MIN; maximum = FILTER_WIDTH_MAX
+        minimum = filterWidthMin; maximum = FILTER_WIDTH_MAX
         onValueChanged = { setFilterWidth(it) }
     }
 
@@ -340,8 +343,14 @@ class Js8WaterfallControls(
     /** Waterfall menu: Disable Filter, or a center / width that also turns the filter on (WideGraph.cpp). */
     fun tickFilter(on: Boolean) { v<CheckBox>(R.id.js8_wf_filter_enable)?.isChecked = on }
 
+    fun setFilterWidthMin(hz: Int) {
+        filterWidthMin = hz
+        widthKnob?.minimum = hz
+        setFilterWidth(maxOf(filterWidth, hz))
+    }
+
     fun setFilterWidth(hz: Int) {
-        filterWidth = hz.coerceIn(FILTER_WIDTH_MIN, FILTER_WIDTH_MAX)
+        filterWidth = hz.coerceIn(filterWidthMin, FILTER_WIDTH_MAX)
         prefs.edit().putInt(KEY_FILTER_WIDTH, filterWidth).apply()
         renderAll()
     }
@@ -357,7 +366,7 @@ class Js8WaterfallControls(
     /** API RX.SET_FILTER / RX.SET_FILTER_ENABLED (WideGraph setFilterCenter / Width / Enabled). */
     fun setFilter(center: Int?, width: Int?, enabled: Boolean?) {
         center?.let { filterCenter = it.coerceIn(FILTER_CENTER_MIN, FILTER_CENTER_MAX) }
-        width?.let { filterWidth = it.coerceIn(FILTER_WIDTH_MIN, FILTER_WIDTH_MAX) }
+        width?.let { filterWidth = it.coerceIn(filterWidthMin, FILTER_WIDTH_MAX) }
         enabled?.let { filterOn = it }
         prefs.edit().putInt(KEY_FILTER_CENTER, filterCenter).putInt(KEY_FILTER_WIDTH, filterWidth)
             .putBoolean(KEY_FILTER_ENABLED, filterOn).apply()

@@ -29,6 +29,7 @@ void js8_engine_set_tx_boost_enabled(JS8Engine_Native* engine, bool enabled);
 void js8_engine_set_tx_output(JS8Engine_Native* engine, float gain, int channel);
 void js8_engine_set_time_drift_ms(JS8Engine_Native* engine, long long drift_ms);
 void js8_engine_set_auto_sync(JS8Engine_Native* engine, bool enabled);
+void js8_engine_set_decode_range(JS8Engine_Native* engine, int low_hz, int high_hz, int offset_hz);
 void js8_engine_set_sync_stats(JS8Engine_Native* engine, bool enabled);
 long long js8_engine_get_time_drift_ms(JS8Engine_Native* engine);
 

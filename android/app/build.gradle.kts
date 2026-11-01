@@ -79,6 +79,13 @@ android {
         }
     }
 
+    // Engine files compressed in the download, 41 MB to 8 MB (Rob, 2026-10-31)
+    packaging {
+        jniLibs {
+            useLegacyPackaging = true
+        }
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17

@@ -10,6 +10,9 @@ object Js8Callsign {
     private val compound = Regex("""(?:[@]?|\b)([A-Z0-9/@][A-Z0-9/]{0,2}[/]?[A-Z0-9/]{0,3}[/]?[A-Z0-9/]{0,3})\b""")
     private val letterDigit = Regex("[0-9][A-Z]|[A-Z][0-9]")
 
+    /** Varicode::isCompoundCallsign: an @GROUP or a call with a prefix or suffix, not a plain call. */
+    fun isCompound(call: String) = !base.matches(call) && compound.matches(call) && call.length - call.count { it == '/' } <= 9
+
     fun isValid(callsign: String): Boolean {
         if (base.matches(callsign)) return callsign.length > 2 && letterDigit.containsMatchIn(callsign)
         if (!compound.matches(callsign)) return false

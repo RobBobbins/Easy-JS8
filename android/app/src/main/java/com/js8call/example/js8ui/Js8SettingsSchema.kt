@@ -233,7 +233,7 @@ object Js8SettingsSchema {
             ButtonRow(listOf("Clear RX Activity" to "clear_rx")),
             ButtonRow(listOf("Clear All Activity" to "clear_all")),
             // Upright and Swipe dividers back to the layout's sizes (Rob, 2026-10-22); PC mode: View menu
-            ButtonRow(listOf("Reset Window Sizes" to "reset_window_sizes")),
+            ButtonRow(listOf("Reset Frame Sizes" to "reset_window_sizes")),
             // Menu bar Configurations and File > Exit, for the layouts without a menu bar
             ButtonRow(listOf("Configurations..." to "configurations", "Exit" to "exit"))
         )),
@@ -335,7 +335,7 @@ object Js8SettingsSchema {
                 check("js8cfg_tx_qsy", "Allow Tx frequency changes while transmitting", false),
                 check("js8cfg_avoid_forced_identify", "Allow sending standard messages without callsign", false),
                 check("js8cfg_transmit_directed", "Immediately transmit CQ, Reply, Info, Saved, and Directed messages from the menu", true),
-                check("log_messages_to_file", "Write log files (ALL.TXT, DIRECTED.TXT, etc) of decoded text", false),
+                check("log_messages_to_file", "Write log files (ALL.TXT, DIRECTED.TXT, etc) of decoded text", true),
                 check("js8cfg_spellcheck", "Suggest alternative word choices for more efficient message transmission", true),
                 check("js8cfg_reset_activity", "Reset the Band Activity, Call Activity, and RX history at startup", false),
                 check("js8cfg_check_updates", "Check for software updates at startup", true)
@@ -345,7 +345,7 @@ object Js8SettingsSchema {
                 spin("js8cfg_activity_aging", "Remove messages from band activity after:", 2, 0.0, 1440.0, suffix = " minutes", special = "Disabled")
             )),
             Group("Customization", listOf(
-                text("js8cfg_eot", "End of Transmission Character Indicator:", "♢"),
+                text("js8cfg_eot", "End of Transmission Character Indicator:", "♢", maxLength = 2, required = true),
                 text("js8cfg_mfi", "Missing Frame Character Indicator:", "……")
             )),
             Group("Heartbeat (HB)", listOf(
@@ -363,7 +363,7 @@ object Js8SettingsSchema {
             )),
             Group("Autoreply", listOf(
                 // Only how AUTO starts (PC autoreply_on_at_startup); the live switch is Settings > AUTO
-                check(AUTOREPLY_STARTUP_KEY, "Turn autoreply on at startup", false),
+                check(AUTOREPLY_STARTUP_KEY, "Turn autoreply on at startup", true),
                 // PC: "Disable relay" checked == JS8Android relay_enabled false
                 Field("relay_enabled", "Disable message relay (>) when autoreply is enabled", Kind.CHECK, "true",
                     load = { p -> (!p.getBoolean("relay_enabled", false)).toString() },
@@ -397,7 +397,7 @@ object Js8SettingsSchema {
                 Field("qmx_cat_baud", "QMX Baud Rate:", Kind.TEXT, "115200", visible = { d -> rigIs(d, "qmx_serial") })
             )),
             Group("Parameters", listOf(
-                choice("rig_serial_baud", "Baud Rate:", "9600", same("1200", "2400", "4800", "9600", "19200", "38400", "57600", "115200")),
+                choice("rig_serial_baud", "Baud Rate:", "4800", same("1200", "2400", "4800", "9600", "19200", "38400", "57600", "115200")),
                 RadioGroup(Field("js8cfg_data_bits", "", Kind.RADIO, "default",
                     load = { p -> p.getString("js8cfg_data_bits", null) ?: if (p.getString("rig_serial_data_bits", "8") == "7") "7" else "default" },
                     save = { e, v, _ -> e.putString("js8cfg_data_bits", v); e.putString("rig_serial_data_bits", if (v == "7") "7" else "8") }),
@@ -425,7 +425,7 @@ object Js8SettingsSchema {
                 active = { d -> (d.values["js8cfg_ptt_method"] ?: d.prefs.getString("js8cfg_ptt_method", "vox")) in setOf("dtr", "rts") },
                 visible = { d -> rigIs(d, "hamlib") }),
             RadioGroup(radio("transmit_mode", "none"), "Mode", listOf("USB" to "usb", "None" to "none", "Data/Pkt" to "usb_data")),
-            RadioGroup(radio("js8cfg_tx_audio_source", "rear"), "Transmit Audio Source", listOf("Rear/Data" to "rear", "Front/Mic" to "front")),
+            RadioGroup(radio("js8cfg_tx_audio_source", "front"), "Transmit Audio Source", listOf("Rear/Data" to "rear", "Front/Mic" to "front")),
             RadioGroup(radio("js8cfg_split", "none"), "Split Operation", listOf("Fake It" to "emulate", "Rig" to "rig", "None" to "none")),
             Group("Advanced", listOf(
                 spin("js8cfg_tx_delay", "Tx delay:", 0.2, 0.1, 0.5, step = 0.1, suffix = "  s", decimals = 1),
@@ -435,7 +435,7 @@ object Js8SettingsSchema {
         Section("Audio", null, listOf(
             Group("Modulation Soundcard", listOf(
                 Field("last_audio_device_id", "Input:", Kind.AUDIO_INPUT, "-1"),
-                choice("js8cfg_input_channel", "Input channel:", "Mono", same("Mono", "Left", "Right", "Both")),
+                choice("js8cfg_input_channel", "Input channel:", "Mono", same("Mono", "Left", "Right")),
                 Field("js8cfg_output_device", "Output:", Kind.CHOICE, "default",
                     choices = { _, _ -> listOf("Phone's current audio output" to "default") }, enabled = false),
                 choice("js8cfg_output_channel", "Output channel:", "Mono", same("Mono", "Left", "Right", "Both"))
@@ -460,9 +460,9 @@ object Js8SettingsSchema {
                 text("js8cfg_op_call", "Operator Callsign (if different than Station Callsign):", upper = true)
             )),
             Group("Network Services", listOf(
-                check("psk_reporter", "Enable spotting to reporting networks (JS8NET, PSKReporter, etc)", false),
+                check("psk_reporter", "Enable spotting to reporting networks (JS8NET, PSKReporter, etc)", true),
                 text("js8cfg_spot_blacklist", "Never send spotting reports from these callsigns (comma separated):", upper = true),
-                check("aprs_is", "Enable spotting @APRSIS messages to the APRS-IS network", false),
+                check("aprs_is", "Enable spotting @APRSIS messages to the APRS-IS network", true),
                 check("js8cfg_aprs_relay", "Enable relaying inbound APRS messages to Heard List stations", false),
                 text("js8cfg_aprs_server", "APRS Server:", "rotate.aprs2.net"),
                 spin("js8cfg_aprs_port", "APRS Server Port:", 14580, 0.0, 65534.0)
@@ -472,7 +472,7 @@ object Js8SettingsSchema {
                 check(Js8Api.KEY_DYNAMIC_INFO, "Allow setting station information (Grid, Info, Status, etc) from the APIs", false),
                 text(Js8Api.KEY_UDP_SERVER, "UDP Server Hostname:", "127.0.0.1"),
                 check(Js8Api.KEY_UDP_ENABLED, "Enable UDP Server API", false),
-                spin(Js8Api.KEY_UDP_PORT, "UDP Server Port:", 2242, 0.0, 65535.0),
+                spin(Js8Api.KEY_UDP_PORT, "UDP Server Port:", 2242, 0.0, 65534.0),
                 check(Js8Api.KEY_UDP_ACCEPT, "Accept UDP Requests", false),
                 text(Js8Api.KEY_TCP_SERVER, "TCP Server Hostname:", "127.0.0.1"),
                 check(Js8Api.KEY_TCP_ENABLED, "Enable TCP Server API", false),

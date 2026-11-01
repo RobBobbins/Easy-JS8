@@ -209,19 +209,21 @@ jlong open_rig_with_path(int rig_model,
   log_info("rig_pathname=%s", path.c_str());
 
   const int normalized_baud = baud_rate > 0 ? baud_rate : 9600;
-  const int normalized_data_bits = (data_bits == 7 || data_bits == 8) ? data_bits : 8;
-  const int normalized_stop_bits = stop_bits == 2 ? 2 : 1;
   const std::string normalized_parity = normalize_parity_value(parity_value);
 
   set_rig_conf_if_supported(
       rig, {"serial_speed", "serial_rate"}, std::to_string(normalized_baud), false,
       "rig_set_conf(serial speed) failed: ");
-  set_rig_conf_if_supported(
-      rig, {"data_bits", "serial_data_bits"}, std::to_string(normalized_data_bits), false,
-      "rig_set_conf(data bits) failed: ");
-  set_rig_conf_if_supported(
-      rig, {"stop_bits", "serial_stop_bits"}, std::to_string(normalized_stop_bits), false,
-      "rig_set_conf(stop bits) failed: ");
+  if (data_bits == 7 || data_bits == 8) {
+    set_rig_conf_if_supported(
+        rig, {"data_bits", "serial_data_bits"}, std::to_string(data_bits), false,
+        "rig_set_conf(data bits) failed: ");
+  }
+  if (stop_bits == 1 || stop_bits == 2) {
+    set_rig_conf_if_supported(
+        rig, {"stop_bits", "serial_stop_bits"}, std::to_string(stop_bits), false,
+        "rig_set_conf(stop bits) failed: ");
+  }
   set_rig_conf_if_supported(
       rig, {"serial_parity", "parity"}, normalized_parity, false,
       "rig_set_conf(parity) failed: ");
@@ -243,8 +245,8 @@ jlong open_rig_with_path(int rig_model,
 
   log_info("serial params requested: baud=%d data=%d stop=%d parity=%s",
            normalized_baud,
-           normalized_data_bits,
-           normalized_stop_bits,
+           data_bits,
+           stop_bits,
            normalized_parity.c_str());
 
   log_info("rig_open starting");

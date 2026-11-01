@@ -9,7 +9,7 @@ import kotlin.math.roundToInt
 
 /** Message Inbox list (PC MessagePanel): columns and rows, shared by the main window and the Message Inbox screen. */
 object Js8Inbox {
-    private val date = SimpleDateFormat("yyyy-MM-dd HH:mm", Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC") }
+    private val date = SimpleDateFormat("EEE MMM d HH:mm:ss yyyy", Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC") }
 
     fun setColumns(table: Js8TableView) = table.setColumns("inbox", listOf(
         Js8TableView.Column("flag", "⚑", 24),
@@ -32,7 +32,7 @@ object Js8Inbox {
 
     fun isHeld(m: MessageEntity) = m.direction == MessageEntity.DIRECTION_HELD
 
-    fun rows(messages: List<MessageEntity>, myCall: String) = messages.map { m ->
+    fun rows(messages: List<MessageEntity>, myCall: String) = messages.sortedByDescending { it.timestamp }.map { m ->
         Js8TableView.Row(
             id = m.id.toString(),
             values = mapOf(
@@ -40,7 +40,7 @@ object Js8Inbox {
                 "id" to m.id.toString(),
                 "date" to date.format(Date(m.timestamp)),
                 "freq" to (m.frequency?.let { "${it.roundToInt()} Hz" } ?: ""),
-                "from" to from(m),
+                "from" to from(m).split('>').reversed().joinToString(" via "),
                 "to" to if (isHeld(m) || m.conversationId.startsWith("@")) m.conversationId else myCall,
                 "message" to m.text
             ),

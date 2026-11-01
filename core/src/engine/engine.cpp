@@ -62,9 +62,9 @@ public:
     decode_state_.samples.resize(kJs8NtMax * kJs8RxSampleRate);
 
     // Initialize decoder parameters with sensible defaults
-    decode_state_.params.nfa = 200;   // Start frequency (Hz) - avoid low-freq noise
-    decode_state_.params.nfb = 2500;  // End frequency (Hz) - typical JS8Call range
-    decode_state_.params.nfqso = 1500; // Center frequency for QSO
+    decode_state_.params.nfa = decode_low_hz_.load();
+    decode_state_.params.nfb = decode_high_hz_.load();
+    decode_state_.params.nfqso = decode_offset_hz_.load();
 
     // Align the ring buffer position to wall clock so decode windows line up with
     // the desktop timing (cycles relative to UTC within the current minute).
@@ -411,6 +411,11 @@ public:
   void set_sync_stats(bool enabled) override { sync_stats_.store(enabled); }
 
   void set_auto_sync(bool enabled) override { auto_sync_.store(enabled); }
+  void set_decode_range(int low_hz, int high_hz, int offset_hz) override {
+    decode_low_hz_.store(low_hz);
+    decode_high_hz_.store(high_hz);
+    decode_offset_hz_.store(offset_hz);
+  }
 
   void set_time_drift_ms(std::int64_t drift_ms) override {
     if (time_drift_ms_.exchange(drift_ms) == drift_ms) return;
@@ -589,6 +594,9 @@ public:
       decode_state_.params.utc = utc_tm.tm_hour * 10000 + utc_tm.tm_min * 100 + utc_tm.tm_sec;
       decode_state_.params.newdat = true;
       decode_state_.params.syncStats = sync_stats_.load();
+      decode_state_.params.nfa = decode_low_hz_.load();
+      decode_state_.params.nfb = decode_high_hz_.load();
+      decode_state_.params.nfqso = decode_offset_hz_.load();
     }
 
     // Port of isDecodeReady() from mainwindow.cpp
@@ -1158,6 +1166,9 @@ public:
     bool decode_stop_{false};
     std::atomic<bool> sync_stats_{false};
     std::atomic<bool> auto_sync_{false};
+    std::atomic<int> decode_low_hz_{500};
+    std::atomic<int> decode_high_hz_{2500};
+    std::atomic<int> decode_offset_hz_{1500};
 
     std::thread spectrum_thread_;
     std::mutex spectrum_mutex_;

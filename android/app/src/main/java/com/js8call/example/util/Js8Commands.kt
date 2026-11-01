@@ -105,6 +105,10 @@ object Js8Commands {
     fun isBuffered(command: String): Boolean =
         COMMANDS[command.uppercase()]?.let { BUFFERED.contains(it) } == true
 
+    /** PC isCommandChecksumed: 16, or 0 for none. */
+    fun checksumBits(command: String): Int =
+        COMMANDS[command.uppercase()]?.let { CHECKSUMMED[it] } ?: 0
+
     fun isChecksummed(command: String): Boolean =
         COMMANDS[command.uppercase()]?.let { CHECKSUMMED.containsKey(it) } == true
 }

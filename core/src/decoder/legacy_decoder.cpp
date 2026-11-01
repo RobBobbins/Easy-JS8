@@ -3,6 +3,7 @@
 #include <algorithm>
 #include <array>
 #include <cassert>
+#include <chrono>
 #include <cmath>
 #include <complex>
 #include <cstddef>
@@ -38,6 +39,10 @@
 #include <vendor/Eigen/Dense>
 
 #include "commons.h"
+#include "FrequencyTracker.h"
+#include "ldpc_feedback.h"
+#include "soft_combiner.h"
+#include "whitening_processor.h"
 #include "js8core/protocol/costas.hpp"
 #include "js8core/protocol/constants.hpp"
 
@@ -1128,6 +1133,12 @@ namespace
         std::array<std::array<float, Mode::NHSYM>, Mode::NSPS>                        s{};
         std::array<float, Mode::NSPS>                                                 savg{};
         FFTWPlanManager                                                               plans;
+        js8::SoftCombiner<N>                                                          m_softCombiner;
+        bool                                                                          m_enableFreqTracking   = true;
+        bool                                                                          m_enableTimingTracking = true;
+        float                                                                         m_llrErasureThreshold  = js8::llrErasureThreshold();
+        bool                                                                          m_enableLdpcFeedback   = js8::ldpcFeedbackEnabled();
+        int                                                                           m_maxLdpcPasses        = js8::ldpcFeedbackMaxPasses();
         SyncIndex                                                                     sync;
 
         using Plan = FFTWPlanManager::Type;
@@ -1291,47 +1302,162 @@ namespace
             }
 #endif
 
-            for (int k = 0; k < NN; ++k)
-            {
+            js8::FrequencyTracker freqTracker;
+            if (m_enableFreqTracking) {
+                freqTracker.reset(0.0, FS2);
+            } else {
+                freqTracker.disable();
+            }
+
+            // Scale timing clamp relative to samples per symbol so short-symbol
+            // modes aren't allowed outsized shifts (e.g., 12-sample JS8 40 formerly "Turbo").
+            double const timingMaxShift =
+                std::clamp(0.08 * static_cast<double>(Mode::NDOWNSPS), 0.5, 2.0);
+
+            js8::TimingTracker timingTracker;
+            if (m_enableTimingTracking) {
+                timingTracker.reset(0.0, 0.15, 0.35, timingMaxShift);
+            } else {
+                timingTracker.disable();
+            }
+
+            auto const estimateResidualHz =
+                [&](int expectedTone) -> std::optional<float> {
+                if (!freqTracker.enabled())
+                    return std::nullopt;
+
+                if (expectedTone < 0 || expectedTone + 1 >= Mode::NDOWNSPS)
+                    return std::nullopt;
+
+                float const m0 = std::norm(csymb[expectedTone]);
+                float const mplus = std::norm(csymb[expectedTone + 1]);
+                float const mminus =
+                    expectedTone > 0 ? std::norm(csymb[expectedTone - 1]) : 0.0f;
+
+                if (m0 <= 0.0f)
+                    return std::nullopt;
+
+                float const ratio = m0 / (mplus + mminus + 1e-12f);
+                if (ratio < 1.5f)
+                    return std::nullopt;
+
+                float const denom = mminus - 2.0f * m0 + mplus;
+                if (std::abs(denom) < 1e-9f)
+                    return std::nullopt;
+
+                float delta = 0.5f * (mminus - mplus) / denom;
+                delta = std::clamp(delta, -0.5f, 0.5f);
+
+                return delta * (FS2 / Mode::NDOWNSPS);
+            };
+
+            auto const goertzelEnergy =
+                [&](int start, int expectedTone) -> std::optional<float> {
+                if (start < 0 || start + Mode::NDOWNSPS > NP2)
+                    return std::nullopt;
+
+                std::array<std::complex<float>, Mode::NDOWNSPS> tmp;
+                std::copy(cd0.begin() + start, cd0.begin() + start + Mode::NDOWNSPS,
+                          tmp.begin());
+
+                if (freqTracker.enabled()) {
+                    freqTracker.apply(tmp.data(), Mode::NDOWNSPS);
+                }
+
+                auto const wstep = std::polar(
+                    1.0f, static_cast<float>(-TAU * expectedTone / Mode::NDOWNSPS));
+                auto phase = std::complex<float>{1.0f, 0.0f};
+                std::complex<float> acc{0.0f, 0.0f};
+
+                for (auto const &sample : tmp) {
+                    acc += sample * std::conj(phase);
+                    phase *= wstep;
+                }
+
+                return std::norm(acc);
+            };
+
+            for (int k = 0; k < NN; ++k) {
                 // Calculate the starting index for the current symbol.
 
-                int const i1 = ibest + k * Mode::NDOWNSPS;
+                int const i1Base = ibest + k * Mode::NDOWNSPS;
+                int const timingShift = timingTracker.enabled()
+                                            ? static_cast<int>(std::round(
+                                                  timingTracker.currentSamples()))
+                                            : 0;
+                int i1 = i1Base + timingShift;
+
+                if (i1 < 0) {
+                    i1 = 0;
+                } else if (i1 + Mode::NDOWNSPS > NP2) {
+                    i1 = NP2 - Mode::NDOWNSPS;
+                }
 
                 csymb.fill(ZERO);
 
-                if (i1 >= 0 && i1 + Mode::NDOWNSPS <= NP2)
-                {
-                    std::copy(cd0.begin() + i1,
-                              cd0.begin() + i1 + Mode::NDOWNSPS,
+                if (i1 >= 0 && i1 + Mode::NDOWNSPS <= NP2) {
+                    std::copy(cd0.begin() + i1, cd0.begin() + i1 + Mode::NDOWNSPS,
                               csymb.begin());
+
+                    if (freqTracker.enabled()) {
+                        freqTracker.apply(csymb.data(), Mode::NDOWNSPS);
+                    }
                 }
-#ifdef __ANDROID__
-                else if (ibest_log_count <= 3 && k < 3) {
-                    __android_log_print(ANDROID_LOG_INFO, "JS8Decoder",
-                        "Symbol %d SKIPPED: i1=%d out of range [0, %d]", k, i1, NP2 - Mode::NDOWNSPS);
-                }
-#endif
 
                 fftwf_execute(plans[Plan::CS]);
 
                 // Normalize and take the magnitude of the first 8 points.
 
-                for (int i = 0; i < NROWS; ++i)
-                {
+                for (int i = 0; i < NROWS; ++i) {
                     s2[i][k] = std::abs(csymb[i]) / 1000.0f;
                 }
 
-#ifdef __ANDROID__
-                // Log first few symbols to verify tone discrimination
-                static int symbol_log_count = 0;
-                if (symbol_log_count < 3 && k < 5) {
-                    __android_log_print(ANDROID_LOG_INFO, "JS8Decoder",
-                        "Symbol %d powers (bins 0-7): %.2e %.2e %.2e %.2e %.2e %.2e %.2e %.2e",
-                        k, s2[0][k], s2[1][k], s2[2][k], s2[3][k],
-                        s2[4][k], s2[5][k], s2[6][k], s2[7][k]);
-                    if (k == 4) symbol_log_count++;
+                if (freqTracker.enabled() || timingTracker.enabled()) {
+                    bool const isPilot =
+                        (k < 7) || (k >= 36 && k < 43) || (k >= 72 && k < 79);
+
+                    if (isPilot) {
+                        int costasBlock = 0;
+                        int costasColumn = k;
+
+                        if (k >= 36 && k < 43) {
+                            costasBlock = 1;
+                            costasColumn = k - 36;
+                        } else if (k >= 72 && k < 79) {
+                            costasBlock = 2;
+                            costasColumn = k - 72;
+                        }
+
+                        int const expectedTone = Costas[costasBlock][costasColumn];
+
+                        if (auto const residual =
+                                estimateResidualHz(expectedTone)) {
+                            freqTracker.update(*residual);
+                        }
+
+                        if (timingTracker.enabled()) {
+                            auto const e0 = goertzelEnergy(i1, expectedTone);
+                            auto const eEarly =
+                                goertzelEnergy(i1 - 1, expectedTone);
+                            auto const eLate = goertzelEnergy(i1 + 1, expectedTone);
+
+                            float const toneMag = s2[expectedTone][k];
+
+                            if (e0 && eEarly && eLate && toneMag > 1e-6f) {
+                                float const denom = *e0 + 1e-6f;
+                                float const grad = (*eLate - *eEarly) / denom;
+
+                                // Smaller steps; favor stability.
+                                double const weight = std::clamp(
+                                    static_cast<double>(toneMag / 5.0f), 0.0, 1.0);
+                                double const errorSamples = std::clamp(
+                                    0.25 * static_cast<double>(grad), -1.0, 1.0);
+
+                                timingTracker.update(errorSamples, weight);
+                            }
+                        }
+                    }
                 }
-#endif
             }
 
             // Sync quality check using Costas tone patterns.
@@ -1389,85 +1515,74 @@ namespace
                 std::copy(s2[row].begin() + 43, s2[row].begin() + 72, s1[row].begin() + 29);
             }
 
-            // Temporary variables for metrics
+            // Identify winning tones (max magnitude) for each data symbol.
+            std::array<int, ND> symbolWinners = {};
 
-            std::array<float, 3 * ND> llr0 = {};
-            std::array<float, 3 * ND> llr1 = {};
+            for (int j = 0; j < ND; ++j) {
+                int winner = 0;
+                float best = s1[0][j];
 
-            // Compute metrics for each row in `s1`
-
-            for (int j = 0; j < ND; ++j)
-            {
-                int const i1 = 3 * j;     // First column (matches Fortran's i1)
-                int const i2 = 3 * j + 1; // Second column (matches Fortran's i2)
-                int const i4 = 3 * j + 2; // Third column (matches Fortran's i4)
-
-                std::array<float, NROWS> ps;
-
-                for (int i = 0; i < NROWS; ++i) ps[i] = s1[i][j];
-
-                // Assign to `bmeta` in column order, with correct values
-                llr0[i1] = std::max({ps[4], ps[5], ps[6], ps[7]}) - std::max({ps[0], ps[1], ps[2], ps[3]}); // r4
-                llr0[i2] = std::max({ps[2], ps[3], ps[6], ps[7]}) - std::max({ps[0], ps[1], ps[4], ps[5]}); // r2
-                llr0[i4] = std::max({ps[1], ps[3], ps[5], ps[7]}) - std::max({ps[0], ps[2], ps[4], ps[6]}); // r1
-
-                for (auto & x : ps) x = std::log(x + 1e-32f);
-
-                // Assign to `bmetb` in column order, with correct values
-                llr1[i1] = std::max({ps[4], ps[5], ps[6], ps[7]}) - std::max({ps[0], ps[1], ps[2], ps[3]}); // r4
-                llr1[i2] = std::max({ps[2], ps[3], ps[6], ps[7]}) - std::max({ps[0], ps[1], ps[4], ps[5]}); // r2
-                llr1[i4] = std::max({ps[1], ps[3], ps[5], ps[7]}) - std::max({ps[0], ps[2], ps[4], ps[6]}); // r1
-            }
-
-            auto const normalizeLLR = [](auto & llr)
-            {
-                float sum            = 0.0f;
-                float sum_of_squares = 0.0f;
-
-                for (auto const value : llr)
-                {
-                    sum            += value;
-                    sum_of_squares += value * value;
+                for (int i = 1; i < NROWS; ++i) {
+                    if (s1[i][j] > best) {
+                        best = s1[i][j];
+                        winner = i;
+                    }
                 }
 
-                float const llrav    = sum            / llr.size();
-                float const llr2av   = sum_of_squares / llr.size();
-                float const variance = llr2av - llrav * llrav;
-                float const llrsig   = std::sqrt(variance > 0.0f ? variance : llr2av);
+                symbolWinners[j] = winner;
+            }
 
-                for (float & val : llr) val = (val / llrsig) * 2.83f;
-            };
+            auto const whitening = js8::WhiteningProcessor<NROWS, ND, N>::process(
+                s1, symbolWinners, m_llrErasureThreshold, false);
 
-            // Normalize and process metrics
+            auto llr0 = whitening.llr0;
+            auto llr1 = whitening.llr1;
 
-            normalizeLLR(llr0);
-            normalizeLLR(llr1);
+            // Only apply a second erasure threshold pass if whitening didn't
+            // already zero low-magnitude LLRs using the configured threshold.
+
+            if (!whitening.erasureApplied && m_llrErasureThreshold > 0.0f)
+            {
+                auto const applyErasureThreshold = [this](auto & llr)
+                {
+                    for (auto & value : llr)
+                    {
+                        if (std::abs(value) < m_llrErasureThreshold) value = 0.0f;
+                    }
+                };
+
+                applyErasureThreshold(llr0);
+                applyErasureThreshold(llr1);
+            }
+
+            auto const ttl = std::chrono::seconds{Mode::NTXDUR * 2};
+
+            m_softCombiner.flush(ttl);
+
+            auto const key      = m_softCombiner.makeKey(Mode::NSUBMODE, f1, xdt, llr0, llr1);
+            auto       combined = m_softCombiner.combine(key, llr0, llr1, ttl);
+
+            auto llr0Combined = combined.llr0;
+            auto llr1Combined = combined.llr1;
 
             std::array<int8_t, K> decoded;
             std::array<int8_t, N> cw;
 
-            // Loop over decoding passes
-            for (int ipass = 1; ipass <= 4; ++ipass)
+            int totalLdpcPasses = 0;
+
+            auto const tryDecode = [&](std::array<float, N> const & llrInput,
+                                       int                  const   ipass) -> std::optional<Decode>
             {
-                // LLR 0 used on passes 1, 3, and 4; LLR 1 used on pass 2.
-
-                auto const & llr = ipass == 2 ? llr1 : llr0;
-
-                // Zero the first 24 bytes of LLR 0 on the third pass;
-                // the first 48 bytes of LLR 0 on the fourth pass;
-
-                if      (ipass == 3) std::fill(llr0.begin(),      llr0.begin() + 24, 0.0f);
-                else if (ipass == 4) std::fill(llr0.begin() + 24, llr0.begin() + 48, 0.0f);
-
                 // Decode using belief propagation.
 
-                nharderrors = bpdecode174(llr, decoded, cw);
+                nharderrors = bpdecode174(llrInput, decoded, cw);
                 xsnr        = -99.0f;
 
                 // Check for all-zero codeword
+
                 if (std::all_of(cw.begin(), cw.end(), [](int x) { return x == 0; }))
                 {
-                    continue;
+                    return std::nullopt;
                 }
 
                 if (nharderrors >= 0    && nharderrors < 60  &&
@@ -1521,12 +1636,54 @@ namespace
                                 1.259e-10f)) - 32.0f,
                            -60.0f);  // XXX was -28.0f in Fortran
 
+                        m_softCombiner.markDecoded(combined.key);
+
                         return std::make_optional<Decode>(i3bit, message);
                    }
                 }
                 else
                 {
                     nharderrors = -1;
+                }
+
+                return std::nullopt;
+            };
+
+            // Loop over decoding passes
+
+            for (int ipass = 1; ipass <= 4 && totalLdpcPasses < m_maxLdpcPasses; ++ipass)
+            {
+                // LLR 0 used on passes 1, 3, and 4; LLR 1 used on pass 2.
+
+                auto & llr = ipass == 2 ? llr1Combined : llr0Combined;
+
+                // Zero the first 24 bytes of LLR 0 on the third pass;
+                // the first 48 bytes of LLR 0 on the fourth pass;
+
+                if      (ipass == 3) std::fill(llr0Combined.begin(),      llr0Combined.begin() + 24, 0.0f);
+                else if (ipass == 4) std::fill(llr0Combined.begin() + 24, llr0Combined.begin() + 48, 0.0f);
+
+                std::array<float, N> llrPrimary = llr;
+
+                if (auto result = tryDecode(llrPrimary, ipass)) return result;
+
+                ++totalLdpcPasses;
+
+                // Feedback refinement and second attempt, if enabled and budget
+                // allows.
+
+                if (m_enableLdpcFeedback && totalLdpcPasses < m_maxLdpcPasses)
+                {
+                    std::array<float, N> llrRefined;
+                    int                  confident = 0;
+                    int                  uncertain = 0;
+
+                    js8::refineLlrsWithLdpcFeedback(llrPrimary, cw, m_llrErasureThreshold,
+                                                    llrRefined, confident, uncertain);
+
+                    if (auto result = tryDecode(llrRefined, ipass)) return result;
+
+                    ++totalLdpcPasses;
                 }
             }
 

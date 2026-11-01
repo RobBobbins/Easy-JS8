@@ -93,8 +93,8 @@ object Js8Configurations {
             if (name != cur) sub.add(0, base + 1, 1, "Switch To").setOnMenuItemClickListener { switchTo(f, name); true }
             sub.add(0, base + 2, 2, "Clone").setOnMenuItemClickListener { clone(f, name); true }
             if (names(c).size > 1) sub.add(0, base + 6, 2, "Clone Into ...").setOnMenuItemClickListener { cloneInto(f, name); true }
-            sub.add(0, base + 3, 3, "Rename ...").setOnMenuItemClickListener { rename(f, name); true }
-            sub.add(0, base + 4, 4, "Reset").setOnMenuItemClickListener { reset(f, name); true }
+            sub.add(0, base + 3, 4, "Rename ...").setOnMenuItemClickListener { rename(f, name); true }
+            sub.add(0, base + 4, 3, "Reset").setOnMenuItemClickListener { reset(f, name); true }
             if (name != cur) sub.add(0, base + 5, 5, "Delete").setOnMenuItemClickListener { delete(f, name); true }
         }
         popup.show()
@@ -126,35 +126,39 @@ object Js8Configurations {
         dialog.show()
     }
 
-    private fun clone(f: Fragment, name: String) = askName(f, "New Configuration Name", "Clone of $name") { new ->
+    /** PC MultiSettings clone_configuration: "<name> - Copy", no question. */
+    private fun clone(f: Fragment, name: String) {
         val c = f.requireContext()
         if (name == current(c)) saveCurrent(c)
         val source = file(c, name)
+        var new = "$name - Copy"
+        var n = 1
+        while (new in names(c)) new = "$name - Copy (${n++})"
         file(c, new).writeText(if (source.exists()) source.readText() else "{}")
     }
 
-    /** PC clone_into_configuration: the target takes this configuration's settings. */
+    /** PC clone_into_configuration: this configuration takes the settings of the one picked. */
     private fun cloneInto(f: Fragment, name: String) {
         val c = f.requireContext()
-        val targets = names(c).filter { it != name }
-        AlertDialog.Builder(c).setTitle("Clone Into Configuration")
-            .setItems(targets.toTypedArray()) { _, which ->
-                val target = targets[which]
+        val sources = names(c).filter { it != name }
+        AlertDialog.Builder(c).setTitle("Configuration to Clone From")
+            .setItems(sources.toTypedArray()) { _, which ->
+                val source = sources[which]
                 AlertDialog.Builder(c).setTitle("Clone Into Configuration")
-                    .setMessage("Confirm overwrite of all values for configuration \"$target\" with values from \"$name\"?")
+                    .setMessage("Confirm overwrite of all values for configuration \"$name\" with values from \"$source\"?")
                     .setPositiveButton("Yes") { _, _ ->
-                        if (name == current(c)) saveCurrent(c)
-                        val source = file(c, name)
-                        file(c, target).writeText(if (source.exists()) source.readText() else "{}")
-                        if (target == current(c)) {
-                            load(c, target)
+                        if (source == current(c)) saveCurrent(c)
+                        val from = file(c, source)
+                        file(c, name).writeText(if (from.exists()) from.readText() else "{}")
+                        if (name == current(c)) {
+                            load(c, name)
                             restart(f)
                         }
                     }.setNegativeButton("No", null).show()
             }.show()
     }
 
-    private fun rename(f: Fragment, name: String) = askName(f, "Rename Configuration", name) { new ->
+    private fun rename(f: Fragment, name: String) = askName(f, "New Configuration Name", name) { new ->
         val c = f.requireContext()
         if (name == current(c)) {
             saveCurrent(c)

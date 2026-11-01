@@ -30,7 +30,8 @@ class Js8Activity {
         val submode: Int,
         val bits: Int,
         val isDirected: Boolean,
-        val isDataFrame: Boolean
+        val isDataFrame: Boolean,
+        val lowConfidence: Boolean = false
     )
 
     data class CallDetail(
@@ -126,6 +127,14 @@ class Js8Activity {
         }
 
         /** JS8::Submode::bandwidth: 8 tones x 12000 / samples per symbol (JS8Submode.cpp). */
+        /** JS8::Submode::rxThreshold. */
+        fun rxThresholdHz(submode: Int) = when (submode) {
+            SUBMODE_FAST -> 16
+            SUBMODE_TURBO -> 32
+            SUBMODE_ULTRA -> 50
+            else -> 10
+        }
+
         fun bandwidthHz(submode: Int) = when (submode) {
             SUBMODE_FAST -> 80f
             SUBMODE_TURBO -> 160f
@@ -263,7 +272,7 @@ class Js8Activity {
             }
         }
         val list = bandActivity.getOrPut(offset) { mutableListOf() }
-        list += ActivityDetail(offset, text, m.snr, now, m.dt, m.mode, m.type, directed != null, m.isDataFrame())
+        list += ActivityDetail(offset, text, m.snr, now, m.dt, m.mode, m.type, directed != null, m.isDataFrame(), m.quality < 0.17f)
         while (list.size > 10) list.removeAt(0)
 
         // Heartbeat / CQ (compound frames): call activity only
@@ -307,7 +316,7 @@ class Js8Activity {
 
         // Message Window: frames near my offset, or continuing a message to me / my group
         if (isHeartbeat || text.contains("<....>")) return true
-        val buffered = bufferedToMe.keys.firstOrNull { abs(it - offset) <= range && now - (bufferedToMe[it] ?: 0) < 5 * 60_000 }
+        val buffered = bufferedToMe.keys.firstOrNull { abs(it - offset) <= range && now - (bufferedToMe[it] ?: 0) < 90_000 }
         val near = abs(offset - myOffset) <= range
         if (!near && buffered == null) return true
         val sender = text.substringBefore(':', "").trim()
@@ -439,6 +448,7 @@ class Js8Activity {
         items.forEachIndexed { i, item ->
             if (!show[i]) return@forEachIndexed
             var t = item.text
+            if (item.lowConfidence) t = "[$t]" // DecodedText::isLowConfidence
             if ((item.bits and 2) != 0) t = t.trimEnd() + " " + eot + " "
             if (prev != null && !prev!!.isDataFrame && sb.isNotEmpty() && !sb.last().isWhitespace() && t.isNotEmpty() && !t.first().isWhitespace()) sb.append(' ')
             sb.append(t)

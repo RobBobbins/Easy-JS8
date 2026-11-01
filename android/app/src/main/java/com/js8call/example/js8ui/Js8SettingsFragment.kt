@@ -381,7 +381,23 @@ class Js8SettingsFragment : Fragment() {
             (callsign.isNotEmpty() || !swl) && (!Js8Callsign.isValid(callsign) || callsign.startsWith("@")) ->
                 "The callsign format you provided is not supported"
             (grid.isNotEmpty() || !swl) && !Js8Grid.isValid(grid) -> "The grid you provided is not valid"
-            else -> null
+            else -> {
+                fun value(key: String, default: String = "") = (draft.values[key] ?: prefs.getString(key, default)).orEmpty().trim().uppercase(Locale.US)
+                val groups = value("my_groups").split(",").map { it.trim() }.filter { it.isNotEmpty() }
+                val badGroup = groups.firstOrNull { it == "@APRSIS" || it == "@JS8NET" }
+                val notGroup = groups.firstOrNull { !Js8Callsign.isCompound(it) }
+                val cq = value("js8cfg_cq_message", "CQ CQ CQ <MYGRID4>")
+                val badCall = value("js8cfg_auto_whitelist").split(Regex("[,\\s]+")).firstOrNull { it.isNotEmpty() && !Js8Callsign.isValid(it) }
+                when {
+                    value("js8cfg_eot", "♢").isEmpty() -> "Please enter an end of transmission character"
+                    badGroup != null -> "$badGroup is a group that cannot be joined"
+                    notGroup != null -> "$notGroup is not a valid group"
+                    badCall != null -> "$badCall is not a valid callsign to whitelist"
+                    cq.isNotEmpty() && !(cq.startsWith("CQ") || cq.contains(callsign)) ->
+                        "The CQ message format is invalid. It must either start with \"CQ\" or contain your callsign."
+                    else -> null
+                }
+            }
         }
         if (problem != null) {
             AlertDialog.Builder(ctx).setMessage(problem).setPositiveButton(android.R.string.ok, null).show()
@@ -1514,7 +1530,7 @@ class Js8SettingsFragment : Fragment() {
         return col
     }
 
-    /** PC StationDialog "Add Station". The band comes from the frequency, as the PC saves it. */
+    /** PC StationDialog "Add Schedule". The band comes from the frequency, as the PC saves it. */
     private fun insertSchedule(onAdd: (String) -> Unit) {
         val box = column().apply { setPadding(px(16), px(8), px(16), 0) }
         fun field(name: String, type: Int): EditText {
@@ -1523,11 +1539,11 @@ class Js8SettingsFragment : Fragment() {
         }
         val number = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL
         val time = InputType.TYPE_CLASS_DATETIME or InputType.TYPE_DATETIME_VARIATION_TIME
-        val mhz = field("Freq (MHz):", number)
-        val at = field("Switch at (UTC, HH:MM):", time)
-        val until = field("Until (UTC, HH:MM):", time)
+        val mhz = field("Frequency (MHz):", number)
+        val at = field("Switch at (UTC):", time)
+        val until = field("Until (UTC):", time)
         val desc = field("Description:", InputType.TYPE_CLASS_TEXT)
-        val dialog = AlertDialog.Builder(requireContext()).setTitle("Add Station").setView(box)
+        val dialog = AlertDialog.Builder(requireContext()).setTitle("Add Schedule").setView(box)
             .setPositiveButton(android.R.string.ok, null).setNegativeButton(android.R.string.cancel, null).create()
         dialog.setCanceledOnTouchOutside(false)
         dialog.setOnShowListener {
