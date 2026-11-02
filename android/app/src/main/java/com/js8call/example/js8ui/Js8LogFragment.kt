@@ -38,6 +38,10 @@ class Js8LogFragment : Fragment() {
         const val ARG_RPT_SENT = "rpt_sent"
         const val ARG_START_MS = "start_ms"
         const val ARG_FREQ_HZ = "freq_hz"
+        /** PC: text selected in the Message Window. */
+        const val ARG_COMMENTS = "comments"
+        /** PC: the Log QSO window sits beside the Message Window; the phone page shows it here. */
+        const val ARG_MESSAGE_WINDOW = "message_window"
         /** Fragment result after Add to Log: the main window clears its selection (PC clearCallsignSelected). */
         const val RESULT_KEY = "js8_log_accepted"
 
@@ -114,8 +118,54 @@ class Js8LogFragment : Fragment() {
             setPadding(0, ui.px(6), 0, ui.px(6))
         })
 
+        page.addView(messageWindowBox())
+
         return ui.frame("Log QSO", onBack = { leave() }, content = page,
             buttons = listOf("Add to Log" to { addToLog() }, "Cancel" to { leave() }))
+    }
+
+    /** LogQSO::acceptText: a word double-tapped here goes into the field that has the focus, Start and End excepted. */
+    private fun messageWindowBox(): View {
+        val text = android.widget.TextView(requireContext()).apply {
+            setText(arguments?.getString(ARG_MESSAGE_WINDOW).orEmpty())
+            setTextIsSelectable(false)
+            typeface = android.graphics.Typeface.MONOSPACE
+            setPadding(ui.px(4), ui.px(4), ui.px(4), ui.px(4))
+            isVerticalScrollBarEnabled = true
+            movementMethod = android.text.method.ScrollingMovementMethod()
+            maxLines = 8
+            minLines = 8
+            gravity = android.view.Gravity.BOTTOM
+        }
+        val gestures = android.view.GestureDetector(requireContext(), object : android.view.GestureDetector.SimpleOnGestureListener() {
+            override fun onDoubleTap(e: android.view.MotionEvent): Boolean {
+                acceptWord(text.text.toString(), text.getOffsetForPosition(e.x, e.y))
+                return true
+            }
+        })
+        text.setOnTouchListener { v, e ->
+            gestures.onTouchEvent(e)
+            if (e.action == android.view.MotionEvent.ACTION_UP) v.performClick()
+            false
+        }
+        val box = ui.column()
+        box.addView(text)
+        return ui.groupBox("Message Window", box)
+    }
+
+    private fun acceptWord(all: String, at: Int) {
+        var from = at.coerceIn(0, all.length)
+        var to = from
+        while (from > 0 && all[from - 1].isLetterOrDigit() || from > 0 && all[from - 1] == '/') from--
+        while (to < all.length && (all[to].isLetterOrDigit() || all[to] == '/')) to++
+        if (from > 0 && (all[from - 1] == '-' || all[from - 1] == '+')) from-- // PC: keeps a report's sign
+        val word = all.substring(from, to)
+        if (word.isEmpty()) return
+        val focused = view?.findFocus() as? EditText ?: return
+        if (focused === boxes["start"] || focused === boxes["end"]) return
+        val current = focused.text.toString()
+        focused.setText(if (current.isEmpty()) word else "$current $word")
+        focused.setSelection(focused.text.length)
     }
 
     /** initLogQSO: new values unless the same callsign is still waiting to be logged. */
@@ -135,7 +185,7 @@ class Js8LogFragment : Fragment() {
             call = call, op = op, start = utc.format(Date(startMs)), end = utc.format(Date(maxOf(now, startMs))),
             mode = "JS8", band = BandUtils.bandLabelForFrequencyHz(freq), sent = args.getString(ARG_RPT_SENT).orEmpty(),
             rcvd = "", grid = args.getString(ARG_GRID).orEmpty(), name = "",
-            comments = if (retain) p.getString(KEY_COMMENTS, "").orEmpty() else "",
+            comments = args.getString(ARG_COMMENTS) ?: if (retain) p.getString(KEY_COMMENTS, "").orEmpty() else "",
             retain = retain, fields = keys.map { it to "" }.toMutableList(), freqHz = freq
         ).also { draft = it }
     }

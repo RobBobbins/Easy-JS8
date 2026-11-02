@@ -21,7 +21,7 @@ import java.net.URLEncoder
  */
 object Js8Configurations {
 
-    private const val DEFAULT = "Default"
+    const val DEFAULT = "Default"
     private const val META = "js8_configurations"
     private const val KEY_CURRENT = "current"
 
@@ -31,6 +31,8 @@ object Js8Configurations {
     private fun file(c: Context, name: String) = File(folder(c), URLEncoder.encode(name, "UTF-8") + ".json")
 
     private fun current(c: Context) = meta(c).getString(KEY_CURRENT, DEFAULT) ?: DEFAULT
+
+    fun currentName(c: Context) = current(c)
 
     private fun names(c: Context): List<String> {
         val stored = folder(c).listFiles().orEmpty().map { URLDecoder.decode(it.name.removeSuffix(".json"), "UTF-8") }

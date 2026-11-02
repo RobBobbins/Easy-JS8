@@ -92,6 +92,11 @@ class WaterfallView @JvmOverloads constructor(
     }
 
     /** Waterfall Controls > Display: new values; the frequency scale follows via [onDisplayChanged]. */
+    /** Band in the cycle line's text (WideGraph m_band). */
+    fun setBandText(band: String) {
+        renderer?.bandText = band
+    }
+
     fun setDisplay(value: WaterfallRenderer.Display) {
         renderer?.setDisplay(value)
         onDisplayChanged?.invoke()

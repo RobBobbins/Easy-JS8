@@ -25,6 +25,19 @@ object AudioDevices {
         PreferenceManager.getDefaultSharedPreferences(context)
             .getString("rig_type", "none") == "trusdx_serial"
 
+    /** Sound outputs a transmit can go to: USB, wired, line and Bluetooth. Earpiece and telephony are left out. */
+    fun outputs(context: Context): List<Device> {
+        val manager = context.getSystemService(Context.AUDIO_SERVICE) as android.media.AudioManager
+        return manager.getDevices(android.media.AudioManager.GET_DEVICES_OUTPUTS).mapNotNull { d ->
+            val name = when (d.type) {
+                AudioDeviceInfo.TYPE_BUILTIN_SPEAKER -> "Internal Speaker"
+                AudioDeviceInfo.TYPE_WIRED_HEADPHONES -> "Wired Headphones"
+                else -> nameFor(d)
+            }
+            name?.let { Device(d.id, it) }
+        }
+    }
+
     /** The display name for a capture device, or null for types not offered. */
     fun nameFor(device: AudioDeviceInfo): String? = when (device.type) {
         AudioDeviceInfo.TYPE_BUILTIN_MIC -> "Internal Microphone"

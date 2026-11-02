@@ -23,6 +23,11 @@ import kotlinx.coroutines.launch
  */
 class Js8InboxFragment : Fragment() {
 
+    companion object {
+        /** PC MessagePanel::setCall: only that call's messages, title "Messages: CALL". */
+        const val ARG_CALL = "call"
+    }
+
     private val repository by lazy { MessageRepository.getInstance(requireContext()) }
     private var messages: List<MessageEntity> = emptyList()
 
@@ -35,9 +40,11 @@ class Js8InboxFragment : Fragment() {
         val message = view.findViewById<TextView>(R.id.js8_inbox_message)
         val replyText = view.findViewById<EditText>(R.id.js8_inbox_reply_text)
         Js8Inbox.setColumns(table)
+        val call = arguments?.getString(ARG_CALL)
+        if (call != null) view.findViewById<TextView>(R.id.js8_inbox_title).text = "Messages: $call"
         view.findViewById<View>(R.id.js8_inbox_back).setOnClickListener { findNavController().popBackStack() }
         repository.getAllMessages().observe(viewLifecycleOwner) { all ->
-            messages = Js8Inbox.incoming(all)
+            messages = Js8Inbox.incoming(all).filter { call == null || Js8Inbox.isFor(it, call) }
             val my = PreferenceManager.getDefaultSharedPreferences(requireContext())
                 .getString("callsign", "").orEmpty().uppercase()
             table.setRows(Js8Inbox.rows(messages, my))
@@ -49,8 +56,8 @@ class Js8InboxFragment : Fragment() {
             }
         }
         table.onRowLongClick = { row, anchor ->
-            Js8Inbox.showMessageMenu(anchor) {
-                viewLifecycleOwner.lifecycleScope.launch { repository.deleteMessage(row.id.toLong()) }
+            Js8Inbox.showMessageMenu(table, row, anchor) { ids ->
+                viewLifecycleOwner.lifecycleScope.launch { ids.forEach { repository.deleteMessage(it.toLong()) } }
                 message.text = ""
             }
         }

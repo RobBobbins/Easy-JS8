@@ -254,6 +254,8 @@ class DecodeViewModel(application: Application) : AndroidViewModel(application) 
 
         val fromCall = first.substringBefore(' ').trim()
         if (fromCall.isEmpty()) return
+        // PC: the compound frame's grid goes with the call
+        com.js8call.example.js8ui.Js8Activity.compoundGrids[fromCall.uppercase()] = first.substringAfter(' ').trim()
 
         val rewrittenDirected = rewriteDirectedPlaceholder(second, fromCall)
         if (rewrittenDirected != null) {

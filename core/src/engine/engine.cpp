@@ -176,6 +176,14 @@ public:
       auto write_index = (static_cast<std::size_t>(decode_state_.params.kin) + i) % decode_state_.samples.size();
       decode_state_.samples[write_index] = raw[i * buffer.format.channels];
     }
+    {
+      std::lock_guard<std::mutex> lock(debug_mix_mutex_);
+      for (std::size_t i = 0; i < frames && !debug_mix_.empty(); ++i) {
+        auto write_index = (static_cast<std::size_t>(decode_state_.params.kin) + i) % decode_state_.samples.size();
+        decode_state_.samples[write_index] = debug_mix_.front();
+        debug_mix_.pop_front();
+      }
+    }
     if (callbacks_.on_rx_audio && frames > 0) {
       int const ring_size = static_cast<int>(decode_state_.samples.size());
       if (buffer.format.channels == 1) {
@@ -373,6 +381,44 @@ public:
   std::vector<std::pair<std::string, int>> tx_message_frames() override {
     std::lock_guard<std::mutex> lock(tx_mutex_);
     return tx_message_frames_;
+  }
+
+  bool replace_unsent_text(TxMessageRequest const& request, int frames_started) override {
+    auto sm = submode_from_varicode(request.submode);
+    if (!sm) return false;
+
+    protocol::varicode::MessageInfo info;
+    std::vector<std::pair<std::string, int>> frames;
+    if (!request.text.empty()) {
+      frames = protocol::varicode::build_message_frames(
+          request.my_call, request.my_grid, request.selected_call, request.text,
+          false, true, request.submode, &info);
+    }
+    auto costas = protocol::costas(costas_from_varicode(request.submode));
+    std::deque<TxFrame> built;
+    for (auto const& f : frames) {
+      if (f.first.size() < 12) continue;
+      TxFrame tx_frame;
+      tx_frame.bits = f.second & ~1; // PC: only the first frame sent carries the First flag
+      tx_frame.frame = f.first.substr(0, 12);
+      legacy_encode(tx_frame.bits, costas, tx_frame.frame.c_str(), tx_frame.tones.data());
+      built.push_back(std::move(tx_frame));
+    }
+
+    std::lock_guard<std::mutex> lock(tx_mutex_);
+    if (!tx_active_ || tx_settings_.tuning || tx_message_frames_.empty() || tx_frames_started_ != frames_started) return false;
+    tx_queue_.clear();
+    tx_message_frames_.resize(static_cast<std::size_t>(frames_started));
+    for (auto& frame : built) {
+      tx_message_frames_.emplace_back(frame.frame, frame.bits);
+      tx_queue_.push_back(std::move(frame));
+    }
+    return true;
+  }
+
+  void debug_mix_rx(std::int16_t const* samples, std::size_t count) override {
+    std::lock_guard<std::mutex> lock(debug_mix_mutex_);
+    debug_mix_.insert(debug_mix_.end(), samples, samples + count);
   }
 
   int tx_frames_started() override {
@@ -1133,6 +1179,8 @@ public:
     std::int64_t ring_drift_ms_{0};
     bool running_{false};
     std::mutex tx_mutex_;
+    std::mutex debug_mix_mutex_;
+    std::deque<std::int16_t> debug_mix_;
     std::deque<TxFrame> tx_queue_;
     // Parts of the message being sent (frame, bits) and how many reached the modulator
     std::vector<std::pair<std::string, int>> tx_message_frames_;

@@ -17,8 +17,18 @@ class Js8LevelMeterView @JvmOverloads constructor(context: Context, attrs: Attri
     View(context, attrs) {
 
     /** Current level in dB, 0..90. */
-    var levelDb: Float = 0f
-        set(value) { field = value.coerceIn(0f, 90f); invalidate() }
+    private var levelDb = 0f
+    /** PC SignalMeter: the last 10 readings; the highest is the peak hold mark. */
+    private val readings = ArrayDeque<Float>()
+    private var peak = 0f
+
+    fun setLevel(value: Float) {
+        levelDb = value.coerceIn(0f, 90f)
+        readings.addLast(levelDb)
+        if (readings.size > 10) readings.removeFirst()
+        peak = readings.maxOrNull() ?: 0f
+        invalidate()
+    }
 
     private val text = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.WHITE
@@ -27,7 +37,9 @@ class Js8LevelMeterView @JvmOverloads constructor(context: Context, attrs: Attri
         textAlign = Paint.Align.RIGHT
     }
     private val line = Paint().apply { color = Color.WHITE; strokeWidth = dp(1f) }
-    private val bar = Paint().apply { color = ContextCompat.getColor(context, R.color.js8_green) }
+    private val green = ContextCompat.getColor(context, R.color.js8_green)
+    private val bar = Paint()
+    private val peakMark = android.graphics.Path()
 
     override fun onDraw(canvas: Canvas) {
         // Laid out for an 87 dp column; a narrower one (upright, 58 dp) scales the scale, bar and
@@ -45,10 +57,24 @@ class Js8LevelMeterView @JvmOverloads constructor(context: Context, attrs: Attri
             canvas.drawLine(axisX - dp(if (major) 6f else 3f) * s, y, axisX, y, line)
             if (major) canvas.drawText("$db", axisX - dp(8f) * s, y + text.textSize * 0.35f, text)
         }
-        canvas.drawText("0 dB", axisX + dp(18f) * s, height - dp(8f), text)
-        if (levelDb > 0f) {
-            val y = bottom - span * levelDb / 90f
-            canvas.drawRect(axisX + dp(6f) * s, y, axisX + dp(22f) * s, bottom, bar)
+        canvas.drawText("${levelDb.toInt()} dB", axisX + dp(18f) * s, height - dp(8f), text)
+        // PC Meter::paintEvent: red above 85, yellow when the peak is below 15, otherwise green
+        bar.color = when {
+            levelDb > 85f -> Color.RED
+            peak < 15f -> Color.YELLOW
+            else -> green
+        }
+        val left = axisX + dp(6f) * s
+        val right = axisX + dp(22f) * s
+        if (levelDb > 0f) canvas.drawRect(left, bottom - span * levelDb / 90f, right, bottom, bar)
+        if (peak > 0f) {
+            val y = bottom - span * peak / 90f
+            peakMark.reset()
+            peakMark.moveTo(right, y - dp(4f))
+            peakMark.lineTo(right, y + dp(4f))
+            peakMark.lineTo(left, y)
+            peakMark.close()
+            canvas.drawPath(peakMark, line)
         }
     }
 }
@@ -60,6 +86,13 @@ class Js8RulerView @JvmOverloads constructor(context: Context, attrs: AttributeS
     var startHz = 0f
         set(value) { field = value; invalidate() }
     var hzPerPixel = 3000f / 1000f
+        set(value) { field = value; invalidate() }
+    var dialHz = 0L
+        set(value) { field = value; invalidate() }
+    /** Filter band, shaded outside as on the waterfall; null = filter off. */
+    var filterHz: ClosedFloatingPointRange<Float>? = null
+        set(value) { field = value; invalidate() }
+    var filterOpacity = 0
         set(value) { field = value; invalidate() }
     /** Tap: the frequency under the finger (on the PC the scale is part of the waterfall). */
     var onOffsetChanged: ((Float) -> Unit)? = null
@@ -118,7 +151,32 @@ class Js8RulerView @JvmOverloads constructor(context: Context, attrs: AttributeS
             if (isLabel && x - half >= 0f && x + half <= w) canvas.drawText(label, x, h - strip - dp(12f), text)
             hz += tickStep
         }
+        // CPlotter::drawMetrics: orange WSPR mark on 30 m, clamped to the edge it lies beyond
+        if (dialHz in 10_130_000L..10_150_000L) {
+            val from = ((10_140_100L - dialHz) - startHz) / hzPerPixel
+            val x1 = from.coerceIn(0f, w)
+            val x2 = (from + 200f / hzPerPixel).coerceIn(0f, w)
+            canvas.drawRect(x1, h - strip, x2, h, wsprBar)
+            canvas.drawText("WSPR", (x1 + x2) / 2f, h - strip - dp(1f), wsprText)
+        }
+        // CPlotter::paintEvent: the filter pixmaps start at the top of the scale
+        filterHz?.let { f ->
+            filterShade.color = Color.argb((255 * filterOpacity / 100).coerceIn(0, 255), 0, 0, 0)
+            val a = ((f.start - startHz) / hzPerPixel).coerceIn(0f, w)
+            val b = ((f.endInclusive - startHz) / hzPerPixel).coerceIn(0f, w)
+            if (a > 0f) canvas.drawRect(0f, 0f, a, h, filterShade)
+            if (b < w) canvas.drawRect(b, 0f, w, h, filterShade)
+        }
     }
+
+    private val wsprBar = Paint().apply { color = Color.rgb(230, 126, 34) }
+    private val wsprText = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.rgb(230, 126, 34)
+        textSize = resources.getDimension(R.dimen.js8_text)
+        isFakeBoldText = true
+        textAlign = Paint.Align.CENTER
+    }
+    private val filterShade = Paint()
 }
 
 /** Cycle progress bar at the end of the Status Bar: white track, #A5CDFF fill, "n/15" text. */
@@ -160,12 +218,34 @@ class Js8CycleProgressView @JvmOverloads constructor(context: Context, attrs: At
     }
 }
 
+private const val MAX = 450
+
 /** Vertical gain slider right of the Waterfall Controls: green value box on top, blue track, ticks both sides. */
 class Js8GainSliderView @JvmOverloads constructor(context: Context, attrs: AttributeSet? = null) :
     View(context, attrs) {
 
+    /** PC outAttenuation, 0..450 (tenths of a dB). */
     var value = 0
-        set(v) { field = v; invalidate() }
+        set(v) { field = v.coerceIn(0, MAX); invalidate() }
+    var onValueChanged: ((Int) -> Unit)? = null
+
+    private val trackTop get() = dp(30f)
+    private val trackBottom get() = height - dp(10f)
+
+    override fun onTouchEvent(event: android.view.MotionEvent): Boolean {
+        when (event.actionMasked) {
+            android.view.MotionEvent.ACTION_DOWN, android.view.MotionEvent.ACTION_MOVE -> {
+                parent?.requestDisallowInterceptTouchEvent(true)
+                value = ((event.y - trackTop) / (trackBottom - trackTop) * MAX).toInt()
+                onValueChanged?.invoke(value)
+                return true
+            }
+            android.view.MotionEvent.ACTION_UP -> { performClick(); return true }
+        }
+        return super.onTouchEvent(event)
+    }
+
+    override fun performClick(): Boolean = super.performClick()
 
     private val green = Paint().apply { color = ContextCompat.getColor(context, R.color.js8_green) }
     private val blue = Paint().apply { color = ContextCompat.getColor(context, R.color.js8_blue) }
@@ -186,6 +266,8 @@ class Js8GainSliderView @JvmOverloads constructor(context: Context, attrs: Attri
         val top = box + dp(10f)
         val bottom = height - dp(10f)
         canvas.drawRect(cx - dp(3f), top, cx + dp(3f), bottom, blue)
+        val handle = top + (bottom - top) * value / MAX
+        canvas.drawRect(cx - dp(10f), handle - dp(3f), cx + dp(10f), handle + dp(3f), green)
         val n = 9
         for (i in 0..n) {
             val y = top + (bottom - top) * i / n

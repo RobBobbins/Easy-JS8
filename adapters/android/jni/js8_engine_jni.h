@@ -34,6 +34,14 @@ void js8_engine_set_sync_stats(JS8Engine_Native* engine, bool enabled);
 long long js8_engine_get_time_drift_ms(JS8Engine_Native* engine);
 
 // Transmit control
+int js8_engine_replace_unsent_text(JS8Engine_Native* engine,
+                                   const char* text,
+                                   const char* my_call,
+                                   const char* my_grid,
+                                   const char* selected_call,
+                                   int submode,
+                                   int frames_started);
+
 int js8_engine_transmit_message(JS8Engine_Native* engine,
                                 const char* text,
                                 const char* my_call,
@@ -65,6 +73,7 @@ bool js8_engine_tx_first_frame_is_data(JS8Engine_Native* engine);
 void js8_engine_set_ft8_enabled(JS8Engine_Native* engine, bool enabled);
 // Debug builds: decode one 15 s recording with the FT8 monitor.
 void js8_engine_debug_ft8_recording(JS8Engine_Native* engine, const int16_t* samples, size_t frames);
+void js8_engine_debug_mix_rx(JS8Engine_Native* engine, const int16_t* samples, size_t frames);
 void js8_engine_set_tx_ready(JS8Engine_Native* engine, bool ready);
 
 // Status queries

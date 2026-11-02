@@ -24,7 +24,7 @@ object Js8Mailbox {
 
     /** Holds [text] from [from] for [to] (callsign or @GROUP). Returns the message id. */
     suspend fun store(context: Context, to: String, from: String, text: String, relayPath: String?,
-                      snr: Int? = null, offset: Float? = null): Long = withContext(Dispatchers.IO) {
+                      snr: Int? = null, offset: Float? = null, dialHz: Long? = null): Long = withContext(Dispatchers.IO) {
         dao(context).insertMessage(MessageEntity(
             conversationId = to.trim().uppercase(),
             direction = MessageEntity.DIRECTION_HELD,
@@ -35,7 +35,8 @@ object Js8Mailbox {
             frequency = offset,
             status = MessageEntity.STATUS_PENDING,
             isRead = true, // never counts as unread
-            relayPath = relayPath
+            relayPath = relayPath,
+            dialHz = dialHz
         ))
     }
 

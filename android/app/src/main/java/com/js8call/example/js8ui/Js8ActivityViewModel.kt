@@ -51,7 +51,29 @@ class Js8ActivityViewModel(app: Application) : AndroidViewModel(app) {
     /** A message from the Typing Box, kept there (locked) until its last part has gone out. */
     data class TypedTx(val text: String, val onAir: Boolean = false, val charsSent: Int = 0,
                        /** Not typed: a heartbeat or reply put in the empty Typing Box while it is sent. */
-                       val auto: Boolean = false)
+                       val auto: Boolean = false,
+                       /** Parts started so far; the PC can't change the text once the last one started. */
+                       val framesStarted: Int = 0, val onLastFrame: Boolean = false)
+
+    private class BandState(val json: String, val hearing: Map<String, MutableSet<String>>, val heardBy: Map<String, MutableSet<String>>)
+    private val bandCache = mutableMapOf<String, BandState>()
+    private var lastBand = ""
+
+    /** PC cacheActivity / restoreActivity: each band keeps its own lists, Message Window and heard data. */
+    fun bandChanged(band: String) {
+        if (band == lastBand) return
+        if (lastBand.isNotEmpty()) {
+            bandCache[lastBand] = BandState(activity.toJson().toString(), activity.hearing.toMap(), activity.heardBy.toMap())
+            activity.clearBand(); activity.clearCalls(); activity.clearRx()
+            bandCache[band]?.let { saved ->
+                activity.fromJson(org.json.JSONObject(saved.json))
+                activity.hearing.putAll(saved.hearing)
+                activity.heardBy.putAll(saved.heardBy)
+            }
+            changed()
+        }
+        lastBand = band
+    }
 
     /** The Typing Box has nothing in it (kept by Js8MainFragment): only then is an automatic message shown there. */
     var typingBoxEmpty = true
@@ -63,6 +85,11 @@ class Js8ActivityViewModel(app: Application) : AndroidViewModel(app) {
     var typedClearPending = false
 
     private var frameOnAir: String? = null
+    /** PC tx_status_label: the frame going out now. */
+    fun frameOnAirText() = frameOnAir
+    /** PC m_txFrameQueue.count(): parts still to go after this one; -1 = nothing on the air. */
+    var txFramesLeft = -1
+        private set
     /** PC last_tx_label: the last frame that finished going out (stopTx). */
     var lastTx = ""
         private set
@@ -87,13 +114,14 @@ class Js8ActivityViewModel(app: Application) : AndroidViewModel(app) {
                   isData: Boolean = false) {
         frameOnAir?.let { lastTx = it }
         frameOnAir = text
+        txFramesLeft = count - index - 1
         if (fullText.isNotEmpty()) lastMessage = fullText
         activity.writeTxFrame(text, offset, first = index == 0, last = index == count - 1, cfg = cfg(), isData = isData)
         // Every transmission shows in the Typing Box (Rob, 2026-10-21); what you typed is never replaced
         if (_typed.value == null && typingBoxEmpty && fullText.isNotEmpty()) {
             _typed.value = TypedTx(fullText, onAir = true, charsSent = charsSent, auto = true)
         } else {
-            _typed.value?.let { if (it.onAir) _typed.value = it.copy(charsSent = charsSent) }
+            _typed.value?.let { if (it.onAir) _typed.value = it.copy(charsSent = charsSent, framesStarted = index + 1, onLastFrame = index + 1 >= count) }
         }
         changed()
     }
@@ -108,6 +136,7 @@ class Js8ActivityViewModel(app: Application) : AndroidViewModel(app) {
     fun onTxEnded() {
         frameOnAir?.let { lastTx = it }
         frameOnAir = null
+        txFramesLeft = -1
         if (_typed.value?.onAir == true) clearTyped()
         changed()
     }

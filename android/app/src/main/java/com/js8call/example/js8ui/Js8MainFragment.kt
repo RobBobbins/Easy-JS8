@@ -36,6 +36,7 @@ import java.util.Date
 import java.util.Locale
 import java.util.TimeZone
 import kotlin.math.roundToInt
+import kotlin.math.roundToLong
 import androidx.lifecycle.lifecycleScope
 import kotlinx.coroutines.launch
 
@@ -48,9 +49,9 @@ class Js8MainFragment : Fragment() {
 
     companion object {
         // Call Activity press-and-hold menu
-        private const val USER_GUIDE_URL = "https://js8call-improved.github.io/JS8Call-improved/d6/d14/md_docs_2user__guide_2JS8Call__User__Guide.html"
+        const val USER_GUIDE_URL = "https://js8call-improved.github.io/JS8Call-improved/d6/d14/md_docs_2user__guide_2JS8Call__User__Guide.html"
         /** PC on_actionCopyright_Notice_triggered. */
-        private const val COPYRIGHT_NOTICE = "If you make fair use of any part of this program under terms of the GNU " +
+        const val COPYRIGHT_NOTICE = "If you make fair use of any part of this program under terms of the GNU " +
             "General Public License, you must display the following copyright notice prominently in your derivative work:\n\n" +
             "\"The algorithms, source code, look-and-feel of WSJT-X and related programs, and protocol specifications for " +
             "the modes FSK441, FT8, JT4, JT6M, JT9, JT65, JTMS, QRA64, ISCAT, MSK144 are Copyright (C) 2001-2018 by one or " +
@@ -86,6 +87,7 @@ class Js8MainFragment : Fragment() {
         private const val ID_PASTE = 35
 
         const val PREF_LANDSCAPE_LAYOUT = "landscape_layout"
+        private const val KEY_FULLSCREEN = "js8cfg_fullscreen"
         /** Swipe page kept across rotation / returning from the Menu page. */
         private var swipePage = 1
         /** checkStartupWarnings runs once per app start, not on each rotation. */
@@ -181,7 +183,9 @@ class Js8MainFragment : Fragment() {
     private val tick = object : Runnable {
         override fun run() {
             val now = System.currentTimeMillis()
-            clock.text = clockFormat.format(Date(now))
+            // PC updateClockUI: the time drift after the time
+            val drift = monitorVm.status.value?.timeDriftMs ?: 0L
+            clock.text = clockFormat.format(Date(now)) + if (drift == 0L) "" else " (${if (drift > 0) "+" else ""}${drift}ms)"
             progress.seconds = ((now / 1000) % progress.period).toInt()
             if (activityVm.activity.processIdle(now, Js8Activity.Config(prefs()))) activityDirty = true
             // PC updateTimer: lists redrawn at most once a second, when something changed;
@@ -190,6 +194,7 @@ class Js8MainFragment : Fragment() {
             renderHbLabel(now)
             renderNextBeacon(now)
             renderCqLabel(now)
+            renderSendText(now)
             ui.postDelayed(this, 1000 - now % 1000)
         }
     }
@@ -281,6 +286,11 @@ class Js8MainFragment : Fragment() {
             view.findViewById<View?>(R.id.js8_pager) != null -> Js8LineDividers.setUpSwipe(view, prefs())
         }
         setUpTables()
+        renderConfigLabel()
+        view.findViewById<Js8GainSliderView?>(R.id.js8_gain_slider)?.let { s ->
+            s.value = prefs().getString(JS8EngineService.PREF_OUT_ATTENUATION, null)?.toIntOrNull() ?: 0
+            s.onValueChanged = { v -> prefs().edit().putString(JS8EngineService.PREF_OUT_ATTENUATION, v.toString()).apply() }
+        }
         // PC onRigStateChanged when the rig first comes online: RX on unless "Receiver (RX) off at startup",
         // TX on unless "Transmitter (TX) off at startup" (Rob, 2026-10-21: RX was off after every fresh start)
         val firstStart = !startupRxTxDone
@@ -415,6 +425,11 @@ class Js8MainFragment : Fragment() {
         messageWindow.setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX, messageWindowPx * scale("rx_font"))
         typingBox.setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX, typingBoxPx * scale("compose_font"))
         txTextScale = scale("tx_font") / scale("rx_font")
+        // PC font dialog: family and style
+        fun face(key: String) = Js8SettingsFragment.typefaceFor(requireContext(), prefs.getString("js8cfg_ui_${key}_family", null), prefs.getString("js8cfg_ui_${key}_style", null))
+        face("table_font")?.let { bandActivity.setFace(it); callActivity.setFace(it) }
+        face("rx_font")?.let { messageWindow.typeface = it }
+        face("compose_font")?.let { typingBox.typeface = it }
     }
 
     /** Station > UI colors; a color never picked keeps the screen's own. */
@@ -429,6 +444,9 @@ class Js8MainFragment : Fragment() {
 
     override fun onResume() {
         super.onResume()
+        androidx.localbroadcastmanager.content.LocalBroadcastManager.getInstance(requireContext())
+            .registerReceiver(rigErrorReceiver, android.content.IntentFilter(JS8EngineService.ACTION_RIG_ERROR))
+        showRigError()
         val prefs = PreferenceManager.getDefaultSharedPreferences(requireContext())
         callsign.text = prefs.getString("callsign", "").orEmpty().ifBlank { "NOCALL" }
         statusAutoReply.text = if (prefs.getBoolean("autoreply_enabled", false)) "Auto Reply: On" else "Auto Reply: Off"
@@ -436,6 +454,8 @@ class Js8MainFragment : Fragment() {
         renderFrequency()
         renderSpeed()
         renderTransmitEnabled() // Station > SWL (Listening only) may have changed
+        splitters?.refresh()
+        applyPanels()
         // Offset from Settings (or saved last time)
         val savedOffset = prefs.getString(Js8SettingsSchema.TX_OFFSET_KEY, null)?.toFloatOrNull()
         if (savedOffset != null && savedOffset != monitorVm.getTxOffset()) {
@@ -446,10 +466,42 @@ class Js8MainFragment : Fragment() {
         renderOffsetBox()
         applyUiFonts(prefs)
         applyUiColors(prefs)
+        renderConfigLabel()
+        applyFullscreen()
         ui.post(tick)
     }
 
+    private val rigErrorReceiver = object : android.content.BroadcastReceiver() {
+        override fun onReceive(context: android.content.Context, intent: Intent) = showRigError()
+    }
+
+    /** PC m_rigErrorMessageBox: Retry, Configurations..., OK (Settings, radio page), Cancel (closes the program). */
+    private fun showRigError() {
+        val reason = JS8EngineService.pendingRigError ?: return
+        JS8EngineService.pendingRigError = null
+        val context = requireContext()
+        val pad = (16 * resources.displayMetrics.density).toInt()
+        val config = android.widget.Button(context).apply { text = "Configurations..."; isAllCaps = false }
+        val box = android.widget.FrameLayout(context).apply { setPadding(pad, 0, pad, 0); addView(config) }
+        val dialog = android.app.AlertDialog.Builder(context).setTitle("Rig Control Error")
+            .setMessage("$reason\n\nDo you want to reconfigure the radio interface?")
+            .setView(box)
+            .setPositiveButton("OK") { _, _ -> openStation("Radio") }
+            .setNeutralButton("Retry") { _, _ ->
+                context.startService(Intent(context, JS8EngineService::class.java).setAction(JS8EngineService.ACTION_RIG_RETRY))
+            }
+            .setNegativeButton("Cancel") { _, _ ->
+                context.stopService(Intent(context, JS8EngineService::class.java))
+                requireActivity().finishAndRemoveTask()
+            }
+            .create()
+        config.setOnClickListener { dialog.dismiss(); Js8Configurations.showMenu(this, popupMenu(view?.findViewById(R.id.js8_menubar_configurations) ?: requireView())) }
+        dialog.setCanceledOnTouchOutside(false)
+        dialog.show()
+    }
+
     override fun onPause() {
+        androidx.localbroadcastmanager.content.LocalBroadcastManager.getInstance(requireContext()).unregisterReceiver(rigErrorReceiver)
         ui.removeCallbacks(tick)
         ui.removeCallbacks(textStats)
         super.onPause()
@@ -512,20 +564,20 @@ class Js8MainFragment : Fragment() {
             Js8TableView.Column("timestamp", "Age", 36, numeric = true, menuLabel = "Last heard timestamp"),
             Js8TableView.Column("snr", "SNR", 36, defaultVisible = !upright, numeric = true),
             Js8TableView.Column("tdrift", "Time Delta", 70, defaultVisible = false, numeric = true),
-            Js8TableView.Column("submode", "Mode Speed", 76, defaultVisible = false),
+            Js8TableView.Column("submode", "Speed", 76, defaultVisible = false, menuLabel = "Mode Speed"),
             Js8TableView.Column("message", "Message(s)", 300, stretch = true)
         ))
         callActivity.setColumns("call", listOf(
-            Js8TableView.Column("icon", "", 22, menuLabel = "Message / ACK / CQ icon"),
+            Js8TableView.Column("icon", "★", 22, menuLabel = "Message / ACK / CQ icon"),
             Js8TableView.Column("callsign", "Callsigns", 100),
             Js8TableView.Column("timestamp", "Age", 36, numeric = true, menuLabel = "Last heard timestamp"),
             Js8TableView.Column("snr", "SNR", 36, numeric = true),
             Js8TableView.Column("offset", "Offset", 48, numeric = true, menuLabel = "Frequency Offset"),
             Js8TableView.Column("tdrift", "Time Delta", 70, defaultVisible = false, numeric = true),
-            Js8TableView.Column("submode", "Mode Speed", 76, defaultVisible = false),
+            Js8TableView.Column("submode", "Speed", 76, defaultVisible = false, menuLabel = "Mode Speed"),
             Js8TableView.Column("grid", "Grid", 56, defaultVisible = false, menuLabel = "Grid Locator"),
             Js8TableView.Column("distance", "Distance", 64, defaultVisible = false, numeric = true),
-            Js8TableView.Column("azimuth", "Azimuth", 60, defaultVisible = false, numeric = true),
+            Js8TableView.Column("azimuth", "°", 60, menuLabel = "Azimuth", defaultVisible = false, numeric = true),
             Js8TableView.Column("log", "✓", 24, menuLabel = "Worked Before"),
             Js8TableView.Column("logName", "Name", 70, menuLabel = "Logged Name"),
             Js8TableView.Column("logComment", "Comment", 120, stretch = true, menuLabel = "Logged Comment")
@@ -541,6 +593,9 @@ class Js8MainFragment : Fragment() {
         // Double-click: put the callsign in the Typing Box (on_tableWidgetCalls_cellDoubleClicked)
         // Press and hold: the PC's right-click menu for that callsign
         callActivity.onRowLongClick = { row, anchor -> showCallMenu(anchor, row.id) }
+        // PC: the menu opens with no row under the finger too; only what needs no callsign
+        callActivity.onEmptyLongClick = { anchor -> showEmptyCallMenu(anchor) }
+        bandActivity.onEmptyLongClick = { anchor -> showEmptyBandMenu(anchor) }
         callActivity.onRowDoubleClick = { row ->
             callActivity.selectedRowId = row.id
             selectedCall = row.id
@@ -573,8 +628,8 @@ class Js8MainFragment : Fragment() {
         inbox?.onRowClick = { row -> showInboxMessage(row.id) }
         // Press and hold: Delete (MessagePanel)
         inbox?.onRowLongClick = { row, anchor ->
-            Js8Inbox.showMessageMenu(anchor) {
-                viewLifecycleOwner.lifecycleScope.launch { repository.deleteMessage(row.id.toLong()) }
+            Js8Inbox.showMessageMenu(inbox!!, row, anchor) { ids ->
+                viewLifecycleOwner.lifecycleScope.launch { ids.forEach { repository.deleteMessage(it.toLong()) } }
                 requireView().findViewById<TextView?>(R.id.js8_inbox_message)?.text = ""
             }
         }
@@ -599,6 +654,8 @@ class Js8MainFragment : Fragment() {
      * already sent crossed out; emptied and unlocked when the message is done or halted.
      */
     private fun renderTyped(t: Js8ActivityViewModel.TypedTx?) {
+        // PC typeahead: an edit that came too late for the part that started goes with the next one
+        if (t != null && typeaheadFrames != null && typeaheadFrames != t.framesStarted && typeaheadOpen(t)) sendTypeahead(t)
         // A heartbeat or reply going out while the box was empty: show its text there
         if (t != null && t.auto && typingBox.text.toString() != t.text) {
             typingBox.filters = emptyArray()
@@ -615,14 +672,70 @@ class Js8MainFragment : Fragment() {
                 e.clear()
             }
         } else {
-            // Locked: typed keys and pastes change nothing
-            typingBox.filters = arrayOf(android.text.InputFilter { _, _, _, dest, dstart, dend -> dest.subSequence(dstart, dend) })
-            typingBox.isCursorVisible = false
-            typingBox.showSoftInputOnFocus = false
+            // Locked: typed keys and pastes change nothing. While a typed message is sent the text
+            // after the crossed-out part stays open, until its last part (PC TransmitTextEdit)
+            val open = typeaheadOpen(t)
+            val sent = t.charsSent
+            typingBox.filters = arrayOf(android.text.InputFilter { source, start, end, dest, dstart, dend ->
+                if (open && dstart >= sent) source.subSequence(start, end) else dest.subSequence(dstart, dend)
+            })
+            typingBox.isCursorVisible = open
+            typingBox.showSoftInputOnFocus = open
             val n = t.charsSent.coerceAtMost(e.length)
             if (n > 0) e.setSpan(android.text.style.StrikethroughSpan(), 0, n, android.text.Spanned.SPAN_EXCLUSIVE_EXCLUSIVE)
         }
         renderButtons()
+    }
+
+    private var typeaheadFrames: Int? = null
+    private var uprightCallWidth: Int? = null
+
+    private fun typeaheadOpen(t: Js8ActivityViewModel.TypedTx) = t.onAir && !t.auto && t.framesStarted > 0 && !t.onLastFrame
+
+    /** PC prepareNextMessageFrame: what is typed past the sent text replaces the parts not started. */
+    private fun sendTypeahead(t: Js8ActivityViewModel.TypedTx) {
+        typeaheadFrames = t.framesStarted
+        requireContext().startService(android.content.Intent(requireContext(), JS8EngineService::class.java)
+            .setAction(JS8EngineService.ACTION_TX_TYPEAHEAD)
+            .putExtra(JS8EngineService.EXTRA_TYPEAHEAD_TEXT, typingBox.text.toString().drop(t.charsSent))
+            .putExtra(JS8EngineService.EXTRA_TYPEAHEAD_FRAMES, t.framesStarted))
+    }
+
+    /** Settings > View and the View menu: the panels of the upright and Pages windows (PC actionShow_*). */
+    private fun applyPanels() {
+        val root = view ?: return
+        fun show(id: Int, on: Boolean) { root.findViewById<View?>(id)?.visibility = if (on) View.VISIBLE else View.GONE }
+        val p = prefs()
+        fun panel(i: Int) = p.getBoolean(Js8PcSplitters.PANELS[i].first, true)
+        if (root.findViewById<View?>(R.id.js8_pc_window) != null) return // PC, FT8Call: Js8PcSplitters
+        val band = panel(1)
+        val call = panel(2)
+        show(R.id.js8_freq_view, panel(0))
+        show(R.id.js8_callclock_view, panel(0))
+        show(R.id.js8_band_activity, band)
+        show(R.id.js8_call_activity, call)
+        show(R.id.js8_lists_row, band || call)
+        val row = root.findViewById<android.widget.LinearLayout?>(R.id.js8_lists_row)
+        if (row != null) {
+            // A divider goes with the panel beside it
+            (1 until row.childCount - 1).map { row.getChildAt(it) }.filter { it !is android.widget.LinearLayout && it !is Js8TableView }.forEach { line ->
+                val i = row.indexOfChild(line)
+                line.visibility = if (row.getChildAt(i - 1).visibility == View.VISIBLE && row.getChildAt(i + 1).visibility == View.VISIBLE) View.VISIBLE else View.GONE
+            }
+            // Upright: Call Activity has its own width; alone it takes the row
+            val alone = row.findViewById<View>(R.id.js8_call_activity)
+            (alone.layoutParams as? android.widget.LinearLayout.LayoutParams)?.takeIf { row.findViewById<View?>(R.id.js8_message_window) == null }?.let { lp ->
+                if (uprightCallWidth == null) uprightCallWidth = lp.width
+                lp.width = if (band) uprightCallWidth ?: lp.width else 0
+                lp.weight = if (band) 0f else 1f
+                alone.layoutParams = lp
+            }
+        }
+        show(R.id.js8_waterfall_view, panel(3))
+        show(R.id.js8_wf_controls_view, panel(4))
+        show(R.id.js8_wf_controls_scroll, panel(4))
+        show(R.id.js8_statusbar_view, panel(5))
+        show(R.id.js8_status_scroll, panel(5))
     }
 
     /** Current speed (Settings > Mode, Call Activity > Jump to ... speed): offset dial width, status bar label, cycle. */
@@ -715,6 +828,7 @@ class Js8MainFragment : Fragment() {
         val hidden = if (view?.findViewById<View?>(R.id.js8_status_scroll) != null) View.INVISIBLE else View.GONE
         val text = typingBox.text.toString().trim()
         if (text.isEmpty()) {
+            txFrameEstimate = 0
             label.visibility = hidden
             label.text = ""
             return
@@ -736,6 +850,7 @@ class Js8MainFragment : Fragment() {
             // A newer count may be on its way; only the latest text is shown
             if (typingBox.text.toString().trim() != text) return@launch
             val count = parts.size
+            txFrameEstimate = count
             if (count == 0) {
                 label.visibility = hidden
                 label.text = ""
@@ -753,6 +868,9 @@ class Js8MainFragment : Fragment() {
     private fun requestRender() {
         if (!listsDrawn) renderActivity() else activityDirty = true
     }
+
+    /** PC buildColumnLabelMap: "%1 Hz", "%1 dB" and "%1 ms" lose the unit with Minimal Column Labels. */
+    private fun unit(value: String, unit: String) = if (bandActivity.minimalLabels()) value else "$value $unit"
 
     private fun renderActivity() {
         if (view == null) return
@@ -786,10 +904,10 @@ class Js8MainFragment : Fragment() {
             Js8TableView.Row(
                 id = "o$off",
                 values = mapOf(
-                    "offset" to "$off Hz",
+                    "offset" to unit(off.toString(), "Hz"),
                     "timestamp" to Js8Activity.since(last.utcMs, now),
-                    "snr" to if (snr.isEmpty()) "" else "$snr dB",
-                    "tdrift" to "${(last.tdrift * 1000).toInt()} ms",
+                    "snr" to if (snr.isEmpty()) "" else unit(snr, "dB"),
+                    "tdrift" to unit((last.tdrift * 1000).toInt().toString(), "ms"),
                     "submode" to Js8Activity.submodeLetter(last.submode),
                     "message" to text
                 ),
@@ -800,8 +918,11 @@ class Js8MainFragment : Fragment() {
         bandActivity.setRows(bandRows)
 
         // Call Activity: @ALLCALL, my groups, then heard callsigns
-        val grid = prefs().getString("grid", "").orEmpty()
+        val grid = Js8Api.myGrid(prefs()) // PC m_config.my_grid(): the API's grid while allowed
         val miles = boolPref("js8cfg_miles", false)
+        // PC: no units in the distance and ° cells while the column labels show; the header says km or mi
+        val distanceUnits = !callActivity.labelsShown()
+        callActivity.setHeaderLabel("distance", if (miles) "mi" else "km")
         val blocked = cfg.blocklist
         val calls = a.callActivity.values.filter { d ->
             d.call == selectedCall || d.call in unreadFrom || agingCalls() == 0 || (now - d.utcMs) / 60_000 < agingCalls()
@@ -809,7 +930,9 @@ class Js8MainFragment : Fragment() {
         callActivity.setHeaderLabel("callsign", if (calls.isEmpty()) "Callsigns" else "Callsigns (${calls.size})")
         val groupRows = buildList {
             if (!cfg.avoidAllcall) add(Js8TableView.Row("@ALLCALL", mapOf("callsign" to "@ALLCALL"), pin = 1))
-            cfg.groups.sorted().forEach { add(Js8TableView.Row(it, mapOf("callsign" to it), pin = 2)) }
+            // ⚑ on a group with unread messages (createGroupCallsignTableRows)
+            cfg.groups.sorted().forEach { add(Js8TableView.Row(it, mapOf("icon" to if (it in unreadTo) "⚑" else "", "callsign" to it),
+                center = setOf("icon"), pin = 2)) }
         }
         val callRows = calls.sortedBy { it.call }.map { d ->
             val hasMessage = d.call in unreadFrom
@@ -817,24 +940,24 @@ class Js8MainFragment : Fragment() {
             val hasAck = d.ackMs > 0
             val isBlocked = d.call in blocked || Js8Activity.baseCall(d.call) in blocked
             val icon = when {
-                isBlocked -> "✕"; hasMessage -> "⚑"; hasAck -> "★"; hasCq -> "☎"; else -> ""
+                isBlocked -> "✕"; hasMessage -> "⚑"; hasAck -> "★"; hasCq -> "☎"; d.through.isNotEmpty() -> "⚟"; else -> ""
             }
             // Worked before / Name / Comment from the log; its grid when none was heard (displayCallActivity)
             val worked = com.js8call.example.data.Js8LogBook.workedBefore(requireContext(), d.call)
             val logged = if (worked) com.js8call.example.data.Js8LogBook.details(requireContext(), d.call) else null
             if (d.grid.isEmpty() && !logged?.grid.isNullOrEmpty()) d.grid = logged!!.grid.trim()
             val vec = Js8Activity.vector(grid, d.grid)
-            val dist = vec?.first?.let { km -> if (miles) "${(km * 0.621371).roundToInt()} mi" else "${km.roundToInt()} km" }.orEmpty()
-            val az = vec?.second?.let { "${it.roundToInt()}°" }.orEmpty()
+            val dist = vec?.first?.let { km -> Js8Activity.distanceText(km, miles, distanceUnits, grid, d.grid) }.orEmpty()
+            val az = vec?.second?.let { "${it.roundToInt()}${if (distanceUnits) "°" else ""}" }.orEmpty()
             val snr = Js8Activity.formatSnr(d.snr)
             Js8TableView.Row(
                 id = d.call,
                 values = mapOf(
                     "icon" to icon, "callsign" to d.call,
                     "timestamp" to Js8Activity.since(d.utcMs, now),
-                    "snr" to if (snr.isEmpty()) "" else "$snr dB",
-                    "offset" to "${d.offset} Hz",
-                    "tdrift" to "${(d.tdrift * 1000).toInt()} ms",
+                    "snr" to if (snr.isEmpty()) "" else unit(snr, "dB"),
+                    "offset" to unit(d.offset.toString(), "Hz"),
+                    "tdrift" to unit((d.tdrift * 1000).toInt().toString(), "ms"),
                     "submode" to Js8Activity.submodeLetter(d.submode),
                     "grid" to d.grid.take(4), "distance" to dist, "azimuth" to az,
                     "log" to if (worked) "✓" else "", "logName" to logged?.name.orEmpty(),
@@ -902,6 +1025,7 @@ class Js8MainFragment : Fragment() {
     private val repository by lazy { com.js8call.example.data.MessageRepository.getInstance(requireContext()) }
     private var inboxMessages: List<com.js8call.example.data.MessageEntity> = emptyList()
     private var unreadFrom: Set<String> = emptySet()
+    private var unreadTo: Set<String> = emptySet()
 
     private fun observeInbox() {
         repository.getAllMessages().observe(viewLifecycleOwner) { all ->
@@ -910,6 +1034,12 @@ class Js8MainFragment : Fragment() {
             inbox?.setRows(Js8Inbox.rows(inboxMessages, my))
             // Call Activity flag: stations with unread messages (displayCallActivity hasMessage)
             unreadFrom = inboxMessages.filter { !it.isRead }.map { it.senderCallsign ?: it.conversationId }.toSet()
+            unreadTo = inboxMessages.filter { !it.isRead }.map { it.conversationId }.filter { it.startsWith("@") }.toSet()
+            // PC refreshInboxCounts: a sender not in Call Activity is added
+            unreadFrom.filter { it.isNotEmpty() && !it.startsWith("@") && it !in activityVm.activity.callActivity }.forEach { from ->
+                val m = inboxMessages.first { !it.isRead && (it.senderCallsign ?: it.conversationId) == from }
+                activityVm.activity.callActivity[from] = Js8Activity.CallDetail(from, offset = m.frequency?.toInt() ?: -1, utcMs = m.timestamp)
+            }
             requestRender()
         }
     }
@@ -980,8 +1110,12 @@ class Js8MainFragment : Fragment() {
         }
         // CAT: PC on_readFreq_clicked, read the rig again
         requireView().findViewById<View>(R.id.js8_btn_cat).setOnClickListener {
+            if (transmitVm.txState.value == TransmitState.TRANSMITTING) return@setOnClickListener
             requireContext().startService(Intent(requireContext(), JS8EngineService::class.java).setAction(JS8EngineService.ACTION_READ_RIG))
         }
+        // PC labCallsign press opens Settings; click on the frequency buildFrequencyMenu
+        callsign.setOnClickListener { openStation(page = Js8SettingsFragment.GENERAL_PAGE) }
+        freqDisplay?.setOnClickListener { showFrequencyMenu(it) }
         // Settings button (Rob, 2026-10-31)
         requireView().findViewById<View>(R.id.js8_btn_settings).setOnClickListener { openSettings() }
         // Mode button: UI_Constructor modeButton press pops up menuModeJS8
@@ -1003,7 +1137,8 @@ class Js8MainFragment : Fragment() {
             }
             menu.show()
         }
-        listOf(R.id.js8_menubar_mode, R.id.js8_menubar_control).forEach { menubar(it) { openSettings() } }
+        menubar(R.id.js8_menubar_mode) { showModeMenu(it) }
+        menubar(R.id.js8_menubar_control) { showControlMenu(it) }
         menubar(R.id.js8_menubar_configurations) { anchor -> Js8Configurations.showMenu(this, popupMenu(anchor)) }
         // View: Inbox (PC View > Show Message Inbox...) and Settings… (Rob, 2026-10-20)
         menubar(R.id.js8_menubar_view) { anchor ->
@@ -1011,6 +1146,8 @@ class Js8MainFragment : Fragment() {
             menu.menu.add(0, 1, 1, "Show Message Inbox...")
             menu.menu.add(0, 2, 2, "Settings…")
             menu.menu.add(0, 3, 3, "Reset Frame Sizes") // PC View > Reset Window Sizes: the dividers
+            menu.menu.add(0, 8, 8, "Show Time Drift Controls...")
+            menu.menu.add(0, 9, 9, "Show Fullscreen").apply { isCheckable = true; isChecked = boolPref(KEY_FULLSCREEN, false) }
             menu.menu.add(0, 4, 4, "Sort Band Activity By...")
             menu.menu.add(0, 5, 5, "Show Band Activity Columns...")
             menu.menu.add(0, 6, 6, "Sort Call Activity...")
@@ -1024,6 +1161,7 @@ class Js8MainFragment : Fragment() {
                     val key = Js8PcSplitters.PANELS[item.itemId - 10].first
                     prefs().edit().putBoolean(key, !prefs().getBoolean(key, true)).apply()
                     splitters?.refresh()
+                    applyPanels()
                     return@setOnMenuItemClickListener true
                 }
                 when (item.itemId) {
@@ -1033,13 +1171,18 @@ class Js8MainFragment : Fragment() {
                     5 -> bandActivity.showColumnChooser()
                     6 -> callActivity.showSortMenu()
                     7 -> callActivity.showColumnChooser()
+                    8 -> wfControls?.showTiming()
+                    9 -> {
+                        prefs().edit().putBoolean(KEY_FULLSCREEN, !item.isChecked).apply()
+                        applyFullscreen()
+                    }
                     else -> splitters?.reset()
                 }
                 true
             }
             menu.show()
         }
-        menubar(R.id.js8_menubar_log) { openLog(selectedCall) }
+        menubar(R.id.js8_menubar_log) { showLogMenu(it) }
         menubar(R.id.js8_menubar_help) { anchor ->
             val menu = popupMenu(anchor)
             menu.menu.add(0, 1, 1, "Copyright notice")
@@ -1058,6 +1201,175 @@ class Js8MainFragment : Fragment() {
             }
             menu.show()
         }
+    }
+
+    /** PC menu_Log. Erase ... are the same as Settings > Log. */
+    private fun showLogMenu(anchor: View) {
+        val menu = popupMenu(anchor)
+        menu.menu.add(0, 1, 1, "Add Log Entry...")
+        menu.menu.add(0, 2, 2, "Open Log Directory...")
+        menu.menu.add(0, 3, 3, "Erase ALL.TXT")
+        menu.menu.add(0, 4, 4, "Erase js8call_log.adi")
+        menu.setOnMenuItemClickListener { item ->
+            when (item.itemId) {
+                1 -> openLog(selectedCall)
+                2 -> openLogDirectory()
+                3 -> confirmErase("Are you sure you want to erase file ALL.TXT?") {
+                    requireContext().startService(Intent(requireContext(), JS8EngineService::class.java).setAction(JS8EngineService.ACTION_ERASE_LOG))
+                }
+                else -> confirmErase("Are you sure you want to erase file js8call_log.adi?") {
+                    com.js8call.example.data.Js8LogBook.adifFile(requireContext()).delete()
+                    com.js8call.example.data.Js8LogBook.forget()
+                }
+            }
+            true
+        }
+        menu.show()
+    }
+
+    private fun confirmErase(message: String, erase: () -> Unit) {
+        AlertDialog.Builder(requireContext()).setTitle("Confirm Erase").setMessage(message)
+            .setPositiveButton("Yes") { _, _ -> erase() }.setNegativeButton("No", null).show()
+    }
+
+    /** PC on_actionOpen_log_directory_triggered: the Download/JS8CallLogs folder in the phone's Files app. */
+    private fun openLogDirectory() {
+        val uri = android.provider.DocumentsContract.buildDocumentUri("com.android.externalstorage.documents", "primary:Download/JS8CallLogs")
+        try {
+            startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(uri, android.provider.DocumentsContract.Document.MIME_TYPE_DIR)
+                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
+        } catch (e: android.content.ActivityNotFoundException) {
+            showMessage("The log files are in Download/JS8CallLogs.")
+        }
+    }
+
+    /** PC Control menu; Set Focus... is left out, a phone has no keyboard focus to move. */
+    private fun showControlMenu(anchor: View) {
+        val v = requireView()
+        val menu = popupMenu(anchor)
+        val m = menu.menu
+        androidx.core.view.MenuCompat.setGroupDividerEnabled(m, true)
+        fun toggle(id: Int, label: String, button: View) =
+            m.add(1, id, id, label).apply { isCheckable = true; isChecked = button.isActivated; isEnabled = button.isEnabled }
+        toggle(1, "Enable Receiver (RX)", btnRx)
+        toggle(2, "Enable Transmitter (TX)", btnTx)
+        toggle(3, "Enable Reporting (SPOT)", v.findViewById(R.id.js8_btn_spot))
+        toggle(4, "Enable Tuning Tone (TUNE)", v.findViewById(R.id.js8_btn_tune))
+        m.add(2, 5, 5, "Send Heartbeat...")
+        m.add(2, 6, 6, "Send CQ Message...")
+        m.add(3, 7, 7, "Set Frequency...")
+        m.add(3, 8, 8, "Set Offset...")
+        val clear = m.addSubMenu(4, 9, 9, "Clear Activity...")
+        clear.add(0, 10, 0, "Clear All Activity")
+        clear.add(0, 11, 1, "Clear Band Activity")
+        clear.add(0, 12, 2, "Clear RX Activity")
+        clear.add(0, 13, 3, "Clear Call Activity")
+        menu.setOnMenuItemClickListener { item ->
+            when (item.itemId) {
+                1 -> btnRx.performClick()
+                2 -> btnTx.performClick()
+                3 -> v.findViewById<View>(R.id.js8_btn_spot).performClick()
+                4 -> v.findViewById<View>(R.id.js8_btn_tune).performClick()
+                5 -> sendHbNow()
+                6 -> sendCq(repeat = false)
+                7 -> askFrequency()
+                8 -> askOffset()
+                10 -> askClearAll()
+                11 -> { activityVm.activity.clearBand(); clearSelection(); activityVm.changed() }
+                12 -> clearRxActivity()
+                13 -> { activityVm.activity.clearCalls(); clearSelection(); activityVm.changed() }
+            }
+            true
+        }
+        menu.show()
+    }
+
+    /** PC buildFrequencyMenu: Set a Custom Frequency..., then the Frequencies table, lowest first. */
+    private fun showFrequencyMenu(anchor: View) {
+        val items = Js8SettingsSchema.frequencyItems(requireContext(), prefs().getString(Js8SettingsSchema.FREQUENCIES_KEY, null)).sortedBy { it.hz }
+        val menu = popupMenu(anchor)
+        menu.menu.add(0, 0, 0, "Set a Custom Frequency...")
+        items.forEachIndexed { i, f ->
+            val band = com.js8call.example.util.BandUtils.bandLabelForFrequencyHz(f.hz)
+            val description = if (f.description.isEmpty()) "" else " - ${f.description}"
+            menu.menu.add(1, i + 1, i + 1, "$band:  ${String.format(Locale.US, "%.3f", f.hz / 1e6)} MHz$description")
+        }
+        menu.setOnMenuItemClickListener { item ->
+            if (item.itemId == 0) askFrequency() else setDial(items[item.itemId - 1].hz)
+            true
+        }
+        menu.show()
+    }
+
+    /** PC Set a Custom Frequency / Set Frequency...: "Frequency in MHz:". */
+    private fun askFrequency() {
+        val box = EditText(requireContext()).apply {
+            isSingleLine = true
+            inputType = android.text.InputType.TYPE_CLASS_NUMBER or android.text.InputType.TYPE_NUMBER_FLAG_DECIMAL
+            setText(String.format(Locale.US, "%.6f", dialHz / 1e6))
+            selectAll()
+        }
+        AlertDialog.Builder(requireContext()).setTitle("Set a Custom Frequency").setMessage("Frequency in MHz:").setView(box)
+            .setPositiveButton(android.R.string.ok) { _, _ ->
+                box.text.toString().toDoubleOrNull()?.takeIf { it > 0 }?.let { setDial((it * 1e6).roundToLong()) }
+            }.setNegativeButton(android.R.string.cancel, null).show()
+    }
+
+    /** PC Set Offset...: "Offset in Hz:". */
+    private fun askOffset() {
+        val box = EditText(requireContext()).apply {
+            isSingleLine = true
+            inputType = android.text.InputType.TYPE_CLASS_NUMBER
+            setText(monitorVm.getTxOffset().toInt().toString())
+            selectAll()
+        }
+        AlertDialog.Builder(requireContext()).setTitle("Set Offset").setMessage("Offset in Hz:").setView(box)
+            .setPositiveButton(android.R.string.ok) { _, _ -> box.text.toString().toIntOrNull()?.let { jumpToOffset(it.coerceIn(0, 5000)) } }
+            .setNegativeButton(android.R.string.cancel, null).show()
+    }
+
+    private fun setDial(hz: Long) {
+        dialHz = hz
+        prefs().edit().putString(Js8SettingsSchema.FREQUENCY_KEY, dialHz.toString()).apply()
+        renderFrequency()
+    }
+
+    /** PC config_label: the configuration's name in the Status Bar unless it is Default. */
+    private fun renderConfigLabel() {
+        val mode = view?.findViewById<TextView?>(R.id.js8_status_mode) ?: return
+        val row = mode.parent as? ViewGroup ?: return
+        val name = Js8Configurations.currentName(requireContext())
+        var label = row.findViewWithTag<TextView?>("js8_config_label")
+        if (name == Js8Configurations.DEFAULT) {
+            label?.let { row.removeView(it) }
+            return
+        }
+        if (label == null) {
+            val lp = mode.layoutParams as ViewGroup.MarginLayoutParams
+            label = TextView(mode.context).apply {
+                tag = "js8_config_label"
+                setTextSize(android.util.TypedValue.COMPLEX_UNIT_PX, mode.textSize)
+                typeface = mode.typeface
+                setTextColor(mode.currentTextColor)
+                gravity = mode.gravity
+                minimumWidth = (80 * resources.displayMetrics.density).toInt()
+                background = mode.background?.constantState?.newDrawable()
+                setPadding(mode.paddingLeft, mode.paddingTop, mode.paddingRight, mode.paddingBottom)
+                isSingleLine = true
+            }
+            row.addView(label, row.indexOfChild(mode), android.widget.LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, lp.height).apply { marginStart = lp.marginStart })
+        }
+        label.text = name
+    }
+
+    /** PC View > Show Fullscreen: the phone's status and navigation bars hide. */
+    private fun applyFullscreen() {
+        val window = requireActivity().window
+        val bars = androidx.core.view.WindowCompat.getInsetsController(window, window.decorView)
+        if (boolPref(KEY_FULLSCREEN, false)) {
+            bars.systemBarsBehavior = androidx.core.view.WindowInsetsControllerCompat.BEHAVIOR_SHOW_TRANSIENT_BARS_BY_SWIPE
+            bars.hide(androidx.core.view.WindowInsetsCompat.Type.systemBars())
+        } else bars.show(androidx.core.view.WindowInsetsCompat.Type.systemBars())
     }
 
     private fun applyOffset(hz: Float) {
@@ -1081,11 +1393,14 @@ class Js8MainFragment : Fragment() {
 
     private fun renderFrequency() {
         freqDisplay?.text = formatMhz(dialHz)
+        ruler.dialHz = dialHz
+        waterfall.setBandText(com.js8call.example.util.BandUtils.bandLabelForFrequencyHz(dialHz))
         // FT8Call layout: the band above the frequency
         view?.findViewById<TextView?>(R.id.js8_band_label)?.text =
             com.js8call.example.util.BandUtils.bandLabelForFrequencyHz(dialHz)
         val offset = monitorVm.getTxOffset().toLong()
         statusFreq.text = "Freq: ${formatMhz(dialHz + offset)}"
+        activityVm.bandChanged(com.js8call.example.util.BandUtils.bandLabelForFrequencyHz(dialHz))
     }
 
     /** 14078000 -> "14.078 000" (desktop dial format). */
@@ -1186,10 +1501,11 @@ class Js8MainFragment : Fragment() {
     private fun openSettings() = navigateFromMain(R.id.navigation_js8_settings)
 
     /** Inbox in this layout (upright, Swipe), or the Message Inbox screen (PC mode). */
-    private fun openInbox() {
+    private fun openInbox(call: String? = null) {
         val table = inbox
-        if (table != null) table.requestRectangleOnScreen(android.graphics.Rect(0, 0, table.width, table.height))
-        else navigateFromMain(R.id.navigation_js8_inbox)
+        // PC messagePanel_->setCall: from Call Activity the list shows that call, title "Messages: CALL"
+        if (table != null && call == null) table.requestRectangleOnScreen(android.graphics.Rect(0, 0, table.width, table.height))
+        else navigateFromMain(R.id.navigation_js8_inbox, android.os.Bundle().apply { putString(Js8InboxFragment.ARG_CALL, call) })
     }
 
     /** Station window: callsign, grid and the rest of the PC's File > Settings. */
@@ -1293,6 +1609,7 @@ class Js8MainFragment : Fragment() {
                 activityVm.typingBoxEmpty = s.isNullOrBlank()
                 JS8EngineService.typingBoxEmpty = s.isNullOrBlank() || activityVm.typed.value?.auto == true
                 if (activityVm.typed.value?.auto == true) return // shown by the app, not typed
+                activityVm.typed.value?.takeIf { typeaheadOpen(it) }?.let { sendTypeahead(it) }
                 Js8Macros.touch()
                 requestTextStats()
                 s?.let { Js8TypingSpans.apply(it, prefs(), selectedCall) }
@@ -1334,7 +1651,7 @@ class Js8MainFragment : Fragment() {
     private fun showSavedMenu(anchor: View) {
         val saved = savedMessages()
         val menu = popupMenu(anchor)
-        saved.forEachIndexed { i, m -> menu.menu.add(0, i, i, m) }
+        saved.forEachIndexed { i, m -> menu.menu.add(0, i, i, macro(m)) } // PC replaceMacros(macro, values, false)
         menu.menu.add(0, 9999, 9999, "Edit Saved Messages…")
         menu.menu.add(0, 9998, 9999, "Save Current Message").isEnabled = typingBox.text.isNotBlank()
         // APRS pages, in every layout: menus have the same items everywhere (Rob, 2026-10-20)
@@ -1347,7 +1664,7 @@ class Js8MainFragment : Fragment() {
         aprs.forEachIndexed { i, (label, _) -> menu.menu.add(0, 10000 + i, 10000 + i, label) }
         menu.setOnMenuItemClickListener { item ->
             when {
-                item.itemId == 9999 -> openStation() // Saved Messages are in Station
+                item.itemId == 9999 -> openStation(page = Js8SettingsSchema.SAVED_PAGE) // Saved Messages are in Station
                 item.itemId == 9998 -> saveCurrentMessage()
                 // APRS GRID sends at once like a saved message, with the grid from Station (Rob, 2026-10-21)
                 aprs.getOrNull(item.itemId - 10000)?.second == Js8AprsFragment.FORM_GRID -> sendAprsGrid()
@@ -1458,6 +1775,9 @@ class Js8MainFragment : Fragment() {
         val popup = popupMenu(anchor)
         val m = popup.menu
         androidx.core.view.MenuCompat.setGroupDividerEnabled(m, true)
+        // PC generateCallDetail is the row's tooltip; a phone has no hover, so it heads the menu
+        a.hearing[call]?.takeIf { it.isNotEmpty() }?.let { m.add(0, 0, 0, "HEARING: ${it.joinToString(", ")}").isEnabled = false }
+        a.heardBy[call]?.takeIf { it.isNotEmpty() }?.let { m.add(0, 0, 0, "HEARD BY: ${it.joinToString(", ")}").isEnabled = false }
         // Jump to their offset / speed / time drift
         if (!isAllCall && detail != null && detail.offset > 0) {
             m.add(1, ID_JUMP_OFFSET, 1, "Jump to ${detail.offset}Hz")
@@ -1470,13 +1790,13 @@ class Js8MainFragment : Fragment() {
         }
         m.add(2, ID_LOG, 10, "Log...")
         m.add(2, ID_INBOX, 11, "Show Message Inbox...").isEnabled = !isAllCall && hasInbox
-        m.add(2, ID_STORE, 12, "Store Message...")
+        m.add(2, ID_STORE, 12, "Store Message...").isEnabled = !isAllCall
         val savedMenu = m.addSubMenu(3, ID_SAVED, 20, "Saved Messages...")
-        saved.forEachIndexed { i, text -> savedMenu.add(0, ID_SAVED_FIRST + i, i, text) }
+        saved.forEachIndexed { i, text -> savedMenu.add(0, ID_SAVED_FIRST + i, i, macro(text)) }
         savedMenu.add(0, ID_SAVED_EDIT, saved.size, "Edit Saved Messages\u2026")
         savedMenu.add(0, ID_SAVED_CURRENT, saved.size + 1, "Save Current Message").isEnabled = typingBox.text.isNotBlank()
         val directedMenu = m.addSubMenu(3, ID_DIRECTED, 21, "Directed to $call...")
-        directed.forEachIndexed { i, (label, _) -> directedMenu.add(0, ID_DIRECTED_FIRST + i, i, label) }
+        directed.forEachIndexed { i, (label, text) -> directedMenu.add(0, ID_DIRECTED_FIRST + i, i, label).isEnabled = directedEnabled(call, text) }
         m.add(3, ID_RELAY, 22, "Relay via $call...").isEnabled = !isAllCall
         m.add(3, ID_DESELECT, 23, "Deselect $call")
         m.add(4, ID_ADD, 30, "Add New Station or Group...")
@@ -1497,10 +1817,10 @@ class Js8MainFragment : Fragment() {
                         putExtra(JS8EngineService.EXTRA_TIME_DRIFT_MS, -(it.tdrift * 1000).toLong())
                     })
                 }
-                id == ID_INBOX -> openInbox()
+                id == ID_INBOX -> openInbox(call)
                 id == ID_LOG -> openLog(call)
                 id == ID_STORE -> storeMessage(call)
-                id == ID_SAVED_EDIT -> openStation()
+                id == ID_SAVED_EDIT -> openStation(page = Js8SettingsSchema.SAVED_PAGE)
                 id == ID_SAVED_CURRENT -> saveCurrentMessage()
                 id in ID_SAVED_FIRST until ID_SAVED_FIRST + saved.size ->
                     addMessageText(macro(saved[id - ID_SAVED_FIRST]), send = true)
@@ -1521,6 +1841,35 @@ class Js8MainFragment : Fragment() {
         popup.show()
     }
 
+    /** Call Activity with no rows: the items of the PC menu that need no callsign. */
+    private fun showEmptyCallMenu(anchor: View) {
+        val popup = popupMenu(anchor)
+        popup.menu.add(0, 1, 1, "Add New Station or Group...")
+        popup.menu.add(0, 2, 2, "Clear Entire List")
+        popup.menu.add(0, 3, 3, "Clear All Lists")
+        popup.setOnMenuItemClickListener { item ->
+            when (item.itemId) {
+                1 -> askAddStation()
+                2 -> { activityVm.activity.clearCalls(); clearSelection(); activityVm.changed() }
+                else -> askClearAll()
+            }
+            true
+        }
+        popup.show()
+    }
+
+    /** Band Activity with no rows: the items of the PC menu that need no row. */
+    private fun showEmptyBandMenu(anchor: View) {
+        val popup = popupMenu(anchor)
+        popup.menu.add(0, 1, 1, "Clear")
+        popup.menu.add(0, 2, 2, "Clear All Lists")
+        popup.setOnMenuItemClickListener { item ->
+            if (item.itemId == 1) { activityVm.activity.clearBand(); clearSelection(); activityVm.changed() } else askClearAll()
+            true
+        }
+        popup.show()
+    }
+
     private fun saveCurrentMessage() {
         prefs().edit().putString(Js8SettingsSchema.SAVED_MESSAGES_KEY,
             (savedMessages() + typingBox.text.toString().trim()).joinToString("\n")).apply()
@@ -1531,11 +1880,11 @@ class Js8MainFragment : Fragment() {
         val saved = savedMessages()
         val savedMenu = m.addSubMenu(3, ID_SAVED, 20, "Saved Messages...")
         saved.forEachIndexed { i, text ->
-            savedMenu.add(0, ID_SAVED_FIRST + i, i, text)
+            savedMenu.add(0, ID_SAVED_FIRST + i, i, macro(text))
             actions[ID_SAVED_FIRST + i] = { addMessageText(macro(text), send = true) }
         }
         savedMenu.add(0, ID_SAVED_EDIT, saved.size, "Edit Saved Messages\u2026")
-        actions[ID_SAVED_EDIT] = { openStation() }
+        actions[ID_SAVED_EDIT] = { openStation(page = Js8SettingsSchema.SAVED_PAGE) }
         savedMenu.add(0, ID_SAVED_CURRENT, saved.size + 1, "Save Current Message").isEnabled = typingBox.text.isNotBlank()
         actions[ID_SAVED_CURRENT] = { saveCurrentMessage() }
         val directedMenu = m.addSubMenu(3, ID_DIRECTED, 21, "Directed to ${call.orEmpty()}...")
@@ -1690,14 +2039,18 @@ class Js8MainFragment : Fragment() {
         val popup = popupMenu(anchor)
         val m = popup.menu
         androidx.core.view.MenuCompat.setGroupDividerEnabled(m, true)
-        m.add(1, 1, 1, "Copy")
+        // PC buildEditMenu: the window is read-only, so Cut and Paste stay grey; Copy needs a selection
+        m.add(1, 5, 0, "Cut").isEnabled = false
+        m.add(1, 1, 1, "Copy").isEnabled = messageWindow.hasSelection()
+        m.add(1, 6, 1, "Paste").isEnabled = false
         m.add(2, 2, 2, "Clear")
         m.add(2, 3, 3, "Clear All Lists")
         m.add(3, 4, 4, "Save As...")
         popup.setOnMenuItemClickListener { item ->
             when (item.itemId) {
                 1 -> (requireContext().getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager)
-                    .setPrimaryClip(android.content.ClipData.newPlainText("Message Window", messageWindow.text))
+                    .setPrimaryClip(android.content.ClipData.newPlainText("Message Window",
+                        messageWindow.text.substring(messageWindow.selectionStart, messageWindow.selectionEnd)))
                 2 -> clearRxActivity()
                 3 -> askClearAll()
                 else -> saveMessageWindow.launch("js8call-" +
@@ -1762,7 +2115,6 @@ class Js8MainFragment : Fragment() {
      * Waterfall Controls > QSY (UI_Constructor::qsy): the dial moves by offset - center, so the
      * signal at the offset is heard at center, and the offset becomes center. The dial goes to
      * Settings > Frequency (last_frequency), which retunes the radio when rig control is on.
-     * Not done: the PC also moves the Band Activity rows by the same amount.
      */
     private fun qsy(center: Int) {
         if (!offsetChangeAllowed()) return
@@ -1771,6 +2123,8 @@ class Js8MainFragment : Fragment() {
         dialHz += delta
         prefs().edit().putString(Js8SettingsSchema.FREQUENCY_KEY, dialHz.toString()).apply()
         jumpToOffset(center)
+        activityVm.activity.shiftBand(delta.toInt())
+        activityVm.changed()
         renderFrequency()
     }
 
@@ -1788,6 +2142,10 @@ class Js8MainFragment : Fragment() {
             putString(Js8LogFragment.ARG_RPT_SENT, d?.snr?.takeIf { it > -50 }?.let { Js8Activity.formatSnr(it) }.orEmpty())
             putLong(Js8LogFragment.ARG_START_MS, callSelectedTime[c] ?: 0L)
             putLong(Js8LogFragment.ARG_FREQ_HZ, dialHz + monitorVm.getTxOffset().toLong())
+            // PC: text selected in the Message Window fills Comments
+            putString(Js8LogFragment.ARG_MESSAGE_WINDOW, messageWindow.text.toString().takeLast(8000))
+            if (messageWindow.hasSelection()) putString(Js8LogFragment.ARG_COMMENTS,
+                messageWindow.text.substring(messageWindow.selectionStart, messageWindow.selectionEnd))
         }
         navigateFromMain(R.id.navigation_js8_log, args)
     }
@@ -1795,8 +2153,13 @@ class Js8MainFragment : Fragment() {
     /** Call Activity > Store Message...: held for [call] to collect (MessageReplyDialog, addCommandToStorage). */
     private fun storeMessage(call: String) {
         val box = EditText(requireContext()).apply {
-            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS
-            filters = arrayOf(android.text.InputFilter.AllCaps())
+            inputType = android.text.InputType.TYPE_CLASS_TEXT or android.text.InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS or
+                android.text.InputType.TYPE_TEXT_FLAG_MULTI_LINE
+            minLines = 3
+            // PC MessageReplyDialog: upper case, newlines and printable 7-bit characters only
+            filters = arrayOf(android.text.InputFilter { source, start, end, _, _, _ ->
+                source.subSequence(start, end).toString().uppercase(Locale.US).filter { it == '\n' || it.code in 32..126 }
+            })
         }
         AlertDialog.Builder(requireContext())
             .setTitle("Message")
@@ -1807,7 +2170,7 @@ class Js8MainFragment : Fragment() {
                 if (text.isEmpty()) return@setPositiveButton
                 val my = prefs().getString("callsign", "").orEmpty().trim().uppercase(Locale.US)
                 viewLifecycleOwner.lifecycleScope.launch {
-                    com.js8call.example.data.Js8Mailbox.store(requireContext(), call, my, text, relayPath = my)
+                    com.js8call.example.data.Js8Mailbox.store(requireContext(), call, my, text, relayPath = my, dialHz = dialHz)
                 }
             }
             .setNegativeButton(android.R.string.cancel, null)
@@ -2244,13 +2607,42 @@ class Js8MainFragment : Fragment() {
             val full = if (call == null) "Directed" else "Directed to $call"
             b.text = if (b.paint.measureText(full) <= b.width - b.paddingLeft - b.paddingRight) full else "Directed"
         }
-        v.findViewById<TextView?>(R.id.js8_btn_send)?.text = when {
-            transmitVm.txState.value == TransmitState.TRANSMITTING -> "Sending"
-            transmitVm.isBusy() -> "Ready"
-            else -> "Send"
-        }
+        renderSendText(System.currentTimeMillis())
         typingBox.hint = if (call == null) "TYPE YOUR OUTGOING MESSAGES HERE."
             else "TYPE YOUR OUTGOING DIRECTED MESSAGE TO $call HERE."
+    }
+
+    /** PC m_txFrameCountEstimate: parts the Typing Box text will take. */
+    private var txFrameEstimate = 0
+
+    /** PC State::timed: "Send (45s)", "Send (1m 30s)", "Send (2m)". */
+    private fun timed(state: String, seconds: Int): String {
+        val m = seconds / 60
+        val s = seconds % 60
+        return when {
+            m > 0 && s > 0 -> "$state (${m}m ${s}s)"
+            m > 0 -> "$state (${m}m)"
+            else -> "$state (${s}s)"
+        }
+    }
+
+    /** PC updateTxButtonDisplay. A button too narrow for the time shows the word alone. */
+    private fun renderSendText(now: Long) {
+        val b = view?.findViewById<TextView?>(R.id.js8_btn_send) ?: return
+        val t = progress.period
+        val second = ((now / 1000) % t).toInt()
+        val left = activityVm.txFramesLeft
+        val text = when {
+            view?.findViewById<View>(R.id.js8_btn_tune)?.isActivated == true -> "Tuning"
+            transmitVm.txState.value == TransmitState.TRANSMITTING ->
+                if (left >= 0) timed("Sending", (left + 1) * t - (second + 1) % t) else "Sending"
+            transmitVm.isBusy() -> "Ready"
+            txFrameEstimate > 0 -> timed("Send", txFrameEstimate * t)
+            else -> "Send"
+        }
+        val fits = b.width == 0 || b.paint.measureText(text) <= b.width - b.paddingLeft - b.paddingRight
+        val shown = if (fits) text else text.substringBefore(" (")
+        if (b.text.toString() != shown) b.text = shown
     }
 
     // ---- Waterfall ----------------------------------------------------------------------
@@ -2314,6 +2706,9 @@ class Js8MainFragment : Fragment() {
         if (waterfall.width <= 0) return
         ruler.startHz = waterfall.startHz()
         ruler.hzPerPixel = waterfall.hzPerPixel()
+        ruler.filterHz = if (waterfall.filterEnabled && waterfall.filterWidthHz > 0f)
+            (waterfall.filterCenterHz - waterfall.filterWidthHz / 2f)..(waterfall.filterCenterHz + waterfall.filterWidthHz / 2f) else null
+        ruler.filterOpacity = waterfall.filterOpacityPercent
     }
 
     // ---- Engine -------------------------------------------------------------------------
@@ -2330,12 +2725,13 @@ class Js8MainFragment : Fragment() {
         monitorVm.status.observe(viewLifecycleOwner) { status ->
             val running = status.state == EngineState.RUNNING || status.state == EngineState.STARTING
             btnRx.isActivated = running
-            levelMeter.levelDb = if (running) (status.powerDb + 90f).coerceIn(0f, 90f) else 0f
+            levelMeter.setLevel(if (running) (status.powerDb + 90f).coerceIn(0f, 90f) else 0f)
             renderStatus()
             offsetSlider?.let { if (it.progress != status.txOffsetHz.toInt()) it.progress = status.txOffsetHz.toInt() }
             offsetValue?.text = "${status.txOffsetHz.toInt()} Hz" // FT8Call has no slider to update it
             renderOffsetBox()
             wfControls?.setTimingState(status.timeDriftMs, status.autoDriftOn)
+            monitorVm.getWaterfallRenderer().timeDriftMs = status.timeDriftMs
         }
         monitorVm.spectrum.observe(viewLifecycleOwner) { syncRuler() }
         transmitVm.txState.observe(viewLifecycleOwner) { state ->
@@ -2348,9 +2744,23 @@ class Js8MainFragment : Fragment() {
         monitorVm.radioFrequency.observe(viewLifecycleOwner) { hz ->
             if (hz != null && hz > 0) { dialHz = hz; renderFrequency() }
         }
-        monitorVm.rigConnected.observe(viewLifecycleOwner) { connected ->
-            requireView().findViewById<View>(R.id.js8_btn_cat).isActivated = connected
-        }
+        monitorVm.rigConnected.observe(viewLifecycleOwner) { connected -> renderCat(connected) }
+    }
+
+    /**
+     * PC readFreq button: green and disabled while the rig is fine, red and live after a failure,
+     * "CAT/S" in split. The PC's yellow "opening" colour has no matching moment here.
+     */
+    private fun renderCat(connected: Boolean) {
+        val cat = requireView().findViewById<TextView>(R.id.js8_btn_cat)
+        val hasRig = prefs().getString("rig_type", "none") != "none"
+        val ok = connected || !hasRig
+        cat.isActivated = ok
+        cat.isSelected = !ok
+        cat.isEnabled = !ok
+        // PC: what the rig says; before a poll has read it, or with a rig that can't tell, the setting
+        val split = connected && (JS8EngineService.rigSplit ?: prefs().getString("js8cfg_split", "none").orEmpty().let { it != "none" && it.isNotEmpty() })
+        cat.text = if (split) "CAT/S" else "CAT"
     }
 
     private fun renderStatus() {
@@ -2361,14 +2771,14 @@ class Js8MainFragment : Fragment() {
         when {
             transmitting -> {
                 val tuning = requireView().findViewById<View>(R.id.js8_btn_tune).isActivated
-                statusState.text = if (tuning) "Tx: TUNE" else activityVm.typed.value?.let { "Tx: ${it.text}".take(40).trim() } ?: "Transmitting"
+                statusState.text = if (tuning) "Tx: TUNE" else activityVm.frameOnAirText()?.let { "Tx: $it".take(40).trim() } ?: "Transmitting"
                 statusState.setBackgroundResource(R.drawable.js8_status_red)
             }
             state == EngineState.RUNNING && JS8EngineService.idleTimedOutMinutes != 0L -> {
                 statusState.text = "Idle timeout"; statusState.setBackgroundResource(R.drawable.js8_status_red)
             }
             state == EngineState.RUNNING || state == EngineState.STARTING -> {
-                statusState.text = "Receiving"; statusState.setBackgroundResource(R.drawable.js8_status_green)
+                statusState.text = if (Js8Api.State.decoding) "Decoding" else "Receiving"; statusState.setBackgroundResource(R.drawable.js8_status_green)
             }
             else -> { statusState.text = "Idle"; statusState.setBackgroundResource(R.drawable.js8_status_blue) }
         }

@@ -186,6 +186,20 @@ class Js8SettingsFragment : Fragment() {
         const val GENERAL_PAGE = "General"
         /** Station: page to open on (PC mode menu bar Help opens About). */
         const val ARG_PAGE = "page"
+        val FONT_FAMILIES = listOf("Selawik", "Sans Serif", "Serif", "Monospace")
+        val FONT_STYLES = listOf("Regular", "Bold", "Italic", "Bold Italic")
+
+        /** The Font button's family and style; null when none was chosen. */
+        fun typefaceFor(context: Context, family: String?, style: String?): Typeface? {
+            if (family == null) return null
+            val base = when (family) {
+                "Sans Serif" -> Typeface.SANS_SERIF
+                "Serif" -> Typeface.SERIF
+                "Monospace" -> Typeface.MONOSPACE
+                else -> ResourcesCompat.getFont(context, R.font.selawik)
+            }
+            return Typeface.create(base, maxOf(FONT_STYLES.indexOf(style), 0))
+        }
     }
 
     private lateinit var vm: Js8SettingsViewModel
@@ -479,7 +493,12 @@ class Js8SettingsFragment : Fragment() {
             setBackgroundResource(R.drawable.js8_cfg_field)
             addView(label(name, size = 1.1f), LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
             addView(label("›", size = 1.4f))
-            setOnClickListener { vm.page = name; render() }
+            setOnClickListener {
+                vm.page = name
+                // PC: 5 s on the status bar while the Audio page reads the device lists
+                if (name == "Audio") android.widget.Toast.makeText(requireContext(), "Enumerating audio devices", android.widget.Toast.LENGTH_SHORT).show()
+                render()
+            }
         }
         if (page == null && sideways) {
             // 3 across, so all pages show without scrolling; 180 dp each, centred (Rob, 2026-10-20)
@@ -949,8 +968,14 @@ class Js8SettingsFragment : Fragment() {
             orientation = LinearLayout.VERTICAL
             setPadding(0, px(4), 0, px(4))
         }
+        // Spin boxes grey with everything inside them (PC set_rig_invariants, Poll Interval)
+        if (f.kind == Kind.SPIN && !f.active(draft)) {
+            fun off(v: View) { v.isEnabled = false; (v as? ViewGroup)?.let { g -> (0 until g.childCount).forEach { off(g.getChildAt(it)) } } }
+            off(control)
+            control.alpha = 0.5f
+        }
         // As wide as its text, not the box below it (side by side the row is only the box's width)
-        row.addView(label(f.label).apply { if (!f.enabled) alpha = 0.5f },
+        row.addView(label(f.label).apply { if (!f.enabled || !f.active(draft)) alpha = 0.5f },
             LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         // Settings window: boxes sized to their values, left under the label (Rob, 2026-10-20:
         // "runaway fields"); Station boxes fill their page upright; sideways only messages, groups
@@ -1195,8 +1220,12 @@ class Js8SettingsFragment : Fragment() {
                 setTextColor(color(R.color.js8_frame_text))
                 CompoundButtonCompat.setButtonTintList(this, android.content.res.ColorStateList.valueOf(color(R.color.js8_cfg_group_border)))
                 isChecked = value == cur
-                setOnCheckedChangeListener { _, c -> if (c) draft.set(item.field, value) }
-                if (value in item.disabled) { isEnabled = false; alpha = 0.5f }
+                setOnCheckedChangeListener { _, c ->
+                    if (!c) return@setOnCheckedChangeListener
+                    draft.set(item.field, value)
+                    if (item.field.key in Js8SettingsSchema.ACTIVE_TRIGGERS) content.post { render() }
+                }
+                if (value in item.disabled || value in item.greyed(draft)) { isEnabled = false; alpha = 0.5f }
             })
         }
         box.addView(rg)
@@ -1251,6 +1280,10 @@ class Js8SettingsFragment : Fragment() {
                 activityVm().changed(); toast("All Activity cleared")
             }
             "reset_window_sizes" -> { Js8LineDividers.reset(draft.prefs); toast("Window sizes reset") }
+            "copyright" -> AlertDialog.Builder(requireContext()).setMessage(Js8MainFragment.COPYRIGHT_NOTICE)
+                .setPositiveButton(android.R.string.ok, null).show()
+            "check_updates" -> Js8Updates.check(requireActivity(), true)
+            "user_guide" -> startActivity(Intent(Intent.ACTION_VIEW, android.net.Uri.parse(Js8MainFragment.USER_GUIDE_URL)))
             "exit" -> { // PC File > Exit
                 requireContext().stopService(Intent(requireContext(), JS8EngineService::class.java))
                 requireActivity().finishAndRemoveTask()
@@ -1269,8 +1302,8 @@ class Js8SettingsFragment : Fragment() {
             "test_ptt" -> sendTestPtt(!vm.testPtt)
             // Settings > Log > Export Log...: the Export Options page
             "export_log" -> findNavController().navigate(R.id.navigation_js8_export)
-            // PC Log menu. ALL.TXT is js8call-log.txt on the phone (and its rotated copy)
-            "erase_all_txt" -> confirmErase("Are you sure you want to erase file ALL.TXT? On the phone it is js8call-log.txt.") {
+            // PC Log menu
+            "erase_all_txt" -> confirmErase("Are you sure you want to erase file ALL.TXT?") {
                 requireContext().startService(Intent(requireContext(), JS8EngineService::class.java).setAction(JS8EngineService.ACTION_ERASE_LOG))
             }
             "erase_adi" -> confirmErase("Are you sure you want to erase file js8call_log.adi?") {
@@ -1316,8 +1349,29 @@ class Js8SettingsFragment : Fragment() {
         val ctx = requireContext()
         val p = draft.prefs
         return buildString {
-            appendLine("Easy JS8 ${BuildConfig.VERSION_NAME}")
-            appendLine("Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT}) on ${Build.MANUFACTURER} ${Build.MODEL}")
+            appendLine("Easy JS8 Diagnostics")
+            appendLine("Timestamp: ${java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss", Locale.US).format(java.util.Date())}")
+            appendLine()
+            appendLine("Application")
+            appendLine("  App name:     Easy JS8 ${BuildConfig.VERSION_NAME}")
+            appendLine("  Package:      ${ctx.packageName}")
+            appendLine("  Config file:  ${ctx.packageName}_preferences.xml")
+            appendLine("  Data directory:    ${ctx.filesDir.absolutePath}")
+            appendLine()
+            appendLine("System")
+            appendLine("  OS:           Android ${Build.VERSION.RELEASE} (API ${Build.VERSION.SDK_INT})")
+            appendLine("  Device:       ${Build.MANUFACTURER} ${Build.MODEL}")
+            appendLine("  Kernel:       ${System.getProperty("os.version")}")
+            appendLine("  CPU arch:     ${Build.SUPPORTED_ABIS.joinToString()}")
+            appendLine()
+            appendLine("Selected (from settings)")
+            appendLine("  Input:        ${AudioDevices.selectedName(ctx)}")
+            appendLine("  Output:       ${p.getString("js8cfg_output_device", "default")}")
+            appendLine("  Notification: ${p.getString("js8cfg_notification_output", "default")}")
+            appendLine()
+            appendLine("Audio outputs available:")
+            AudioDevices.outputs(ctx).forEach { appendLine("  ${it.name} (id ${it.id})") }
+            appendLine()
             appendLine("Callsign: ${p.getString("callsign", "")}   Grid: ${p.getString("grid", "")}")
             appendLine("Rig: ${p.getString("rig_type", "none")}  control=${p.getBoolean("rig_control_enabled", false)}")
             appendLine("Audio input: ${AudioDevices.selectedName(ctx)}")
@@ -1400,12 +1454,44 @@ class Js8SettingsFragment : Fragment() {
             list.selectedRowId = null
             list.setRows(rows(sorted))
         }
+        // PC edits cells in place; a touch table opens the same fields filled in
+        list.onRowLongClick = { row, _ ->
+            val i = row.id.toInt()
+            insertFrequency(current().getOrNull(i)) { edited -> refresh(current().filterIndexed { n, _ -> n != i } + edited) }
+        }
         val col = column()
         val buttons = LinearLayout(requireContext()).apply { orientation = LinearLayout.HORIZONTAL }
         buttons.addView(button("Insert ...") { insertFrequency { refresh(current() + it) } }, LinearLayout.LayoutParams(0, px(30), 1f))
         buttons.addView(button("Delete") {
             val sel = list.selectedRowId?.toIntOrNull() ?: return@button
             refresh(current().filterIndexed { i, _ -> i != sel })
+        }, LinearLayout.LayoutParams(0, px(30), 1f).apply { marginStart = px(6) })
+        val files = LinearLayout(requireContext()).apply { orientation = LinearLayout.HORIZONTAL }
+        files.addView(button("Load ...") {
+            frequencyFile = { loaded ->
+                if (loaded.isNotEmpty() && current().isEmpty()) refresh(loaded)
+                else if (loaded.isNotEmpty()) AlertDialog.Builder(requireContext()).setTitle("Replace Working Frequencies")
+                    .setMessage("Are you sure you want to discard your current working frequencies and replace them with the loaded ones?")
+                    .setPositiveButton("Yes") { _, _ -> refresh(loaded) }.setNegativeButton("No", null).show()
+            }
+            pickFrequencies.launch(arrayOf("*/*"))
+        }, LinearLayout.LayoutParams(0, px(30), 1f))
+        files.addView(button("Save as ...") {
+            val all = current()
+            val selected = list.selectedRowId?.toIntOrNull()?.let { all.getOrNull(it) }
+            fun save(items: List<Js8SettingsSchema.FrequencyItem>) {
+                frequencySave = Js8Qrg.write(items)
+                saveFrequencies.launch("frequencies.qrg")
+            }
+            if (selected == null) save(all)
+            else AlertDialog.Builder(requireContext()).setTitle("Only Save Selected  Working Frequencies")
+                .setMessage("Are you sure you want to save only the working frequencies that are currently selected? Click No to save all.")
+                .setPositiveButton("Yes") { _, _ -> save(listOf(selected)) }
+                .setNegativeButton("No") { _, _ -> save(all) }.show()
+        }, LinearLayout.LayoutParams(0, px(30), 1f).apply { marginStart = px(6) })
+        files.addView(button("Merge ...") {
+            frequencyFile = { loaded -> refresh((current() + loaded).distinct()) } // PC: only rows not in the table
+            pickFrequencies.launch(arrayOf("*/*"))
         }, LinearLayout.LayoutParams(0, px(30), 1f).apply { marginStart = px(6) })
         buttons.addView(button("Reset") {
             AlertDialog.Builder(requireContext()).setTitle("Reset Working Frequencies")
@@ -1414,12 +1500,29 @@ class Js8SettingsFragment : Fragment() {
                 .setNegativeButton("No", null).show()
         }, LinearLayout.LayoutParams(0, px(30), 1f).apply { marginStart = px(6) })
         col.addView(buttons)
+        col.addView(files, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = px(6) })
         col.addView(list)
         return col
     }
 
-    /** PC FrequencyDialog "Add Frequency". */
-    private fun insertFrequency(onAdd: (Js8SettingsSchema.FrequencyItem) -> Unit) {
+    private var frequencyFile: ((List<Js8SettingsSchema.FrequencyItem>) -> Unit)? = null
+    private var frequencySave = ByteArray(0)
+    private val pickFrequencies = registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.OpenDocument()) { uri ->
+        if (uri != null) requireContext().contentResolver.openInputStream(uri)?.use { s ->
+            try {
+                frequencyFile?.invoke(Js8Qrg.read(s.readBytes()))
+            } catch (e: Js8Qrg.BadFile) {
+                AlertDialog.Builder(requireContext()).setTitle("Not a valid frequencies file").setMessage(e.message)
+                    .setPositiveButton(android.R.string.ok, null).show()
+            }
+        }
+    }
+    private val saveFrequencies = registerForActivityResult(androidx.activity.result.contract.ActivityResultContracts.CreateDocument("application/octet-stream")) { uri ->
+        if (uri != null) requireContext().contentResolver.openOutputStream(uri)?.use { it.write(frequencySave) }
+    }
+
+    /** PC FrequencyDialog "Add Frequency"; with [item], the same fields for an edit. */
+    private fun insertFrequency(item: Js8SettingsSchema.FrequencyItem? = null, onAdd: (Js8SettingsSchema.FrequencyItem) -> Unit) {
         val box = column().apply { setPadding(px(16), px(8), px(16), 0) }
         fun title(name: String) = box.addView(label(name).apply { setTextColor(Color.BLACK) })
         fun spinner(items: List<String>) = android.widget.Spinner(requireContext()).apply {
@@ -1427,9 +1530,12 @@ class Js8SettingsFragment : Fragment() {
             box.addView(this)
         }
         title("IARU Region:")
-        val region = spinner(listOf("All", "Region 1", "Region 2", "Region 3"))
+        val regions = listOf("All", "Region 1", "Region 2", "Region 3")
+        val region = spinner(regions)
         title("Mode:")
-        val mode = spinner(listOf("JS8"))
+        val modes = listOf("All", "JS8")
+        val mode = spinner(modes)
+        mode.setSelection(1)
         title("Frequency (MHz):")
         val mhz = styledField(EditText(requireContext())).apply {
             inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL
@@ -1437,7 +1543,13 @@ class Js8SettingsFragment : Fragment() {
         } as EditText
         title("Description:")
         val desc = styledField(EditText(requireContext())).apply { inputType = InputType.TYPE_CLASS_TEXT; box.addView(this) } as EditText
-        val dialog = AlertDialog.Builder(requireContext()).setTitle("Add Frequency").setView(box)
+        item?.let {
+            region.setSelection(regions.indexOf(it.region).coerceAtLeast(0))
+            mode.setSelection(modes.indexOf(it.mode).coerceAtLeast(0))
+            mhz.setText(String.format(Locale.US, "%.6f", it.hz / 1_000_000.0))
+            desc.setText(it.description)
+        }
+        val dialog = AlertDialog.Builder(requireContext()).setTitle(if (item == null) "Add Frequency" else "Edit Frequency").setView(ScrollView(requireContext()).apply { addView(box) })
             .setPositiveButton(android.R.string.ok, null).setNegativeButton(android.R.string.cancel, null).create()
         dialog.setCanceledOnTouchOutside(false)
         dialog.setOnShowListener {
@@ -1508,6 +1620,12 @@ class Js8SettingsFragment : Fragment() {
             list.selectedRowId = null
             list.setRows(rows(items))
         }
+        list.onRowLongClick = { row, _ ->
+            val i = row.id.toInt()
+            insertSchedule(current().getOrNull(i)) { line ->
+                refresh((current().filterIndexed { n, _ -> n != i } + line).sortedBy { it.split('|').getOrElse(1) { "" } })
+            }
+        }
         val col = column()
         val buttons = LinearLayout(requireContext()).apply { orientation = LinearLayout.HORIZONTAL }
         buttons.addView(button("Insert ...") { insertSchedule { line ->
@@ -1527,11 +1645,16 @@ class Js8SettingsFragment : Fragment() {
             })
         }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, px(30)).apply { topMargin = px(6) })
         col.addView(list)
+        // PC stations_table_view: enabled by Automatically switch bands / frequencies at specific times of day
+        val on = (draft.values["js8cfg_auto_switch_bands"] ?: draft.prefs.getBoolean("js8cfg_auto_switch_bands", false).toString()) == "true"
+        fun grey(v: View) { v.isEnabled = on; (v as? ViewGroup)?.let { g -> (0 until g.childCount).forEach { grey(g.getChildAt(it)) } } }
+        grey(col)
+        col.alpha = if (on) 1f else 0.45f
         return col
     }
 
-    /** PC StationDialog "Add Schedule". The band comes from the frequency, as the PC saves it. */
-    private fun insertSchedule(onAdd: (String) -> Unit) {
+    /** PC StationDialog "Add Schedule"; with [line], the same fields for an edit. The band comes from the frequency, as the PC saves it. */
+    private fun insertSchedule(line: String? = null, onAdd: (String) -> Unit) {
         val box = column().apply { setPadding(px(16), px(8), px(16), 0) }
         fun field(name: String, type: Int): EditText {
             box.addView(label(name).apply { setTextColor(Color.BLACK) })
@@ -1543,7 +1666,11 @@ class Js8SettingsFragment : Fragment() {
         val at = field("Switch at (UTC):", time)
         val until = field("Until (UTC):", time)
         val desc = field("Description:", InputType.TYPE_CLASS_TEXT)
-        val dialog = AlertDialog.Builder(requireContext()).setTitle("Add Schedule").setView(box)
+        line?.split('|', limit = 4)?.let { p ->
+            mhz.setText(String.format(Locale.US, "%.6f", (p[0].toLongOrNull() ?: 0L) / 1_000_000.0))
+            at.setText(p.getOrElse(1) { "" }); until.setText(p.getOrElse(2) { "" }); desc.setText(p.getOrElse(3) { "" })
+        }
+        val dialog = AlertDialog.Builder(requireContext()).setTitle(if (line == null) "Add Schedule" else "Edit Schedule").setView(ScrollView(requireContext()).apply { addView(box) })
             .setPositiveButton(android.R.string.ok, null).setNegativeButton(android.R.string.cancel, null).create()
         dialog.setCanceledOnTouchOutside(false)
         dialog.setOnShowListener {
@@ -1581,6 +1708,25 @@ class Js8SettingsFragment : Fragment() {
         fun refresh(items: List<String>) {
             draft.values[key] = items.joinToString("\n")
             list.setRows(items.mapIndexed { i, m -> Js8TableView.Row("$i", mapOf("msg" to m)) })
+        }
+        // PC RearrangableMacrosModel: press and hold, then drag, moves a row
+        list.onRowsMoved = { order ->
+            val items = current()
+            refresh(order.mapNotNull { items.getOrNull(it.toInt()) })
+        }
+        // PC edits in place on a double click; a touch table opens the text in a box
+        list.onRowDoubleClick = { row ->
+            val i = row.id.toInt()
+            val items = current()
+            val edit = styledField(EditText(requireContext())).apply {
+                inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
+            } as EditText
+            edit.setText(items[i])
+            AlertDialog.Builder(requireContext()).setTitle("Saved Message").setView(edit)
+                .setPositiveButton(android.R.string.ok) { _, _ ->
+                    val t = edit.text.toString().trim().uppercase(Locale.US)
+                    if (t.isNotEmpty()) { items[i] = t; refresh(items) }
+                }.setNegativeButton(android.R.string.cancel, null).show()
         }
         addRow.addView(button("Add") {
             val t = input.text.toString().trim().uppercase(Locale.US)
@@ -1677,6 +1823,28 @@ class Js8SettingsFragment : Fragment() {
         }
     }
 
+    /** PC QColorDialog: Red, Green, Blue sliders with a sample, any colour. */
+    private fun pickColor(title: String, start: String?, onPick: (String) -> Unit) {
+        val first = start?.let { runCatching { Color.parseColor(it) }.getOrNull() } ?: Color.WHITE
+        val box = column().apply { setPadding(px(16), px(8), px(16), 0) }
+        val sample = View(requireContext())
+        box.addView(sample, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, px(36)))
+        val bars = listOf("Red" to Color.red(first), "Green" to Color.green(first), "Blue" to Color.blue(first)).map { (name, v) ->
+            box.addView(label(name).apply { setTextColor(Color.BLACK); setPadding(0, px(6), 0, 0) })
+            android.widget.SeekBar(requireContext()).apply { max = 255; progress = v; box.addView(this) }
+        }
+        fun chosen() = Color.rgb(bars[0].progress, bars[1].progress, bars[2].progress)
+        sample.setBackgroundColor(first)
+        bars.forEach { it.setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
+            override fun onProgressChanged(s: android.widget.SeekBar, p: Int, user: Boolean) = sample.setBackgroundColor(chosen())
+            override fun onStartTrackingTouch(s: android.widget.SeekBar) {}
+            override fun onStopTrackingTouch(s: android.widget.SeekBar) {}
+        }) }
+        AlertDialog.Builder(requireContext()).setTitle(title).setView(box)
+            .setPositiveButton(android.R.string.ok) { _, _ -> onPick(String.format("#%06X", chosen() and 0xFFFFFF)) }
+            .setNegativeButton(android.R.string.cancel, null).show()
+    }
+
     private val palette = listOf(
         "#FFFFFF", "#000000", "#1E1E1E", "#3C3C3C", "#808080", "#C0C0C0",
         "#FFEAA7", "#FFFFE0", "#DDEEFF", "#A5CDFF", "#6699FF", "#003EAA",
@@ -1715,12 +1883,21 @@ class Js8SettingsFragment : Fragment() {
             paint()
             row.addView(button(lab.substringAfter(": ")) {
                 if (k.endsWith("_font")) {
-                    val sizes = (8..20).map { it.toString() }
-                    AlertDialog.Builder(requireContext()).setTitle("Font size")
-                        .setItems(sizes.map { "$it pt" }.toTypedArray()) { _, w -> draft.values[key] = sizes[w]; paint() }.show()
+                    // PC QFontDialog: family, style, size
+                    AlertDialog.Builder(requireContext()).setTitle("Font").setItems(FONT_FAMILIES.toTypedArray()) { _, f ->
+                        AlertDialog.Builder(requireContext()).setTitle("Font style").setItems(FONT_STYLES.toTypedArray()) { _, s ->
+                            val sizes = (8..20).map { it.toString() }
+                            AlertDialog.Builder(requireContext()).setTitle("Font size")
+                                .setItems(sizes.map { "$it pt" }.toTypedArray()) { _, w ->
+                                    draft.values[key] = sizes[w]
+                                    draft.values["${key}_family"] = FONT_FAMILIES[f]
+                                    draft.values["${key}_style"] = FONT_STYLES[s]
+                                    paint()
+                                }.show()
+                        }.show()
+                    }.show()
                 } else {
-                    AlertDialog.Builder(requireContext()).setTitle(lab)
-                        .setItems(palette.toTypedArray()) { _, w -> draft.values[key] = palette[w]; paint() }.show()
+                    pickColor(lab, draft.values[key] ?: draft.prefs.getString(key, null)) { draft.values[key] = it; paint() }
                 }
             }, LinearLayout.LayoutParams(0, px(28), 1f))
             row.addView(sample, LinearLayout.LayoutParams(px(110), ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginStart = px(8) })

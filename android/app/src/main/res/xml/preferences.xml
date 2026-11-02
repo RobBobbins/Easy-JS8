@@ -162,7 +162,7 @@
                 app:key="rig_serial_baud"
                 app:title="@string/settings_hamlib_baud_rate"
                 app:summary="@string/settings_hamlib_baud_rate_summary"
-                app:defaultValue="9600"
+                app:defaultValue="4800"
                 app:useSimpleSummaryProvider="true"
                 app:iconSpaceReserved="false" />
 
@@ -233,7 +233,7 @@
             app:key="psk_reporter"
             app:title="@string/settings_psk_reporter"
             app:summary="@string/settings_psk_reporter_summary"
-            app:defaultValue="false"
+            app:defaultValue="true"
             app:iconSpaceReserved="false" />
 
         <!-- TODO: Enable when APRS-IS support is implemented. -->
@@ -242,7 +242,7 @@
             app:key="aprs_is"
             app:title="@string/settings_aprs_is"
             app:summary="@string/settings_aprs_is_summary"
-            app:defaultValue="false"
+            app:defaultValue="true"
             app:iconSpaceReserved="false" />
         -->
 
@@ -285,7 +285,7 @@
             app:key="log_messages_to_file"
             app:title="@string/settings_log_messages"
             app:summary="@string/settings_log_messages_summary"
-            app:defaultValue="false"
+            app:defaultValue="true"
             app:iconSpaceReserved="false" />
 
     </PreferenceCategory>

@@ -31,6 +31,7 @@
             <!-- Frequency and Offset moved to the Settings window, and the ⋮ menu's items
                  too (Rob, 2026-10-19): callsign over clock -->
             <include
+                android:id="@+id/js8_callclock_view"
                 layout="@layout/js8_call_clock_block"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
@@ -46,6 +47,7 @@
 
         <!-- 2. Band Activity | Call Activity -->
         <LinearLayout
+            android:id="@+id/js8_lists_row"
             android:layout_width="match_parent"
             android:layout_height="211dp"
             android:layout_marginTop="8dp"
@@ -197,6 +199,7 @@
 
         <!-- 7. Waterfall -->
         <include
+            android:id="@+id/js8_waterfall_view"
             layout="@layout/js8_waterfall_block"
             android:layout_width="match_parent"
             android:layout_height="277dp"
@@ -204,6 +207,7 @@
 
         <!-- 8. Waterfall Controls -->
         <include
+            android:id="@+id/js8_wf_controls_view"
             layout="@layout/js8_waterfall_controls"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"

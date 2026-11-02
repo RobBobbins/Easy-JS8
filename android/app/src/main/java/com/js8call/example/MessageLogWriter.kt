@@ -22,9 +22,12 @@ class MessageLogWriter(private val context: Context) {
 
     private val resolver = context.applicationContext.contentResolver
     private val executor = Executors.newSingleThreadExecutor()
-    private val timeFormatter = SimpleDateFormat(TIMESTAMP_FORMAT, Locale.US).apply {
-        timeZone = TimeZone.getDefault()
+    private val dayFormatter = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply {
+        timeZone = TimeZone.getTimeZone("UTC")
     }
+    /** Day of the last line; the PC's m_RxLog writes a date and frequency line when the day turns. */
+    private var lastDay = ""
+    private var lastDial = 0L
 
     private val directedTimeFormatter = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).apply {
         timeZone = TimeZone.getTimeZone("UTC")
@@ -43,11 +46,11 @@ class MessageLogWriter(private val context: Context) {
         executor.shutdown()
     }
 
-    /** Erase ALL.TXT: the log and its rotated copy. The next line starts a new file. */
+    /** Erase ALL.TXT. The next line starts a new file. */
     fun erase() {
         executor.execute {
             logTarget = null
-            for (name in listOf(LOG_NAME, LOG_BACKUP_NAME)) {
+            for (name in listOf(LOG_NAME)) {
                 try {
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                         findMediaStoreEntry(name)?.let { resolver.delete(it, null, null) }
@@ -62,21 +65,35 @@ class MessageLogWriter(private val context: Context) {
         }
     }
 
-    fun logRx(text: String, snr: Int, freqHz: Float, mode: Int, from: String?) {
+    /**
+     * PC writeAllTxt: "yyyy-MM-dd hh:mm:ss snr dt offset mode  frame         bits   message", UTC.
+     * The engine hands the app decoded text, not the 12-character frame, so the frame column holds
+     * its first 12 characters.
+     */
+    fun logRx(utcMs: Long, dialHz: Long, text: String, snr: Int, dt: Float, offset: Int, modeChar: String, bits: Int) {
         if (!enabled) return
-        val timestamp = formatTimestamp()
-        val fromPart = if (!from.isNullOrBlank()) " FROM=$from" else ""
-        val line = "$timestamp RX$fromPart SNR=$snr FREQ=${formatFrequency(freqHz.toDouble())} MODE=$mode TEXT=\"${sanitizeText(text)}\""
-        enqueue(line)
+        val line = String.format(Locale.US, "%s %3d %4.1f %4d %s  %-12s         %d   %s",
+            directedTimeFormatter.format(Date(utcMs)), snr, dt, offset, modeChar, text.take(12), bits, text)
+        enqueue(line, utcMs, dialHz)
     }
 
-    fun logTx(text: String, to: String?, freqHz: Double, mode: Int) {
+    /** PC write_transmit_entry: the start of the period, "Transmitting x MHz  JS8:  message". */
+    fun logTx(utcMs: Long, dialHz: Long, periodSec: Int, text: String) {
         if (!enabled) return
-        val timestamp = formatTimestamp()
-        val toPart = if (!to.isNullOrBlank()) " TO=$to" else ""
-        val line = "$timestamp TX$toPart FREQ=${formatFrequency(freqHz)} MODE=$mode TEXT=\"${sanitizeText(text)}\""
-        enqueue(line)
+        val start = utcMs - (utcMs / 1000 % periodSec) * 1000
+        enqueue(directedTimeFormatter.format(Date(start)) + "  Transmitting ${mhz(dialHz)} MHz  JS8:  ${sanitizeText(text)}", utcMs, dialHz)
     }
+
+    /** PC write_frequency_entry: a new dial frequency, below 30 MHz only. */
+    fun logFrequency(utcMs: Long, dialHz: Long) {
+        if (!enabled || dialHz >= 30_000_000L || dialHz == lastDial) return
+        lastDial = dialHz
+        lastDay = dayFormatter.format(Date(utcMs))
+        enqueue(directedTimeFormatter.format(Date(utcMs)) + "  ${mhz(dialHz)} MHz  JS8", utcMs, dialHz)
+    }
+
+    /** qSetRealNumberPrecision(12): no trailing zeros. */
+    private fun mhz(dialHz: Long) = java.math.BigDecimal(dialHz).movePointLeft(6).stripTrailingZeros().toPlainString()
 
     /** PC writeMsgTxt: DIRECTED.TXT, UTC date, dial MHz, offset, SNR and text, tab separated. */
     fun logDirected(dialHz: Long, offset: Int, snr: String, text: String) {
@@ -98,10 +115,14 @@ class MessageLogWriter(private val context: Context) {
         }
     }
 
-    private fun enqueue(line: String) {
+    private fun enqueue(line: String, utcMs: Long, dialHz: Long) {
         if (!enabled) return
+        val day = dayFormatter.format(Date(utcMs))
+        val header = if (day != lastDay) directedTimeFormatter.format(Date(utcMs)) + "  ${mhz(dialHz)} MHz  JS8" else null
+        lastDay = day
         executor.execute {
             try {
+                header?.let { appendLine(it) }
                 appendLine(line)
             } catch (e: Exception) {
                 Log.w(TAG, "Failed writing log line", e)
@@ -112,8 +133,7 @@ class MessageLogWriter(private val context: Context) {
     private fun appendLine(line: String) {
         if (!enabled) return
         val bytes = (line + "\n").toByteArray(Charsets.UTF_8)
-        var target = ensureLogTarget() ?: return
-        target = rotateIfNeeded(target, bytes.size) ?: return
+        val target = ensureLogTarget() ?: return
         when (target) {
             is LogTarget.MediaStoreTarget -> writeToMediaStore(target.uri, bytes)
             is LogTarget.FileTarget -> writeToFile(target.file, bytes)
@@ -157,24 +177,6 @@ class MessageLogWriter(private val context: Context) {
         return LogTarget.FileTarget(file)
     }
 
-    private fun rotateIfNeeded(target: LogTarget, newBytes: Int): LogTarget? {
-        val size = getSize(target)
-        if (size + newBytes <= LOG_MAX_BYTES) return target
-        when (target) {
-            is LogTarget.MediaStoreTarget -> rotateMediaStore(target.uri)
-            is LogTarget.FileTarget -> rotateFile(target.file)
-        }
-        logTarget = null
-        return ensureLogTarget()
-    }
-
-    private fun getSize(target: LogTarget): Long {
-        return when (target) {
-            is LogTarget.MediaStoreTarget -> queryMediaStoreSize(target.uri)
-            is LogTarget.FileTarget -> target.file.length()
-        }
-    }
-
     private fun writeToMediaStore(uri: Uri, bytes: ByteArray) {
         val stream = resolver.openOutputStream(uri, "wa") ?: resolver.openOutputStream(uri)
         if (stream == null) {
@@ -186,28 +188,6 @@ class MessageLogWriter(private val context: Context) {
 
     private fun writeToFile(file: File, bytes: ByteArray) {
         FileOutputStream(file, true).use { it.write(bytes) }
-    }
-
-    private fun rotateMediaStore(uri: Uri) {
-        try {
-            findMediaStoreEntry(LOG_BACKUP_NAME)?.let { resolver.delete(it, null, null) }
-            val values = ContentValues().apply {
-                put(MediaStore.MediaColumns.DISPLAY_NAME, LOG_BACKUP_NAME)
-            }
-            resolver.update(uri, values, null, null)
-        } catch (e: Exception) {
-            Log.w(TAG, "Failed rotating MediaStore log", e)
-        }
-    }
-
-    private fun rotateFile(file: File) {
-        val backup = File(file.parentFile, LOG_BACKUP_NAME)
-        if (backup.exists() && !backup.delete()) {
-            Log.w(TAG, "Failed deleting backup log: ${backup.absolutePath}")
-        }
-        if (file.exists() && !file.renameTo(backup)) {
-            Log.w(TAG, "Failed rotating log file: ${file.absolutePath}")
-        }
     }
 
     private fun findMediaStoreEntry(displayName: String): Uri? {
@@ -242,27 +222,6 @@ class MessageLogWriter(private val context: Context) {
         }
     }
 
-    private fun queryMediaStoreSize(uri: Uri): Long {
-        resolver.query(
-            uri,
-            arrayOf(MediaStore.MediaColumns.SIZE),
-            null,
-            null,
-            null
-        )?.use { cursor ->
-            if (cursor.moveToFirst()) {
-                return cursor.getLong(0)
-            }
-        }
-        return 0L
-    }
-
-    private fun formatTimestamp(): String = timeFormatter.format(Date())
-
-    private fun formatFrequency(freqHz: Double): String {
-        return String.format(Locale.US, "%.1f", freqHz)
-    }
-
     private fun sanitizeText(text: String): String {
         val normalized = text.replace(Regex("\\s+"), " ").trim()
         return normalized.replace("\"", "\\\"")
@@ -276,11 +235,8 @@ class MessageLogWriter(private val context: Context) {
     private companion object {
         private const val TAG = "MessageLogWriter"
         private const val LOG_DIR = "JS8CallLogs"
-        private const val LOG_NAME = "js8call-log.txt"
-        private const val LOG_BACKUP_NAME = "js8call-log.1.txt"
+        private const val LOG_NAME = "ALL.TXT"
         private const val DIRECTED_NAME = "DIRECTED.TXT"
-        private const val LOG_MAX_BYTES = 10L * 1024L * 1024L
-        private const val TIMESTAMP_FORMAT = "yyyy-MM-dd HH:mm:ss Z"
         private val RELATIVE_PATH = Environment.DIRECTORY_DOWNLOADS + "/JS8CallLogs/"
     }
 }

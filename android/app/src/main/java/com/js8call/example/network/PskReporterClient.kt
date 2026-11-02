@@ -11,8 +11,12 @@ import java.util.Locale
 import kotlin.random.Random
 
 class PskReporterClient(
-    private val programId: String
+    private val programId: String,
+    private val host: String = HOST
 ) {
+    /** PC pskReporter sendError: the status bar message. */
+    var onUnavailable: (() -> Unit)? = null
+
     private data class Spot(
         val call: String,
         val grid: String,
@@ -150,12 +154,13 @@ class PskReporterClient(
         if (socket != null) return
         try {
             val udpSocket = DatagramSocket()
-            udpSocket.connect(InetSocketAddress(HOST, PORT))
+            udpSocket.connect(InetSocketAddress(host, PORT))
             socket = udpSocket
             sendDescriptors = 3
-            Log.d(TAG, "PSKReporter socket opened to $HOST:$PORT")
+            Log.d(TAG, "PSKReporter socket opened to $host:$PORT")
         } catch (e: Exception) {
             Log.w(TAG, "PSKReporter socket error", e)
+            onUnavailable?.invoke()
             socket = null
         }
     }
@@ -279,6 +284,7 @@ class PskReporterClient(
             return true
         } catch (e: Exception) {
             Log.w(TAG, "PSKReporter send failed", e)
+            onUnavailable?.invoke()
             return false
         }
     }
@@ -499,7 +505,7 @@ class PskReporterClient(
 
     companion object {
         private const val TAG = "PskReporter"
-        private const val HOST = "report.pskreporter.info"
+        const val HOST = "report.pskreporter.info"
         private const val PORT = 4739
         private const val IPFIX_VERSION = 10
         private const val TEMPLATE_ID_SENDER = 0x50e3

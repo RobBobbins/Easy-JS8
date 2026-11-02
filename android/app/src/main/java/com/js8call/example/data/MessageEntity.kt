@@ -47,7 +47,10 @@ data class MessageEntity(
     val isRead: Boolean = false,
 
     /** Relay path if message was relayed (e.g., "CALL1>CALL2") */
-    val relayPath: String? = null
+    val relayPath: String? = null,
+
+    /** Dial frequency in Hz when it was heard (PC inbox DIAL), null on messages stored before it was kept */
+    val dialHz: Long? = null
 ) {
     companion object {
         const val DIRECTION_INCOMING = 0

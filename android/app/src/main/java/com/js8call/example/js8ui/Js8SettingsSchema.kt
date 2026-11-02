@@ -35,7 +35,9 @@ object Js8SettingsSchema {
         /** Values shown greyed out. */
         val disabled: Set<String> = emptySet(),
         /** One under another sideways too (long labels). */
-        val vertical: Boolean = false
+        val vertical: Boolean = false,
+        /** Values greyed out by the unsaved settings (PC set_rig_invariants). */
+        val greyed: (Draft) -> Set<String> = { emptySet() }
     ) : Item()
     data class Note(val text: String) : Item()
     data class ButtonRow(val buttons: List<Pair<String, String>>) : Item() // label to action id
@@ -116,6 +118,8 @@ object Js8SettingsSchema {
         val base = listOf(
             "None" to "none",
             "Hamlib NET rigctl / FLRig (network)" to "network",
+            "DX Lab Suite Commander" to "dxlab",
+            "Ham Radio Deluxe" to "hrd",
             "QRP Labs QMX (direct USB)" to "qmx_serial",
             "truSDX (direct USB)" to "trusdx_serial",
             "BTECH UV-Pro (Bluetooth)" to "btech_uvpro",
@@ -129,6 +133,7 @@ object Js8SettingsSchema {
         if (!p.getBoolean("rig_control_enabled", false)) return "none"
         return when (val t = p.getString("rig_type", "none") ?: "none") {
             "hamlib_usb" -> "hamlib:${p.getString("rig_hamlib_model", "0")}"
+            "network" -> p.getString("rig_network_kind", "rigctl").takeIf { it == "dxlab" || it == "hrd" } ?: t
             else -> t
         }
     }
@@ -138,10 +143,46 @@ object Js8SettingsSchema {
         if (v.startsWith("hamlib:")) {
             e.putString("rig_type", "hamlib_usb")
             e.putString("rig_hamlib_model", v.removePrefix("hamlib:"))
+        } else if (v == "dxlab" || v == "hrd") {
+            e.putString("rig_type", "network")
+            e.putString("rig_network_kind", v)
         } else {
             e.putString("rig_type", v)
+            e.putString("rig_network_kind", "rigctl")
         }
     }
+
+    private fun hamlibModel(d: Draft): HamlibRigCatalog.RigModel? {
+        val v = d.values[RIG] ?: loadRig(d.prefs)
+        if (!v.startsWith("hamlib:")) return null
+        return try { HamlibRigCatalog.model(v.removePrefix("hamlib:")) } catch (_: Throwable) { null }
+    }
+
+    private fun hamlibSerial(d: Draft) = rigIs(d, "hamlib") && hamlibModel(d)?.network != true
+
+    /** PC Capabilities::network: Network Server and Network Port instead of the serial Port. */
+    private fun rigNetwork(d: Draft) = rigIs(d, "network", "dxlab", "hrd") || hamlibModel(d)?.network == true
+
+    private fun pttMethod(d: Draft) = d.values["js8cfg_ptt_method"] ?: d.prefs.getString("js8cfg_ptt_method", "vox")
+
+    /** PC set_rig_invariants, has_CAT_PTT. */
+    private fun catPtt(d: Draft) = when {
+        rigIs(d, "none", "rts_ptt") -> false
+        rigIs(d, "hamlib") -> hamlibModel(d)?.catPtt == true
+        else -> true
+    }
+
+    /** PC has_CAT_PTT_mic_data: NET rigctl and Ham Radio Deluxe; DX Lab no. */
+    private fun micData(d: Draft) = when {
+        rigIs(d, "network", "hrd") -> true
+        rigIs(d, "hamlib") -> hamlibModel(d)?.micData == true
+        else -> false
+    }
+
+    /** PC: RTS is the handshake line while the CAT port itself keys with hardware handshake. */
+    private fun rtsTaken(d: Draft) = hamlibSerial(d) &&
+        (d.values["js8cfg_ptt_port"] ?: d.prefs.getString("js8cfg_ptt_port", "cat")) == "cat" &&
+        (d.values["js8cfg_handshake"] ?: d.prefs.getString("js8cfg_handshake", "default")) == "hardware"
 
     /** PC set_rig_invariants: Test CAT needs a rig, Test PTT also a PTT Method other than VOX. */
     fun rigTestEnabled(d: Draft, action: String): Boolean {
@@ -228,6 +269,8 @@ object Js8SettingsSchema {
             check("js8_table_call_col_labels", "Show Column Labels in Call Activity", true),
             // FT8 signals heard on the JS8 frequency (Rob, 2026-10-19); off = the FT8 decoder doesn't run
             check("js8cfg_show_ft8", "Show FT8 decodes in the Message Window", true),
+            // PC View > Show ...: every layout
+            *Js8PcSplitters.PANELS.map { (key, name) -> check(key, name, true) }.toTypedArray(),
             ButtonRow(listOf("Clear Band Activity" to "clear_band")),
             ButtonRow(listOf("Clear Call Activity" to "clear_call")),
             ButtonRow(listOf("Clear RX Activity" to "clear_rx")),
@@ -235,7 +278,10 @@ object Js8SettingsSchema {
             // Upright and Swipe dividers back to the layout's sizes (Rob, 2026-10-22); PC mode: View menu
             ButtonRow(listOf("Reset Frame Sizes" to "reset_window_sizes")),
             // Menu bar Configurations and File > Exit, for the layouts without a menu bar
-            ButtonRow(listOf("Configurations..." to "configurations", "Exit" to "exit"))
+            ButtonRow(listOf("Configurations..." to "configurations", "Exit" to "exit")),
+            // PC Help menu, for the layouts without a menu bar
+            ButtonRow(listOf("Copyright notice" to "copyright", "Check for Updates" to "check_updates")),
+            ButtonRow(listOf("JS8Call User Guide" to "user_guide"))
         )),
         // From the PC's Log menu (Rob, 2026-10-20): Export Log... opens Export Options
         Section("Log", null, listOf(
@@ -260,7 +306,7 @@ object Js8SettingsSchema {
     const val HB_KEY = "js8cfg_hb"
     const val HB_ACK_KEY = "js8cfg_hb_ack"
     /** Keys whose change can grey or un-grey another setting (ACK). */
-    val ACTIVE_TRIGGERS = setOf(AUTOREPLY_KEY, HB_KEY)
+    val ACTIVE_TRIGGERS = setOf(AUTOREPLY_KEY, HB_KEY, "js8cfg_ptt_method", "js8cfg_handshake", "js8cfg_auto_switch_bands")
 
     const val FREQUENCY_KEY = "last_frequency"
     const val CUSTOM_FREQUENCY_KEY = "custom_frequency_mhz"
@@ -357,7 +403,6 @@ object Js8SettingsSchema {
             Group("Heartbeat Network", listOf(
                 check("js8cfg_heartbeat_anywhere", "Allow heartbeat transmissions outside of heartbeat sub-channel (500Hz - 1000Hz)", false),
                 check("js8cfg_heartbeat_qso_pause", "Pause heartbeat transmissions while in a QSO (i.e., callsign is selected)", true),
-                check("js8cfg_heartbeat_ack_snr", "Send SNR report when acknowledging heartbeats", false),
                 text("js8cfg_hb_blacklist", "Never acknowledge heartbeats from these callsigns (comma separated):", upper = true),
                 check("js8cfg_hb_rate_limit", "Suppress ACK to stations that send heartbeats at less than 55 minute intervals", false)
             )),
@@ -381,16 +426,18 @@ object Js8SettingsSchema {
             Group(null, listOf(
                 Field(RIG, "Rig:", Kind.CHOICE, "none", choices = { c, _ -> rigChoices(c) },
                     load = { p -> loadRig(p) }, save = { e, v, _ -> saveRig(e, v) }),
-                spin("js8cfg_cat_poll_interval", "Poll Interval:", 1, 1.0, 99.0, suffix = " s"),
+                Field("js8cfg_cat_poll_interval", "Poll Interval:", Kind.SPIN, "1", min = 1.0, max = 99.0, step = 1.0, suffix = " s",
+                    active = { d -> !rigIs(d, "none") }),
                 ButtonRow(listOf("Test CAT" to "test_cat", "Test PTT" to "test_ptt"))
             ))
         )),
         Section("Radio", "CAT Control", listOf(
             Group(null, listOf(
                 Field("rig_hamlib_usb_port", "Port:", Kind.CHOICE, "auto", choices = { c, _ -> portChoices(c) },
-                    visible = { d -> rigIs(d, "hamlib", "rts_ptt") }),
-                Field("rigctld_host", "Network Server:", Kind.TEXT, "localhost", visible = { d -> rigIs(d, "network") }),
-                Field("rigctld_port", "Network Port:", Kind.TEXT, "4532", visible = { d -> rigIs(d, "network") }),
+                    visible = { d -> hamlibSerial(d) || rigIs(d, "rts_ptt") }),
+                Field("rigctld_host", "Network Server:", Kind.TEXT, "localhost", visible = { d -> rigNetwork(d) }),
+                // PC: blank = the service's default port (rigctl 4532, Commander 52002, HRD 7809)
+                Field("rigctld_port", "Network Port:", Kind.TEXT, "", visible = { d -> rigNetwork(d) }),
                 Field("qmx_band_profile", "QMX Bands:", Kind.CHOICE, "low",
                     choices = { _, _ -> listOf("80/60/40/30/20m" to "low", "20/17/15/12/11/10m" to "high", "60/40/30/20/17/15m" to "mixed") },
                     visible = { d -> rigIs(d, "qmx_serial") }),
@@ -414,18 +461,20 @@ object Js8SettingsSchema {
                     choice("js8cfg_force_dtr", "DTR:", "", listOf("" to "", "High" to "high", "Low" to "low")),
                     choice("js8cfg_force_rts", "RTS:", "", listOf("" to "", "High" to "high", "Low" to "low"))
                 ))
-            ), visible = { d -> rigIs(d, "hamlib", "rts_ptt") })
+            ), visible = { d -> hamlibSerial(d) || rigIs(d, "rts_ptt") })
         )),
         Section("Radio", "Rig Options", listOf(
             RadioGroup(radio("js8cfg_ptt_method", "vox"), "PTT Method",
-                listOf("VOX" to "vox", "DTR" to "dtr", "CAT" to "cat", "RTS" to "rts")),
+                listOf("VOX" to "vox", "DTR" to "dtr", "CAT" to "cat", "RTS" to "rts"),
+                greyed = { d -> setOfNotNull("cat".takeUnless { catPtt(d) }, "rts".takeIf { rtsTaken(d) }) }),
             // PC set_rig_invariants: only for DTR and RTS. USB ports only; "CAT" = the rig's own port
             Field("js8cfg_ptt_port", "PTT Port:", Kind.CHOICE, "cat",
                 choices = { c, _ -> portChoices(c).filter { it.second.startsWith("android-usb:") } + ("CAT" to "cat") },
                 active = { d -> (d.values["js8cfg_ptt_method"] ?: d.prefs.getString("js8cfg_ptt_method", "vox")) in setOf("dtr", "rts") },
-                visible = { d -> rigIs(d, "hamlib") }),
+                visible = { d -> hamlibSerial(d) }),
             RadioGroup(radio("transmit_mode", "none"), "Mode", listOf("USB" to "usb", "None" to "none", "Data/Pkt" to "usb_data")),
-            RadioGroup(radio("js8cfg_tx_audio_source", "front"), "Transmit Audio Source", listOf("Rear/Data" to "rear", "Front/Mic" to "front")),
+            RadioGroup(radio("js8cfg_tx_audio_source", "front"), "Transmit Audio Source", listOf("Rear/Data" to "rear", "Front/Mic" to "front"),
+                greyed = { d -> if (rigIs(d, "none") || micData(d) && pttMethod(d) == "cat") emptySet() else setOf("rear", "front") }),
             RadioGroup(radio("js8cfg_split", "none"), "Split Operation", listOf("Fake It" to "emulate", "Rig" to "rig", "None" to "none")),
             Group("Advanced", listOf(
                 spin("js8cfg_tx_delay", "Tx delay:", 0.2, 0.1, 0.5, step = 0.1, suffix = "  s", decimals = 1),
@@ -437,7 +486,7 @@ object Js8SettingsSchema {
                 Field("last_audio_device_id", "Input:", Kind.AUDIO_INPUT, "-1"),
                 choice("js8cfg_input_channel", "Input channel:", "Mono", same("Mono", "Left", "Right")),
                 Field("js8cfg_output_device", "Output:", Kind.CHOICE, "default",
-                    choices = { _, _ -> listOf("Phone's current audio output" to "default") }, enabled = false),
+                    choices = { c, _ -> listOf("Phone's current audio output" to "default") + com.js8call.example.ui.AudioDevices.outputs(c).map { it.name to it.id.toString() } }),
                 choice("js8cfg_output_channel", "Output channel:", "Mono", same("Mono", "Left", "Right", "Both"))
             )),
             Group("Notification Soundcard", listOf(
@@ -536,6 +585,7 @@ object Js8SettingsSchema {
     )
 
     /** Saved Messages default list (Configuration.cpp: "TNX 73 GL"). */
+    const val SAVED_PAGE = "Saved Messages"
     const val SAVED_MESSAGES_KEY = "js8cfg_saved_messages"
     const val SAVED_MESSAGES_DEFAULT = "TNX 73 GL"
 

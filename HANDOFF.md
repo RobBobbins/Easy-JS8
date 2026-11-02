@@ -614,8 +614,17 @@ Station window sideways = PC tabs, no About tab.
 
 ## Audit work state (2026-10-31)
 
-- `AUDIT-3.0.3.md`: 54 ticked, 123 open. Nothing committed.
-- Inbox Frequency stays offset Hz: the message store has no dial frequency, the PC format needs a database change. Status label shows "Tx: <typed text>", not the frame being sent; "Decoding" not added.
+- `AUDIT-3.0.3.md` (2026-11-01): 0 open. Nothing committed. The 17 last items and the listed full test pass were seen on S22-Fresh: upright, PC, Pages, FT8Call. Older ticks outside that test list were not all rerun.
+- Fixed during the test pass: multi-row Delete in the Inbox did nothing (selection cleared before it was read); unticking **Automatically switch bands / frequencies at specific times of day** greyed the schedule only after reopening the page (the page now redraws and jumps to the top).
+- Not proven: real FLRig, DX Lab Suite Commander, Ham Radio Deluxe and any radio; fake servers only (scratchpad `fakes.py`, ports 4599, 52002, 7809). Log QSO Start/End word exclusion and Comments as the double-tap target not run.
+- **Where it stands (2026-11-01, end of session):** branch `easy-js8`, all audit work uncommitted in the working copy; commit only when Rob says, push only to `fork`. Waiting on Rob: whether the **Message Window** box on the Log page stays. Then real FLRig, DX Lab Suite Commander, Ham Radio Deluxe, then a real radio on a dummy load.
+- Small faults left: **Secondary Highlight Background** button on Settings > UI has its second line cut off; Inbox Date column clips the last digit on bold rows upright; Frequencies page jumps to the top when the schedule box is ticked.
+- Test helpers from this session are in `C:\Users\Robert\AppData\Local\Temp\claude\E--new-w3bguru-websites-easy-js8\3f7d8426-1099-44c1-bd68-34b39530ba8f\scratchpad`: `u.py`, `inj.py`, `sig.py`, `t.py`, `fakes.py`, `sub.py`. S22-Fresh now has rig None and network on; `psk_reporter` is on, with test values left in place.
+- Test notes: my scroll swipes drag the upright dividers; delete `js8cfg_up_split_*` to reset. S22-Fresh closed once during testing, cause unknown, no crash record. Debug audio feed: ACTION_DEBUG_JS8_PCM, debug builds only.
+- Test paths: fake rig `C:\Users\Robert\AppData\Local\Temp\claude\E--new-w3bguru-websites-easy-js8\99ccad85-68d1-4545-83b4-3b349ad7f132\scratchpad\fakerig.py` (PC port 4599, argument = seconds; app host 10.0.2.2); PC source `...\scratchpad\pc`; S22-Fresh saved prefs `build-env\test\out\prefs.bak.xml`. Wait for rotation before tapping. Git Bash: `export MSYS_NO_PATHCONV=1` before adb paths.
+- ALL.TXT (2026-11-01): `MessageLogWriter.kt` writes the PC lines, no rotation; old `js8call-log.txt` is left where it is. The frame column holds the first 12 decoded characters because the app has no raw frame. Received lines not yet seen: injected decodes bypass that path.
+- Rig Control Error box tested with a fake rigctld on the PC, port 4599: scratchpad script, S22-Fresh prefs restored after.
+- Status label shows "Tx: <typed text>", not the frame being sent; "Decoding" not added.
 - Decoder: PC 3.0.3 frequency and timing tracking, whitening with LLR erasure, soft combining and LDPC feedback are in `core/src/decoder/` (`FrequencyTracker.*`, `whitening_processor.h`, `soft_combiner.h`, `ldpc_feedback.h`: PC files with Qt removed, environment switches at PC defaults).
 - Decoder test (made-up signals, 60 to 100 frames per case, run on S22-Fresh with a test program, 2026-10-31): single frames 1 to 3 of 60 fewer than the old decoder at -18 to -20 dB, one frame repeated 4 times 15 of 60 against 11, CPU about 30% more. Plain noise only, no real HF audio, no phone CPU figure.
 - Injected MSG tests need a checksum over the whole message, for relay including the destination: `K4RDX HI THERE`.

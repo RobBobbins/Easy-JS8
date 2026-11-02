@@ -102,6 +102,22 @@ class HamlibRigControl {
         return nativeGetFrequency(active)
     }
 
+    /** PC HamlibTransceiver::poll: "vfo|split|txHz|mode|ptt", an empty field when the rig can't tell. */
+    @Synchronized
+    fun readState(): String {
+        val active = handle
+        if (active == 0L) return ""
+        return nativeReadState(active)
+    }
+
+    /** Sets the mode of the transmit VFO while in split (PC rig_set_split_mode). */
+    @Synchronized
+    fun setSplitMode(mode: String): Boolean {
+        val active = handle
+        if (active == 0L) return false
+        return nativeSetSplitMode(active, mode)
+    }
+
     @Synchronized
     fun setPtt(enabled: Boolean, rearData: Boolean = false): Boolean {
         val active = handle
@@ -122,6 +138,8 @@ class HamlibRigControl {
         return nativeGetLastError()
     }
 
+    private external fun nativeReadState(handle: Long): String
+    private external fun nativeSetSplitMode(handle: Long, mode: String): Boolean
     private external fun nativeOpen(
         rigModel: Int,
         deviceId: Int,

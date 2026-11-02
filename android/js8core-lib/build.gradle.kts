@@ -56,7 +56,8 @@ android {
         debug {
             externalNativeBuild {
                 cmake {
-                    cppFlags += listOf("-g", "-O0")
+                    // Same speed as release: at -O0 the decoder took a whole core on the emulator
+                    cppFlags += listOf("-g", "-O3")
                     arguments += "-DCMAKE_BUILD_TYPE=Debug"
                 }
             }

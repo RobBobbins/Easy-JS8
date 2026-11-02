@@ -200,7 +200,8 @@ jlong open_rig_with_path(int rig_model,
     return 0;
   }
 
-  int ret = rig_set_conf(rig, path_token, path.c_str());
+  // PC: an empty Network Server leaves the rig's own default address
+  int ret = path.empty() ? RIG_OK : rig_set_conf(rig, path_token, path.c_str());
   if (ret != RIG_OK) {
     rig_cleanup(rig);
     log_error("rig_set_conf failed: ", rigerror(ret));
@@ -455,6 +456,59 @@ Java_com_js8call_core_HamlibRigControl_nativeSetPtt(JNIEnv* /*env*/,
   int ret = rig_set_ptt(handle->rig, RIG_VFO_CURR, enabled == JNI_TRUE ? on : RIG_PTT_OFF);
   if (ret != RIG_OK) {
     log_error("rig_set_ptt failed: ", rigerror(ret));
+  }
+  return ret == RIG_OK ? JNI_TRUE : JNI_FALSE;
+}
+
+// PC HamlibTransceiver::poll. A field stays empty when the rig can't answer, as the PC ignores those.
+extern "C" JNIEXPORT jstring JNICALL
+Java_com_js8call_core_HamlibRigControl_nativeReadState(JNIEnv* env,
+                                                       jobject /*thiz*/,
+                                                       jlong handle_value) {
+  if (!handle_value) return env->NewStringUTF("");
+  auto* handle = reinterpret_cast<HamlibRigHandle*>(handle_value);
+  std::lock_guard<std::mutex> lock(handle->mutex);
+  if (!handle->rig) return env->NewStringUTF("");
+  RIG* rig = handle->rig;
+  std::string vfo_text, split_text, tx_text, mode_text, ptt_text;
+  if (rig->caps->get_vfo) {
+    vfo_t v = RIG_VFO_NONE;
+    if (rig_get_vfo(rig, &v) == RIG_OK) vfo_text = rig_strvfo(v);
+  }
+  split_t split = RIG_SPLIT_OFF;
+  vfo_t tx_vfo = RIG_VFO_NONE;
+  if (rig->caps->get_split_vfo && rig_get_split_vfo(rig, RIG_VFO_CURR, &split, &tx_vfo) == RIG_OK) {
+    split_text = split == RIG_SPLIT_ON ? "1" : "0";
+    freq_t tx = 0;
+    if (split == RIG_SPLIT_ON && rig_get_split_freq(rig, RIG_VFO_CURR, &tx) == RIG_OK) {
+      tx_text = std::to_string(static_cast<long long>(tx));
+    }
+  }
+  rmode_t mode = RIG_MODE_NONE;
+  pbwidth_t width = 0;
+  if (rig_get_mode(rig, RIG_VFO_CURR, &mode, &width) == RIG_OK) mode_text = rig_strrmode(mode);
+  if (rig->caps->get_ptt) {
+    ptt_t ptt = RIG_PTT_OFF;
+    if (rig_get_ptt(rig, RIG_VFO_CURR, &ptt) == RIG_OK) ptt_text = ptt == RIG_PTT_OFF ? "0" : "1";
+  }
+  auto out = vfo_text + "|" + split_text + "|" + tx_text + "|" + mode_text + "|" + ptt_text;
+  return env->NewStringUTF(out.c_str());
+}
+
+extern "C" JNIEXPORT jboolean JNICALL
+Java_com_js8call_core_HamlibRigControl_nativeSetSplitMode(JNIEnv* env,
+                                                          jobject /*thiz*/,
+                                                          jlong handle_value,
+                                                          jstring mode) {
+  if (!handle_value) return JNI_FALSE;
+  auto* handle = reinterpret_cast<HamlibRigHandle*>(handle_value);
+  std::lock_guard<std::mutex> lock(handle->mutex);
+  if (!handle->rig) return JNI_FALSE;
+  rmode_t rmode = parse_mode(jstring_value(env, mode));
+  if (rmode == RIG_MODE_NONE) return JNI_FALSE;
+  int ret = rig_set_split_mode(handle->rig, RIG_VFO_CURR, rmode, RIG_PASSBAND_NOCHANGE);
+  if (ret != RIG_OK) {
+    log_error("rig_set_split_mode failed: ", rigerror(ret));
   }
   return ret == RIG_OK ? JNI_TRUE : JNI_FALSE;
 }

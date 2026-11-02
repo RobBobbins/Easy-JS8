@@ -74,7 +74,8 @@ class MessageRepository(context: Context) {
         text: String,
         snr: Int?,
         frequency: Float?,
-        relayPath: String? = null
+        relayPath: String? = null,
+        dialHz: Long? = null
     ): Long {
         val message = MessageEntity(
             conversationId = if (conversationId.startsWith("@")) conversationId.uppercase() else normalizeCallsign(conversationId),
@@ -86,7 +87,8 @@ class MessageRepository(context: Context) {
             frequency = frequency,
             status = MessageEntity.STATUS_SENT,
             isRead = false,
-            relayPath = relayPath
+            relayPath = relayPath,
+            dialHz = dialHz
         )
         return insertMessage(message)
     }

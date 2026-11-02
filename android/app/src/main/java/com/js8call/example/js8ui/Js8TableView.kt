@@ -36,7 +36,7 @@ class Js8TableView @JvmOverloads constructor(
         private const val MINIMAL_KEY = "js8_table_all_col_minimal_labels"
         /** PC buildColumnLabelMap. */
         private val MINIMAL_LABELS = mapOf("Callsigns" to "Call", "Offset" to "Off", "SNR" to "SN", "Time Delta" to "TD",
-            "Mode Speed" to "Sp", "Distance" to "Dist", "Azimuth" to "Az")
+            "Speed" to "Sp", "Distance" to "Dist", "Azimuth" to "Az")
     }
 
     data class Column(
@@ -75,8 +75,69 @@ class Js8TableView @JvmOverloads constructor(
     var onRowDoubleClick: ((Row) -> Unit)? = null
     /** Press and hold a row (PC right-click): the row and the view to anchor a menu to. */
     var onRowLongClick: ((Row, android.view.View) -> Unit)? = null
+    /** Press and hold below the last row (PC: the menu opens with no row under the mouse). */
+    var onEmptyLongClick: ((android.view.View) -> Unit)? = null
     var selectedRowId: String? = null
         set(value) { field = value; rebindAll() }
+
+    /** Rows picked after [startMultiSelect] or [selectAll]; empty otherwise (the PC's Ctrl and Shift clicks). */
+    private val multiSelected = linkedSetOf<String>()
+    private var multiSelecting = false
+    val selectedRowIds: Set<String> get() = multiSelected.ifEmpty { setOfNotNull(selectedRowId) }
+
+    fun startMultiSelect(firstId: String) {
+        val current = setOfNotNull(selectedRowId)
+        multiSelected.clear()
+        multiSelected += current + firstId
+        multiSelecting = true
+        rebindAll()
+    }
+
+    fun selectAll() {
+        multiSelected.clear()
+        multiSelected += sortedRows.map { it.id }
+        multiSelecting = true
+        rebindAll()
+    }
+
+    fun clearSelection() {
+        multiSelected.clear()
+        multiSelecting = false
+        selectedRowId = null
+    }
+
+    /** Press and hold, then drag, moves a row (Saved Messages); gets the row ids in their new order. */
+    var onRowsMoved: ((List<String>) -> Unit)? = null
+        set(value) {
+            field = value
+            rowDrag.attachToRecyclerView(if (value != null) list else null)
+        }
+
+    private val rowDrag by lazy {
+        androidx.recyclerview.widget.ItemTouchHelper(object : androidx.recyclerview.widget.ItemTouchHelper.SimpleCallback(
+            androidx.recyclerview.widget.ItemTouchHelper.UP or androidx.recyclerview.widget.ItemTouchHelper.DOWN, 0) {
+            private var moved = false
+            override fun onMove(rv: RecyclerView, from: RecyclerView.ViewHolder, to: RecyclerView.ViewHolder): Boolean {
+                val a = from.bindingAdapterPosition
+                val b = to.bindingAdapterPosition
+                if (a < 0 || b < 0) return false
+                sortedRows = sortedRows.toMutableList().apply { add(b, removeAt(a)) }
+                adapter.notifyItemMoved(a, b)
+                moved = true
+                return true
+            }
+            override fun onSwiped(holder: RecyclerView.ViewHolder, direction: Int) {}
+            override fun clearView(rv: RecyclerView, holder: RecyclerView.ViewHolder) {
+                super.clearView(rv, holder)
+                if (!moved) return
+                moved = false
+                sortKey = null // the order is now the dragged one
+                PreferenceManager.getDefaultSharedPreferences(context).edit().remove(sortPref()).apply()
+                val order = sortedRows.map { it.id }
+                post { onRowsMoved?.invoke(order) }
+            }
+        })
+    }
 
     private var columns: List<Column> = emptyList()
     private var rows: List<Row> = emptyList()
@@ -89,8 +150,8 @@ class Js8TableView @JvmOverloads constructor(
     var sortChoices: List<Triple<String, String, Boolean>> = emptyList()
 
     private val dp = resources.displayMetrics.density
-    private val font: Typeface? = ResourcesCompat.getFont(context, R.font.selawik)
-    private val boldFont: Typeface = Typeface.create(font, Typeface.BOLD)
+    private var font: Typeface? = ResourcesCompat.getFont(context, R.font.selawik)
+    private var boldFont: Typeface = Typeface.create(font, Typeface.BOLD)
     private var textSizePx = resources.getDimension(R.dimen.js8_text)
     private val headerHeight = resources.getDimensionPixelSize(R.dimen.js8_list_header_height)
     private var rowHeight = resources.getDimensionPixelSize(R.dimen.js8_list_row_height)
@@ -113,6 +174,17 @@ class Js8TableView @JvmOverloads constructor(
         list.itemAnimator = null
         list.isNestedScrollingEnabled = true
         list.setBackgroundColor(ContextCompat.getColor(context, R.color.js8_list_bg))
+        val emptyPress = android.view.GestureDetector(context, object : android.view.GestureDetector.SimpleOnGestureListener() {
+            override fun onLongPress(e: android.view.MotionEvent) {
+                if (list.findChildViewUnder(e.x, e.y) == null) onEmptyLongClick?.invoke(list)
+            }
+        })
+        list.addOnItemTouchListener(object : RecyclerView.SimpleOnItemTouchListener() {
+            override fun onInterceptTouchEvent(rv: RecyclerView, e: android.view.MotionEvent): Boolean {
+                emptyPress.onTouchEvent(e)
+                return false
+            }
+        })
         inner.addView(header, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, headerHeight))
         inner.addView(list, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
         hScroll.addView(inner, LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.MATCH_PARENT))
@@ -149,6 +221,16 @@ class Js8TableView @JvmOverloads constructor(
         rowHeight = (resources.getDimensionPixelSize(R.dimen.js8_list_row_height) * scale).toInt()
         measure.textSize = px
         header.layoutParams = header.layoutParams.apply { height = (headerHeight * scale).toInt() }
+        measureContents()
+        rebuildHeader()
+    }
+
+    /** Settings > Colors > Font: family and style. */
+    fun setFace(face: Typeface) {
+        if (face == font) return
+        font = face
+        boldFont = Typeface.create(face, Typeface.BOLD)
+        measure.typeface = face
         measureContents()
         rebuildHeader()
     }
@@ -245,9 +327,14 @@ class Js8TableView @JvmOverloads constructor(
         }
     }
 
+    fun labelsShown() = showLabels()
+
     private fun showLabels() = PreferenceManager.getDefaultSharedPreferences(context).getBoolean(labelsKey(), true)
-    private fun minimalLabels() = PreferenceManager.getDefaultSharedPreferences(context).getBoolean(MINIMAL_KEY, false)
+    fun minimalLabels() = PreferenceManager.getDefaultSharedPreferences(context).getBoolean(MINIMAL_KEY, false)
     private fun labelsKey() = "js8_table_${tableKey}_col_labels"
+
+    private fun minimalLabel(label: String) =
+        if (label.startsWith("Callsigns (")) "Call(" + label.substringAfter("(") else MINIMAL_LABELS[label] ?: label
 
     private fun rebuildHeader() {
         header.removeAllViews()
@@ -256,7 +343,7 @@ class Js8TableView @JvmOverloads constructor(
         val widths = columnWidths()
         vis.forEachIndexed { i, col ->
             val label = TextView(context).apply {
-                text = if (minimalLabels()) MINIMAL_LABELS[col.label] ?: col.label else col.label
+                text = if (minimalLabels()) minimalLabel(col.label) else col.label
                 typeface = font
                 setTextSize(TypedValue.COMPLEX_UNIT_PX, textSizePx)
                 setTextColor(ContextCompat.getColor(context, R.color.js8_list_header_text))
@@ -374,7 +461,7 @@ class Js8TableView @JvmOverloads constructor(
                     }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.MATCH_PARENT))
                 }
             }
-            val selected = row.id == selectedRowId
+            val selected = if (multiSelected.isEmpty()) row.id == selectedRowId else row.id in multiSelected
             // Selected row: desktop colorTableHighlight #3498db
             rv.setBackgroundColor(if (selected) selectedBg else row.bg ?: 0)
             val face = if (row.bold) boldFont else font
@@ -396,7 +483,11 @@ class Js8TableView @JvmOverloads constructor(
             }
             rv.setOnClickListener {
                 val now = System.currentTimeMillis()
-                if (lastClickId == row.id && now - lastClickTime < 400) {
+                if (multiSelecting) {
+                    if (!multiSelected.remove(row.id)) multiSelected += row.id
+                    if (multiSelected.isEmpty()) multiSelecting = false
+                    rebindAll()
+                } else if (lastClickId == row.id && now - lastClickTime < 400) {
                     onRowDoubleClick?.invoke(row)
                 } else {
                     selectedRowId = if (selectedRowId == row.id) null else row.id

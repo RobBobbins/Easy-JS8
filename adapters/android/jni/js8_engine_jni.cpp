@@ -48,6 +48,7 @@ JNIEXPORT void JNICALL Java_com_js8call_core_JS8Engine_nativeStopTransmit(JNIEnv
 JNIEXPORT jboolean JNICALL Java_com_js8call_core_JS8Engine_nativeIsTransmitting(JNIEnv*, jobject, jlong);
 JNIEXPORT jboolean JNICALL Java_com_js8call_core_JS8Engine_nativeIsTransmittingAudio(JNIEnv*, jobject, jlong);
 JNIEXPORT jobjectArray JNICALL Java_com_js8call_core_JS8Engine_nativeGetTxFrameTexts(JNIEnv*, jobject, jlong);
+JNIEXPORT jboolean JNICALL Java_com_js8call_core_JS8Engine_nativeReplaceUnsentText(JNIEnv*, jobject, jlong, jstring, jstring, jstring, jstring, jint, jint);
 JNIEXPORT jint JNICALL Java_com_js8call_core_JS8Engine_nativeGetTxFramesStarted(JNIEnv*, jobject, jlong);
 JNIEXPORT jboolean JNICALL Java_com_js8call_core_JS8Engine_nativeGetTxFirstFrameIsData(JNIEnv*, jobject, jlong);
 JNIEXPORT jintArray JNICALL Java_com_js8call_core_JS8Engine_nativeGetTxFrameTones(JNIEnv*, jobject, jlong);
@@ -56,6 +57,7 @@ JNIEXPORT jboolean JNICALL Java_com_js8call_core_JS8Engine_nativeJscCorrect(JNIE
 JNIEXPORT jobjectArray JNICALL Java_com_js8call_core_JS8Engine_nativeJscSuggestions(JNIEnv*, jclass, jstring, jint);
 JNIEXPORT void JNICALL Java_com_js8call_core_JS8Engine_nativeSetFt8Enabled(JNIEnv*, jobject, jlong, jboolean);
 JNIEXPORT void JNICALL Java_com_js8call_core_JS8Engine_nativeDebugFt8Recording(JNIEnv*, jobject, jlong, jshortArray);
+JNIEXPORT void JNICALL Java_com_js8call_core_JS8Engine_nativeDebugMixRx(JNIEnv*, jobject, jlong, jshortArray);
 JNIEXPORT jint JNICALL Java_com_js8call_core_JS8Engine_nativeTxMillisecondsUntilAudio(JNIEnv*, jobject, jlong);
 JNIEXPORT void JNICALL Java_com_js8call_core_JS8Engine_nativeSetTxReady(JNIEnv*, jobject, jlong, jboolean);
 JNIEXPORT void JNICALL Java_com_js8call_core_JS8Engine_nativeSetTimeDriftMs(JNIEnv*, jobject, jlong, jlong);
@@ -89,6 +91,14 @@ struct JS8Engine_Native {
     std::chrono::steady_clock::time_point received_at;
   };
   std::vector<CompoundCall> compound_calls;
+
+  // PC processCompoundActivity: a directed frame with "<....>" for a call waits for its compound frame
+  struct PendingDirected {
+    std::vector<std::string> tokens;
+    float frequency = 0.0f;
+    std::chrono::steady_clock::time_point received_at;
+  };
+  std::vector<PendingDirected> pending_directed;
 
   // Easy JS8: FT8 signals heard in the JS8 audio (receive only)
   std::unique_ptr<Ft8Monitor> ft8;
@@ -295,9 +305,39 @@ static std::string maybe_insert_callsign_prefix(std::string const& text, bool fi
 // compound_calls: compound callsigns seen recently (received text uses the engine's list;
 // sent parts use their own, so they can't change what is shown for received frames).
 static std::string render_decoded_text(std::vector<JS8Engine_Native::CompoundCall>& compound_calls,
+                                       std::vector<JS8Engine_Native::PendingDirected>& pending_directed,
                                        js8core::events::Decoded const& decoded,
                                        int* type) {
   using namespace js8core::protocol::varicode;
+
+  // PC JS8Submode rxThreshold: how far apart two frames of one station can be
+  float const match_hz = decoded.mode == 1 ? 16.0f : decoded.mode == 2 ? 32.0f : decoded.mode == 8 ? 50.0f : 10.0f;
+  auto const now = std::chrono::steady_clock::now();
+  auto const expired = [&](auto const& entry) { return now - entry.received_at > std::chrono::seconds(60); };
+  compound_calls.erase(std::remove_if(compound_calls.begin(), compound_calls.end(), expired), compound_calls.end());
+  pending_directed.erase(std::remove_if(pending_directed.begin(), pending_directed.end(), expired), pending_directed.end());
+
+  // Puts the heard compound calls in place of "<....>", oldest first (PC buffer.compound.dequeue),
+  // from then to; false, changing nothing, while one is still missing.
+  auto const fill_placeholders = [&](std::vector<std::string>& tokens, float frequency) {
+    std::vector<std::size_t> found;
+    std::size_t const need = (tokens[0] == "<....>" ? 1u : 0u) + (tokens[1] == "<....>" ? 1u : 0u);
+    for (std::size_t i = 0; i < compound_calls.size() && found.size() < need; ++i) {
+      if (std::fabs(frequency - compound_calls[i].frequency) <= match_hz) found.push_back(i);
+    }
+    if (found.size() < need) return false;
+    std::size_t next = 0;
+    for (std::size_t t = 0; t < 2; ++t) {
+      if (tokens[t] == "<....>") tokens[t] = compound_calls[found[next++]].callsign;
+    }
+    for (std::size_t i = found.size(); i-- > 0;) compound_calls.erase(compound_calls.begin() + static_cast<std::ptrdiff_t>(found[i]));
+    return true;
+  };
+  auto const join_tokens = [](std::vector<std::string> const& tokens) {
+    std::string out = tokens[0] + ": " + tokens[1];
+    for (std::size_t i = 2; i < tokens.size(); ++i) out += " " + tokens[i];
+    return out;
+  };
 
   *type = decoded.type;
   auto const& frame = decoded.data;
@@ -388,19 +428,22 @@ static std::string render_decoded_text(std::vector<JS8Engine_Native::CompoundCal
         }
       }
       if (type == 1 && !parts.front().empty()) {
-        auto now = std::chrono::steady_clock::now();
-        compound_calls.erase(
-            std::remove_if(compound_calls.begin(), compound_calls.end(),
-                           [&](auto const& call) { return now - call.received_at > std::chrono::seconds(60); }),
-            compound_calls.end());
         compound_calls.push_back({parts.front(), decoded.frequency, now});
+        for (auto it = pending_directed.begin(); it != pending_directed.end(); ++it) {
+          if (std::fabs(decoded.frequency - it->frequency) > match_hz) continue;
+          if (fill_placeholders(it->tokens, it->frequency)) {
+            auto joined = join_tokens(it->tokens);
+            pending_directed.erase(it);
+            return joined;
+          }
+        }
       }
       if (type == 2 && !parts.front().empty() && !out.empty()) {
         auto closest = compound_calls.end();
         auto closest_distance = std::numeric_limits<float>::max();
         for (auto it = compound_calls.begin(); it != compound_calls.end(); ++it) {
           auto distance = std::fabs(decoded.frequency - it->frequency);
-          if (distance <= 10.0f && distance < closest_distance) {
+          if (distance <= match_hz && distance < closest_distance) {
             closest = it;
             closest_distance = distance;
           }
@@ -432,10 +475,10 @@ static std::string render_decoded_text(std::vector<JS8Engine_Native::CompoundCal
       if (!tokens.empty()) {
         std::string out;
         if (tokens.size() >= 2) {
-          out = tokens[0] + ": " + tokens[1];
-          for (std::size_t i = 2; i < tokens.size(); ++i) {
-            out += " " + tokens[i];
+          if ((tokens[0] == "<....>" || tokens[1] == "<....>") && !fill_placeholders(tokens, decoded.frequency)) {
+            pending_directed.push_back({tokens, decoded.frequency, now}); // shown as it is until its call arrives
           }
+          out = join_tokens(tokens);
         } else {
           out = tokens[0];
         }
@@ -466,7 +509,7 @@ static void event_callback(JS8Engine_Native* native, js8core::events::Variant co
   // Handle different event types
   if (auto* decoded = std::get_if<js8core::events::Decoded>(&event)) {
     int type = 0;
-    auto rendered = render_decoded_text(native->compound_calls, *decoded, &type);
+    auto rendered = render_decoded_text(native->compound_calls, native->pending_directed, *decoded, &type);
     __android_log_print(ANDROID_LOG_INFO, "JS8Engine_Native",
                        "DECODED: SNR=%d dB, freq=%.1f Hz, text='%s', raw='%s', type=%d, mode=%d",
                        decoded->snr, decoded->frequency, rendered.c_str(),
@@ -959,6 +1002,24 @@ int js8_engine_transmit_message(JS8Engine_Native* engine,
   return engine->engine->transmit_message(request) ? 1 : 0;
 }
 
+int js8_engine_replace_unsent_text(JS8Engine_Native* engine,
+                                   const char* text,
+                                   const char* my_call,
+                                   const char* my_grid,
+                                   const char* selected_call,
+                                   int submode,
+                                   int frames_started) {
+  if (!engine || !engine->engine) return 0;
+
+  js8core::TxMessageRequest request;
+  request.text = text ? text : "";
+  request.my_call = my_call ? my_call : "";
+  request.my_grid = my_grid ? my_grid : "";
+  request.selected_call = selected_call ? selected_call : "";
+  request.submode = submode;
+  return engine->engine->replace_unsent_text(request, frames_started) ? 1 : 0;
+}
+
 int js8_engine_transmit_frame(JS8Engine_Native* engine,
                               const char* frame,
                               int bits,
@@ -1012,12 +1073,13 @@ std::vector<std::string> js8_engine_tx_frame_texts(JS8Engine_Native* engine) {
   if (!engine || !engine->engine) return out;
   // Same text as a received copy of each part (PC: DecodedText(frame, bits).message())
   std::vector<JS8Engine_Native::CompoundCall> compound_calls;
+  std::vector<JS8Engine_Native::PendingDirected> pending_directed;
   for (auto const& [frame, bits] : engine->engine->tx_message_frames()) {
     js8core::events::Decoded decoded;
     decoded.data = frame;
     decoded.type = bits;
     int type = 0;
-    out.push_back(render_decoded_text(compound_calls, decoded, &type));
+    out.push_back(render_decoded_text(compound_calls, pending_directed, decoded, &type));
   }
   return out;
 }
@@ -1091,13 +1153,14 @@ std::vector<std::string> js8_build_frame_texts(std::string const& text, std::str
   auto frames = js8core::protocol::varicode::build_message_frames(
       my_call, my_grid, selected_call, text, force_identify, false, submode);
   std::vector<JS8Engine_Native::CompoundCall> compound_calls;
+  std::vector<JS8Engine_Native::PendingDirected> pending_directed;
   for (auto const& [frame, bits] : frames) {
     if (frame.size() < 12) continue;
     js8core::events::Decoded decoded;
     decoded.data = frame.substr(0, 12);
     decoded.type = bits;
     int type = 0;
-    out.push_back(render_decoded_text(compound_calls, decoded, &type));
+    out.push_back(render_decoded_text(compound_calls, pending_directed, decoded, &type));
   }
   return out;
 }
@@ -1107,6 +1170,11 @@ extern "C" {
 void js8_engine_debug_ft8_recording(JS8Engine_Native* engine, const int16_t* samples, size_t frames) {
   if (!engine || !engine->ft8) return;
   engine->ft8->decode_recording(samples, frames, engine->audio_format.sample_rate);
+}
+
+void js8_engine_debug_mix_rx(JS8Engine_Native* engine, const int16_t* samples, size_t frames) {
+  if (!engine || !engine->engine) return;
+  engine->engine->debug_mix_rx(samples, frames);
 }
 
 void js8_engine_set_ft8_enabled(JS8Engine_Native* engine, bool enabled) {
@@ -1127,8 +1195,9 @@ bool js8_engine_tx_first_frame_is_data(JS8Engine_Native* engine) {
   decoded.data = frames.front().first;
   decoded.type = frames.front().second;
   std::vector<JS8Engine_Native::CompoundCall> compound_calls;
+  std::vector<JS8Engine_Native::PendingDirected> pending_directed;
   int type = 0;
-  render_decoded_text(compound_calls, decoded, &type);
+  render_decoded_text(compound_calls, pending_directed, decoded, &type);
   return (type & 0b100) != 0;
 }
 
@@ -1203,6 +1272,8 @@ int js8_register_natives(JavaVM* vm, JNIEnv* env) {
      (void*)Java_com_js8call_core_JS8Engine_nativeIsTransmitting},
     {"nativeIsTransmittingAudio", "(J)Z",
       (void*)Java_com_js8call_core_JS8Engine_nativeIsTransmittingAudio},
+    {"nativeReplaceUnsentText", "(JLjava/lang/String;Ljava/lang/String;Ljava/lang/String;Ljava/lang/String;II)Z",
+     (void*)Java_com_js8call_core_JS8Engine_nativeReplaceUnsentText},
     {"nativeGetTxFrameTexts", "(J)[Ljava/lang/String;",
      (void*)Java_com_js8call_core_JS8Engine_nativeGetTxFrameTexts},
     {"nativeGetTxFramesStarted", "(J)I",
@@ -1217,6 +1288,8 @@ int js8_register_natives(JavaVM* vm, JNIEnv* env) {
     {"nativeJscSuggestions", "(Ljava/lang/String;I)[Ljava/lang/String;", (void*)Java_com_js8call_core_JS8Engine_nativeJscSuggestions},
     {"nativeSetFt8Enabled", "(JZ)V",
      (void*)Java_com_js8call_core_JS8Engine_nativeSetFt8Enabled},
+    {"nativeDebugMixRx", "(J[S)V",
+     (void*)Java_com_js8call_core_JS8Engine_nativeDebugMixRx},
     {"nativeDebugFt8Recording", "(J[S)V",
      (void*)Java_com_js8call_core_JS8Engine_nativeDebugFt8Recording},
     {"nativeTxMillisecondsUntilAudio", "(J)I",

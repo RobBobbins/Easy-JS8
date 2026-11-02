@@ -143,6 +143,11 @@ public:
   // and how many of them have been handed to the modulator. Empty / 0 for TUNE and single frames.
   virtual std::vector<std::pair<std::string, int>> tx_message_frames() { return {}; }
   virtual int tx_frames_started() { return 0; }
+  // Debug builds: these 12 kHz samples are added to the audio coming in (tests without a radio).
+  virtual void debug_mix_rx(std::int16_t const*, std::size_t) {}
+  // PC typeahead (prepareNextMessageFrame): the parts not yet started become request.text, sent as
+  // data parts. Refused when frames_started is out of date, or nothing is being sent.
+  virtual bool replace_unsent_text(TxMessageRequest const&, int /*frames_started*/) { return false; }
   // Tone numbers of the frame last handed to the modulator (PC emitTones / API TX.FRAME).
   // Empty for TUNE and before the first frame.
   virtual std::vector<int> tx_current_tones() { return {}; }

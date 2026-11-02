@@ -224,7 +224,7 @@ class Js8ApiCommands(private val context: Context) {
                         reply("STATION.SET_GROUPS", "", mapOf("_ID" to id, "ERROR" to "Group not allowed: $g"))
                         return
                     }
-                    if (!Regex("@[A-Za-z0-9/]+").matches(g)) {
+                    if (!com.js8call.example.js8ui.Js8Callsign.isCompound(g.uppercase())) {
                         reply("STATION.SET_GROUPS", "", mapOf("_ID" to id, "ERROR" to "Invalid group name: $g"))
                         return
                     }
@@ -255,10 +255,10 @@ class Js8ApiCommands(private val context: Context) {
             }
             "RX.GET_CALL_SELECTED" -> { reply("RX.CALL_SELECTED", Js8Api.State.selectedCall.orEmpty(), mapOf("_ID" to id)); return }
             "RX.GET_BAND_ACTIVITY" -> {
-                val dial = api.dialHz()
                 val offsets = linkedMapOf<String, Any?>("_ID" to id)
                 api.activity?.bandActivity?.toList()?.forEach { (offset, list) ->
                     val d = list.lastOrNull() ?: return@forEach
+                    val dial = d.dial.takeIf { it > 0 } ?: api.dialHz() // PC ActivityDetail.dial
                     offsets[offset.toString()] = mapOf(
                         "FREQ" to dial + d.offset, "DIAL" to dial, "OFFSET" to d.offset,
                         "TEXT" to d.text, "SNR" to d.snr, "UTC" to d.utcMs
@@ -327,7 +327,7 @@ class Js8ApiCommands(private val context: Context) {
                 // Held for them to collect, from us (addCommandToStorage STORE)
                 val my = api.myCall()
                 scope.launch {
-                    val mid = try { com.js8call.example.data.Js8Mailbox.store(context, call, my, text, my) } catch (e: Exception) { -1L }
+                    val mid = try { com.js8call.example.data.Js8Mailbox.store(context, call, my, text, my, dialHz = Js8Api.dialHz()) } catch (e: Exception) { -1L }
                     reply("INBOX.MESSAGE", "", mapOf("_ID" to id, "ID" to mid))
                 }
                 return

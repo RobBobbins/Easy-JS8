@@ -54,6 +54,9 @@ struct RigModelEntry {
   int model = 0;
   std::string mfg;
   std::string name;
+  bool network = false;     // PC Capabilities::network
+  bool cat_ptt = false;     // PC has_CAT_PTT
+  bool mic_data = false;    // PC has_CAT_PTT_mic_data
 };
 
 std::once_flag g_hamlib_loaded;
@@ -68,6 +71,10 @@ int collect_rig_caps(const struct rig_caps* caps, void* data) {
   entry.model = static_cast<int>(caps->rig_model);
   entry.mfg = caps->mfg_name;
   entry.name = caps->model_name;
+  entry.network = caps->port_type == RIG_PORT_NETWORK;
+  entry.cat_ptt = caps->rig_model != RIG_MODEL_DUMMY &&
+                  (caps->ptt_type == RIG_PTT_RIG || caps->ptt_type == RIG_PTT_RIG_MICDATA);
+  entry.mic_data = caps->ptt_type == RIG_PTT_RIG_MICDATA;
   list->push_back(std::move(entry));
   return -1;
 }
@@ -302,6 +309,26 @@ Java_com_js8call_core_JS8Engine_nativeGetTimeDriftMs(
 }
 
 JNIEXPORT jboolean JNICALL
+Java_com_js8call_core_JS8Engine_nativeReplaceUnsentText(
+    JNIEnv* env,
+    jobject /* thiz */,
+    jlong handle,
+    jstring text,
+    jstring my_call,
+    jstring my_grid,
+    jstring selected_call,
+    jint submode,
+    jint frames_started) {
+  JS8Engine_Native* engine = reinterpret_cast<JS8Engine_Native*>(handle);
+  auto text_utf8 = to_utf8(env, text);
+  auto my_call_utf8 = to_utf8(env, my_call);
+  auto my_grid_utf8 = to_utf8(env, my_grid);
+  auto selected_call_utf8 = to_utf8(env, selected_call);
+  return js8_engine_replace_unsent_text(engine, text_utf8.c_str(), my_call_utf8.c_str(), my_grid_utf8.c_str(),
+                                        selected_call_utf8.c_str(), submode, frames_started) ? JNI_TRUE : JNI_FALSE;
+}
+
+JNIEXPORT jboolean JNICALL
 Java_com_js8call_core_JS8Engine_nativeTransmitMessage(
     JNIEnv* env,
     jobject /* thiz */,
@@ -428,6 +455,21 @@ Java_com_js8call_core_JS8Engine_nativeSetFt8Enabled(
     jboolean enabled) {
   JS8Engine_Native* engine = reinterpret_cast<JS8Engine_Native*>(handle);
   js8_engine_set_ft8_enabled(engine, enabled == JNI_TRUE);
+}
+
+JNIEXPORT void JNICALL
+Java_com_js8call_core_JS8Engine_nativeDebugMixRx(
+    JNIEnv* env,
+    jobject /* thiz */,
+    jlong handle,
+    jshortArray samples) {
+  JS8Engine_Native* engine = reinterpret_cast<JS8Engine_Native*>(handle);
+  if (!samples) return;
+  jsize n = env->GetArrayLength(samples);
+  jshort* data = env->GetShortArrayElements(samples, nullptr);
+  if (!data) return;
+  js8_engine_debug_mix_rx(engine, reinterpret_cast<const int16_t*>(data), static_cast<size_t>(n));
+  env->ReleaseShortArrayElements(samples, data, JNI_ABORT);
 }
 
 JNIEXPORT void JNICALL
@@ -617,7 +659,8 @@ Java_com_js8call_core_HamlibRigCatalog_nativeListRigModels(
       label.push_back(' ');
     }
     label += entry.name;
-    std::string packed = std::to_string(entry.model) + "|" + label;
+    std::string packed = std::to_string(entry.model) + "|" + (entry.network ? "n" : "") +
+                         (entry.cat_ptt ? "p" : "") + (entry.mic_data ? "m" : "") + "|" + label;
     jstring packed_str = env->NewStringUTF(packed.c_str());
     env->SetObjectArrayElement(result, static_cast<jsize>(i + 1), packed_str);
     env->DeleteLocalRef(packed_str);

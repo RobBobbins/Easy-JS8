@@ -246,6 +246,9 @@ class Js8WaterfallControls(
         v<View>(R.id.js8_wf_tab_timing)?.setOnClickListener { showTab(R.id.js8_wf_tab_timing) }
     }
 
+    /** PC View > Show Time Drift Controls...: the Timing tab. */
+    fun showTiming() = showTab(R.id.js8_wf_tab_timing)
+
     private fun showTab(tabId: Int) {
         listOf(R.id.js8_wf_tab_control, R.id.js8_wf_tab_display, R.id.js8_wf_tab_timing).forEach { id ->
             v<View>(id)?.setBackgroundResource(if (id == tabId) R.drawable.js8_tab_selected else 0)

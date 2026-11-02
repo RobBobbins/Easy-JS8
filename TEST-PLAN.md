@@ -1,0 +1,48 @@
+# Easy JS8 test plan
+
+Nothing here has started. Times are estimates at about 45 seconds a screen row, measured on the 2026-11-02 run.
+
+**Total: about 14 hours before the phone. It could be 12 to 16.**
+
+The 10 hours I gave earlier was too low. It left out 29 controls that have never been tested and the time to write missing test scripts.
+
+## How the tests change
+
+- **One layout:** Header, lists, Settings, Station and menus run in Upright only. Every window or menu gets one open check in PC, Pages and FT8Call.
+- **All four layouts:** only where a control sits differently on screen, like the waterfall panel.
+- **Failed rows only:** no whole section is rerun.
+- **One row first:** a changed script must pass on one row before any long run.
+- **Failure limit:** a row that fails twice is written on the checklist as Failed, and testing moves on.
+- **Time check:** after each step, real time is compared to the estimate. More than 10% over: stop and tell Rob. Long steps also get a check at the halfway point.
+- **Every row still runs twice**, with an app restart between runs.
+- **No settings sweep:** I counted the rows, and it saves about 25 minutes of testing but takes about 30 minutes to write.
+
+## Steps
+
+| # | Step | Rows | Time |
+|---|---|---|---|
+| 1 | Change the scripts to Upright only, add the hook that blocks four-layout runs, save the rule to memory | none | 30 minutes |
+| 2 | Crash records: find the cause of the saved-screen crash, fix it if it is a real fault | none | 45 minutes |
+| 3 | Write the missing test scripts | none | 2 hours |
+| 4 | Header (H): second run, Upright | 37 controls | 30 minutes |
+| 5 | Lists, waterfall, Log QSO (I, J, K): controls never tested, twice | 29 controls | 45 minutes |
+| 6 | Settings, Station, menus (L, M, N), twice, skipping runs already passed | 90 controls | 1 hour 50 minutes |
+| 7 | Open checks in PC, Pages and FT8Call | about 15 windows | 25 minutes |
+| 8 | Failed screen rows (H, J, K) | 44 rows | 45 minutes |
+| 9 | Decoding and on-air rows still open (A, B, D, E, F, G), twice | 56 rows | 3 hours |
+| 10 | Rig, API, server and startup rows still open (O, P, Q, R, S), twice | 33 rows | 1 hour 15 minutes |
+| 11 | JS8Call 3.0.2 on your PC as the other station (T), twice | 18 rows | 2 hours |
+| 12 | Real APRS and JS8NET, genuine traffic only (U), twice | 3 rows | 30 minutes |
+| 13 | Remaining Failed rows, one more try | whatever is left | 1 hour |
+| 14 | Phone and radio | not on this list | absolutely last |
+
+## What could change the time
+
+- **Step 2:** a real fault needs a fix and a rebuild. Each rebuild takes about 3 minutes, and the fix time is unknown.
+- **Step 9:** on-air rows wait for real transmissions and timers, so this is the roughest estimate.
+- **Step 11:** the audio link between the app and your PC is not proven yet. It could take longer.
+- **A new app fault:** a fix needs two new passes on that row.
+
+## The downside
+
+A fault that shows up only in PC, Pages or FT8Call on a shared screen could be missed. The open check only proves the window opens.

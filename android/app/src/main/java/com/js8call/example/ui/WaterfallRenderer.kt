@@ -127,6 +127,115 @@ class WaterfallRenderer {
 
     private var invalidateCallback: (() -> Unit)? = null
 
+    /** Band for the green cycle line's text. */
+    var bandText = ""
+    private var lastSecondInPeriod = 0
+    private var cycleText = ""
+    private var textRows = Int.MAX_VALUE
+    private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE }
+    private val dotted = Paint().apply {
+        color = Color.DKGRAY
+        style = Paint.Style.STROKE
+        pathEffect = android.graphics.DashPathEffect(floatArrayOf(2f, 2f), 0f)
+    }
+
+    /** CPlotter m_replot, newest first: one drawn line, or a cycle line with its text. */
+    private class Line(val spectrum: FloatArray?, val rows: Int, val text: String?)
+    private val replotLines = ArrayDeque<Line>()
+    private val replot = Runnable { replotNow() }
+
+    private fun scheduleReplot() {
+        drawHandler.removeCallbacks(replot)
+        drawHandler.postDelayed(replot, 100) // CPlotter DEBOUNCE_INTERVAL
+    }
+
+    private fun remember(line: Line) {
+        replotLines.addFirst(line)
+        var rows = 0
+        val keep = replotLines.indexOfFirst { rows += it.rows; rows > waterfallHeight() }
+        if (keep >= 0) while (replotLines.size > keep + 1) replotLines.removeLast()
+    }
+
+    /** The line in [columns] into [row], through Scaler1D. */
+    private fun fillRow() {
+        val d = display
+        val density = d.density.coerceAtLeast(0.1f)
+        val cols = columns.size
+        val scale = 10f * sqrt(d.binsPerPixel * d.avg / 15f) * 10f.pow(0.015f * d.gain)
+        if (row.size != width) row = IntArray(width)
+        for (x in 0 until width) {
+            val v = columns[(x / density).toInt().coerceAtMost(cols - 1)]
+            val index = if (v.isNaN()) 0 else (d.zero + (scale * v).toInt()).coerceIn(0, 254)
+            row[x] = d.colours[index]
+        }
+    }
+
+    /** CPlotter::replot: redraw what is on screen with the current Start, Bins Per Pixel and size. */
+    private fun replotNow() {
+        val bitmap = waterfallBitmap ?: return
+        val c = waterfallCanvas ?: return
+        val h1 = waterfallHeight()
+        if (h1 <= 0) return
+        c.save()
+        c.clipRect(0, 0, width, h1)
+        paintFill(c, 0, h1)
+        var y = 0
+        val dp = display.density.coerceAtLeast(0.1f)
+        setTextSize()
+        for (line in replotLines) {
+            if (y >= h1) break
+            if (line.spectrum != null) {
+                swide(line.spectrum)
+                fillRow()
+                for (k in 0 until line.rows) if (y + k < h1) bitmap.setPixels(row, 0, width, 0, y + k, width, 1)
+                y += line.rows
+            } else {
+                linePaint.color = Color.GREEN
+                linePaint.strokeWidth = dp
+                c.drawLine(0f, y.toFloat(), width.toFloat(), y.toFloat(), linePaint)
+                c.drawText(line.text.orEmpty(), 5 * dp, y - (textPaint.fontSpacing - textPaint.textSize), textPaint) // above its line, as drawn live
+                y += line.rows
+            }
+        }
+        c.restore()
+        invalidateCallback?.invoke()
+    }
+
+    private fun paintFill(c: Canvas, top: Int, bottom: Int) {
+        c.drawRect(0f, top.toFloat(), width.toFloat(), bottom.toFloat(), Paint().apply { color = Color.BLACK })
+    }
+
+    private fun setTextSize() {
+        textPaint.textSize = 10 * display.density.coerceAtLeast(0.1f)
+    }
+
+    /** WideGraph::dataSink: a green line across the top when a new period starts. */
+    private fun cycleLine() {
+        val now = System.currentTimeMillis() + timeDriftMs
+        val second = (now / 1000 % 86400).toInt()
+        val inPeriod = second % cyclePeriodSec
+        if (inPeriod < lastSecondInPeriod) {
+            val bitmap = waterfallBitmap ?: return
+            val temp = tempBitmap ?: return
+            val h1 = waterfallHeight()
+            val dp = display.density.coerceAtLeast(0.1f)
+            val rows = dp.toInt().coerceAtLeast(1)
+            if (h1 > rows) {
+                Canvas(temp).drawBitmap(bitmap, Rect(0, 0, width, h1 - rows), Rect(0, rows, width, h1), null)
+                waterfallCanvas?.drawBitmap(temp, Rect(0, rows, width, h1), Rect(0, rows, width, h1), null)
+                linePaint.color = Color.GREEN
+                linePaint.strokeWidth = rows.toFloat()
+                waterfallCanvas?.drawLine(0f, rows / 2f, width.toFloat(), rows / 2f, linePaint)
+                val clock = java.text.SimpleDateFormat("HH:mm:ss", java.util.Locale.US).apply { timeZone = java.util.TimeZone.getTimeZone("UTC") }
+                cycleText = clock.format(java.util.Date(now)) + "    " + bandText
+                setTextSize()
+                textRows = (textPaint.fontSpacing).toInt()
+                remember(Line(null, rows, cycleText))
+            }
+        }
+        lastSecondInPeriod = inPeriod
+    }
+
     fun setInvalidateCallback(callback: (() -> Unit)?) {
         invalidateCallback = callback
     }
@@ -142,9 +251,15 @@ class WaterfallRenderer {
             }
             invalidateCallback?.invoke()
         }
+        // CPlotter: changes to the range or the scaling redraw the history
+        if (old.startHz != value.startHz || old.binsPerPixel != value.binsPerPixel || old.gain != value.gain ||
+            old.zero != value.zero || old.flatten != value.flatten || !old.colours.contentEquals(value.colours)) scheduleReplot()
     }
 
     fun getDisplay(): Display = display
+
+    /** Engine clock drift, for the cycle line's time. */
+    var timeDriftMs = 0L
 
     /** Current speed's cycle (Cumulative restarts each cycle, dataSink lastCycle). */
     fun setCyclePeriod(seconds: Int) {
@@ -184,6 +299,7 @@ class WaterfallRenderer {
         }
 
         oldTemp?.recycle()
+        scheduleReplot()
     }
 
     /** One engine spectrum (linear power per [binHz] bin): dataSink. */
@@ -240,6 +356,7 @@ class WaterfallRenderer {
         stopDrawing()
         haveCommitted = false
         sAccumRuns = 0
+        replotLines.clear()
         waterfallCanvas?.drawColor(Color.BLACK)
         invalidateCallback?.invoke()
     }
@@ -296,7 +413,7 @@ class WaterfallRenderer {
     }
 
     /** WideGraph::dataSink swide: one dB value per PC pixel; NaN past 5000 Hz. */
-    private fun swide(): Int {
+    private fun swide(source: FloatArray = sCommitted): Int {
         val d = display
         val density = d.density.coerceAtLeast(0.1f)
         val cols = (width / density).toInt().coerceAtLeast(1)
@@ -308,7 +425,7 @@ class WaterfallRenderer {
             val first = start + c * bpp
             if (c >= end || first + bpp > IZ) { columns[c] = Float.NaN; continue }
             var sum = 0f
-            for (k in first until first + bpp) sum += sCommitted[k]
+            for (k in first until first + bpp) sum += source[k]
             columns[c] = 10f * log10((bpp * sum).coerceAtLeast(1e-20f))
         }
         var valid = 0
@@ -322,25 +439,27 @@ class WaterfallRenderer {
         val bitmap = waterfallBitmap ?: return
         val temp = tempBitmap ?: return
         val d = display
-        val density = d.density.coerceAtLeast(0.1f)
         val h1 = waterfallHeight()
+        cycleLine()
         val valid = swide()
-        val cols = columns.size
 
         if (h1 > 0) {
             // Scaler1D
-            val scale = 10f * sqrt(d.binsPerPixel * d.avg / 15f) * 10f.pow(0.015f * d.gain)
-            if (row.size != width) row = IntArray(width)
-            for (x in 0 until width) {
-                val v = columns[(x / density).toInt().coerceAtMost(cols - 1)]
-                val index = if (v.isNaN()) 0 else (d.zero + (scale * v).toInt()).coerceIn(0, 254)
-                row[x] = d.colours[index]
-            }
+            fillRow()
             // Scroll the waterfall part down by [rows]
             val tempCanvas = Canvas(temp)
             tempCanvas.drawBitmap(bitmap, Rect(0, 0, width, h1 - rows), Rect(0, rows, width, h1), null)
             waterfallCanvas?.drawBitmap(temp, Rect(0, rows, width, h1), Rect(0, rows, width, h1), null)
             for (y in 0 until rows) bitmap.setPixels(row, 0, width, 0, y, width, 1)
+            remember(Line(sCommitted.copyOf(IZ), rows, null))
+            // CPlotter::drawData: the text lands one font height below the green line
+            if (textRows != Int.MAX_VALUE) {
+                textRows -= rows
+                if (textRows <= 0) {
+                    textRows = Int.MAX_VALUE
+                    waterfallCanvas?.drawText(cycleText, 5 * d.density, textPaint.textSize, textPaint)
+                }
+            }
         }
 
         // CPlotter::shouldDrawSpectrum
@@ -360,6 +479,22 @@ class WaterfallRenderer {
         c.save()
         c.clipRect(0f, top, width.toFloat(), height.toFloat())
         c.drawColor(Color.BLACK)
+        // CPlotter::drawMetrics overlay: dark blue to black, dotted grid
+        val bottom = height.toFloat()
+        c.drawRect(0f, top, width.toFloat(), bottom, Paint().apply {
+            shader = android.graphics.LinearGradient(0f, top, 0f, bottom, Color.rgb(0, 0, 139), Color.BLACK, android.graphics.Shader.TileMode.CLAMP)
+        })
+        dotted.strokeWidth = dp
+        val hzPerDp = d.binsPerPixel * PC_BIN_HZ
+        val span = width / dp * hzPerDp
+        val fpd = when { span > 2500 -> 500; span > 1000 -> 200; span > 500 -> 100; span > 250 -> 50; else -> 20 }
+        var gridHz = (d.startHz + fpd - 1) / fpd * fpd
+        while ((gridHz - d.startHz) / hzPerDp * dp <= width) {
+            val x = (gridHz - d.startHz) / hzPerDp * dp
+            c.drawLine(x, top, x, bottom, dotted)
+            gridHz += fpd
+        }
+        for (i in 1 until 7) c.drawLine(0f, top + i * (bottom - top) / 7f, width.toFloat(), top + i * (bottom - top) / 7f, dotted)
 
         // Scaler2D, in PC pixels of the spectrum height
         val h2 = spectrumHeight() / dp

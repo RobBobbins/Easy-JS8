@@ -184,6 +184,10 @@ class JS8Engine private constructor(
     /**
      * Transmit a text message by building JS8 frames and scheduling audio output.
      */
+    /** PC typeahead: the parts not yet started become [text]. False when a new part started first. */
+    fun replaceUnsentText(text: String, myCall: String, myGrid: String, selectedCall: String, submode: Int, framesStarted: Int): Boolean =
+        withNativeHandleOr(false) { nativeReplaceUnsentText(it, text, myCall, myGrid, selectedCall, submode, framesStarted) }
+
     fun transmitMessage(
         text: String,
         myCall: String,
@@ -283,6 +287,11 @@ class JS8Engine private constructor(
     /** FT8 monitor on/off: decodes FT8 signals heard in the JS8 audio (receive only). */
     fun setFt8Enabled(enabled: Boolean) {
         withNativeHandle { nativeSetFt8Enabled(it, enabled) }
+    }
+
+    /** Debug builds: 12 kHz samples added to the incoming audio (tests without a radio). */
+    fun debugMixRx(samples: ShortArray) {
+        withNativeHandle { nativeDebugMixRx(it, samples) }
     }
 
     /** Debug builds: decode one 15 s 12 kHz recording with the FT8 monitor (tests without a radio). */
@@ -403,6 +412,16 @@ class JS8Engine private constructor(
     private external fun nativeSetTxBoostEnabled(handle: Long, enabled: Boolean)
     private external fun nativeSetTxOutput(handle: Long, gain: Float, channel: Int)
     private external fun nativeIsRunning(handle: Long): Boolean
+    private external fun nativeReplaceUnsentText(
+        handle: Long,
+        text: String,
+        myCall: String,
+        myGrid: String,
+        selectedCall: String,
+        submode: Int,
+        framesStarted: Int
+    ): Boolean
+
     private external fun nativeTransmitMessage(
         handle: Long,
         text: String,
@@ -438,6 +457,7 @@ class JS8Engine private constructor(
     private external fun nativeGetTxFrameTones(handle: Long): IntArray
     private external fun nativeSetFt8Enabled(handle: Long, enabled: Boolean)
     private external fun nativeDebugFt8Recording(handle: Long, samples: ShortArray)
+    private external fun nativeDebugMixRx(handle: Long, samples: ShortArray)
     private external fun nativeTxMillisecondsUntilAudio(handle: Long): Int
     private external fun nativeSetTxReady(handle: Long, ready: Boolean)
     private external fun nativeSetTimeDriftMs(handle: Long, driftMs: Long)

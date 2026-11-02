@@ -421,9 +421,8 @@ object Js8Api {
     }
 
     /** processRxActivity: every frame heard. */
-    fun rxActivity(text: String, offset: Int, snr: Int, speed: Int, tdrift: Float, utcMs: Long, bits: Int) {
+    fun rxActivity(text: String, offset: Int, snr: Int, speed: Int, tdrift: Float, utcMs: Long, bits: Int, dial: Long) {
         if (!canSend()) return
-        val dial = dialHz()
         sendNetworkMessage("RX.ACTIVITY", text, mapOf(
             "_ID" to -1, "FREQ" to dial + offset, "DIAL" to dial, "OFFSET" to offset, "SNR" to snr,
             "SPEED" to speed, "TDRIFT" to tdrift, "UTC" to utcMs, "BITS" to bits
@@ -435,9 +434,8 @@ object Js8Api {
      * without the sender, with the end-of-transmission mark on the last frame.
      */
     fun rxDirected(from: String, to: String, cmd: String, grid: String, extra: String, text: String,
-                   offset: Int, snr: Int, speed: Int, tdrift: Float, utcMs: Long) {
+                   offset: Int, snr: Int, speed: Int, tdrift: Float, utcMs: Long, dial: Long) {
         if (!canSend()) return
-        val dial = dialHz()
         sendNetworkMessage("RX.DIRECTED", text, mapOf(
             "_ID" to -1, "FROM" to from, "TO" to to, "CMD" to cmd, "GRID" to grid, "EXTRA" to extra,
             "TEXT" to text, "FREQ" to dial + offset, "DIAL" to dial, "OFFSET" to offset, "SNR" to snr,

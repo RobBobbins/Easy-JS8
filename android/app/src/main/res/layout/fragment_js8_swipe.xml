@@ -28,6 +28,7 @@
                 android:background="@color/js8_header_bg">
 
                 <include
+                    android:id="@+id/js8_freq_view"
                     layout="@layout/js8_freq_block"
                     android:layout_width="wrap_content"
                     android:layout_height="wrap_content"
@@ -35,6 +36,7 @@
                     android:layout_marginTop="16dp" />
 
                 <include
+                    android:id="@+id/js8_callclock_view"
                     layout="@layout/js8_call_clock_block"
                     android:layout_width="268dp"
                     android:layout_height="wrap_content"
@@ -59,6 +61,7 @@
             android:padding="6dp">
 
             <LinearLayout
+                android:id="@+id/js8_lists_row"
                 android:layout_width="match_parent"
                 android:layout_height="0dp"
                 android:layout_weight="1"
@@ -144,6 +147,7 @@
             </LinearLayout>
 
             <include
+                android:id="@+id/js8_statusbar_view"
                 layout="@layout/js8_status_bar_swipe"
                 android:layout_width="match_parent"
                 android:layout_height="wrap_content"
@@ -159,12 +163,14 @@
             android:padding="6dp">
 
             <include
+                android:id="@+id/js8_waterfall_view"
                 layout="@layout/js8_waterfall_block"
                 android:layout_width="0dp"
                 android:layout_height="match_parent"
                 android:layout_weight="1" />
 
             <ScrollView
+                android:id="@+id/js8_wf_controls_scroll"
                 android:layout_width="210dp"
                 android:layout_height="match_parent"
                 android:layout_marginStart="8dp">

@@ -31,7 +31,9 @@ class Js8Activity {
         val bits: Int,
         val isDirected: Boolean,
         val isDataFrame: Boolean,
-        val lowConfidence: Boolean = false
+        val lowConfidence: Boolean = false,
+        /** Dial at decode, for the API (PC ActivityDetail.dial); 0 = not known. */
+        val dial: Long = 0
     )
 
     data class CallDetail(
@@ -43,7 +45,9 @@ class Js8Activity {
         var tdrift: Float = 0f,
         var submode: Int = 0,
         var cqMs: Long = 0,
-        var ackMs: Long = 0
+        var ackMs: Long = 0,
+        /** PC CallDetail.through: heard only inside a relay through this station. */
+        var through: String = ""
     )
 
     /** One line of the Message Window. */
@@ -58,6 +62,14 @@ class Js8Activity {
     val bandActivity = linkedMapOf<Int, MutableList<ActivityDetail>>()
     val callActivity = linkedMapOf<String, CallDetail>()
     val rxLines = mutableListOf<RxLine>()
+    /** PC m_heardGraphOutgoing / m_heardGraphIncoming (logHeardGraph). */
+    val hearing = mutableMapOf<String, MutableSet<String>>()
+    val heardBy = mutableMapOf<String, MutableSet<String>>()
+    /** PC m_rxBlockedOffsets: continuation frames of a blocked station. */
+    private val blockedOffsets = mutableSetOf<Int>()
+    /** A GRID command or relay still arriving, by offset; their later frames finish it. */
+    private class Pending(val from: String, val cmd: String, val text: StringBuilder)
+    private val pending = mutableMapOf<Int, Pending>()
 
     private val dupeCache = mutableMapOf<String, Long>()
     private val openRxLine = mutableMapOf<Int, RxLine>()   // offset bucket -> line still taking frames
@@ -94,6 +106,15 @@ class Js8Activity {
             SUBMODE_SLOW -> "S"
             SUBMODE_ULTRA -> "60"
             else -> "N"
+        }
+
+        /** ALL.TXT mode letter (DecodedText.cpp submodeChar). */
+        fun allTxtLetter(submode: Int) = when (submode) {
+            SUBMODE_FAST -> "B"
+            SUBMODE_TURBO -> "C"
+            SUBMODE_SLOW -> "E"
+            SUBMODE_ULTRA -> "I"
+            else -> "A"
         }
 
         /** Speeds the engine can send; anything else goes out as Normal (getPreferredTxSubmode). */
@@ -188,21 +209,73 @@ class Js8Activity {
             return lat to lon
         }
 
-        /** Great-circle distance (km) and bearing (degrees) between two grids, or null. */
-        fun vector(from: String, to: String): Pair<Double, Double>? {
-            val a = gridToLatLon(from) ?: return null
-            val b = gridToLatLon(to) ?: return null
-            val r = Math.PI / 180
-            val la1 = a.first * r; val la2 = b.first * r
-            val dLon = (b.second - a.second) * r
-            val dLat = la2 - la1
-            val h = sin(dLat / 2) * sin(dLat / 2) + cos(la1) * cos(la2) * sin(dLon / 2) * sin(dLon / 2)
-            val km = 6371.0 * 2 * atan2(sqrt(h), sqrt(1 - h))
-            val y = sin(dLon) * cos(la2)
-            val x = cos(la1) * sin(la2) - sin(la1) * cos(la2) * cos(dLon)
-            val az = (Math.toDegrees(atan2(y, x)) + 360) % 360
-            return km to az
+        /** PC gridLat / gridLon: West longitude positive; a missing subsquare counts as MM, a missing extension as 44. */
+        private fun coords(grid: String): Pair<Float, Float> {
+            fun part(i: Int, at: Int, default: Char) = if (i + at < grid.length) grid[i + at] else default
+            fun data(i: Int) = listOf(part(i, 0, 'A') - 'A', part(i, 2, '0') - '0', part(i, 4, 'M') - 'A', part(i, 6, '4') - '0')
+            val la = data(1)
+            val lo = data(0)
+            val lat = (-90 + 10 * la[0]) + la[1] + (2.5f * (la[2] + 0.5f)) / 60f + (15 * (la[3] + 0.5f)) / 3600f
+            val lon = (180 - 20 * lo[0]) - (2 * lo[1]) - (5 * (lo[2] + 0.5f)) / 60f - (30 * (lo[3] + 0.5f)) / 3600f
+            return lat to lon
         }
+
+        /** PC Geodesic azdist (Thomas 1970, Clarke 1866 ellipsoid): distance in km and azimuth in degrees, or null. */
+        fun vector(from: String, to: String): Pair<Double, Double>? {
+            gridToLatLon(from) ?: return null
+            gridToLatLon(to) ?: return null
+            val origin = from.trim().uppercase()
+            val remote = to.trim().uppercase()
+            if (origin == remote) return 0.0 to 0.0
+            val (lat1, lon1) = coords(origin)
+            val (lat2, lon2) = coords(remote)
+            if (abs(lat1 - lat2) < 0.02f && abs(lon1 - lon2) < 0.02f) return 0.0 to 0.0
+            val range = (lon1 - lon2 + 720f) % 360f
+            if (abs(lat1 + lat2) < 0.02f && abs(range - 180f) < 0.02f) return 204000.0 to 0.0
+            val AL = 6378206.4f; val BL = 6356583.8f
+            val D2R = 0.01745329251994f; val TAU = 6.28318530718f
+            val BOA = BL / AL; val F = 1f - BOA; val FF64 = F * F / 64f
+            val P1R = lat1 * D2R; val P2R = lat2 * D2R
+            val DLR = lon2 * D2R - lon1 * D2R
+            val T1R = kotlin.math.atan(BOA * kotlin.math.tan(P1R))
+            val T2R = kotlin.math.atan(BOA * kotlin.math.tan(P2R))
+            val TM = (T1R + T2R) / 2f; val DTM = (T2R - T1R) / 2f
+            val STM = sin(TM); val CTM = cos(TM); val SDTM = sin(DTM); val CDTM = cos(DTM)
+            val KL = STM * CDTM; val KK = SDTM * CTM
+            val SDLMR = sin(DLR / 2f)
+            val L = SDTM * SDTM + SDLMR * SDLMR * (CDTM * CDTM - STM * STM)
+            val CD = 1f - 2f * L
+            val DL = kotlin.math.acos(CD)
+            val SD = sin(DL)
+            val T = DL / SD
+            val U = 2f * KL * KL / (1f - L)
+            val V = 2f * KK * KK / L
+            val D = 4f * T * T
+            val X = U + V
+            val E = -2f * CD
+            val Y = U - V
+            val A = -D * E
+            val dist = AL * SD * (T - (F / 4f) * (T * X - Y) +
+                FF64 * (X * (A + (T - (A + E) / 2f) * X) + Y * (-2f * D + E * Y) + D * X * Y)) / 1000f
+            val TDLPM = kotlin.math.tan((DLR + (-((E * (4f - X) + 2f * Y) *
+                ((F / 2f) * T + FF64 * (32f * T + (A - 20f * T) * X - 2f * (D + 2f) * Y)) / 4f) * kotlin.math.tan(DLR))) / 2f)
+            val HAPBR = atan2(SDTM, CTM * TDLPM)
+            val HAMBR = atan2(CDTM, STM * TDLPM)
+            var A1M2 = TAU + HAMBR - HAPBR
+            while (A1M2 < 0f || A1M2 >= TAU) A1M2 += if (A1M2 < 0f) TAU else -TAU
+            return dist.toDouble() to (360f - A1M2 / D2R).toDouble()
+        }
+
+        /** PC Distance::toString: "<N" when close and either grid has only 4 characters. */
+        fun distanceText(km: Double, miles: Boolean, units: Boolean, a: String, b: String): String {
+            val close = (a.trim().length < 6 || b.trim().length < 6) && km < 120.0
+            var value = if (close) 120.0 else km
+            if (miles) value /= 1.609344
+            return (if (close) "<" else "") + Math.round(value) + if (units) (if (miles) " mi" else " km") else ""
+        }
+
+        /** Grid from a compound "CALL GRID" helper frame (DecodeViewModel), for the frame it joins. */
+        val compoundGrids = java.util.concurrent.ConcurrentHashMap<String, String>()
     }
 
     // ---- Settings read on each frame ---------------------------------------------------------
@@ -272,7 +345,8 @@ class Js8Activity {
             }
         }
         val list = bandActivity.getOrPut(offset) { mutableListOf() }
-        list += ActivityDetail(offset, text, m.snr, now, m.dt, m.mode, m.type, directed != null, m.isDataFrame(), m.quality < 0.17f)
+        list += ActivityDetail(offset, text, m.snr, now, m.dt, m.mode, m.type, directed != null, m.isDataFrame(), m.quality < 0.17f,
+            com.js8call.example.service.JS8EngineService.decodeDialHz)
         while (list.size > 10) list.removeAt(0)
 
         // Heartbeat / CQ (compound frames): call activity only
@@ -281,8 +355,10 @@ class Js8Activity {
         val isCq = directed != null && directed.to == "@ALLCALL" && directed.extra.uppercase().startsWith("CQ") ||
             directed != null && directed.to == "@ALLCALL" && directed.cmd.trim().uppercase() == "CQ"
 
+        finishPending(offset, range, text, isLast, m, cfg.myCall)
         if (directed != null && directed.from != "<....>" && directed.to != "<....>") {
-            val grid = (directed.extra + " " + text).split(Regex("\\s+")).lastOrNull { isGrid(it) && it.length >= 4 }.orEmpty()
+            val grid = (directed.extra + " " + text).split(Regex("\\s+")).lastOrNull { isGrid(it) && it.length >= 4 }
+                ?: compoundGrids.remove(directed.from.uppercase()).orEmpty()
             val toMe = cfg.isToMe(directed.to)
             logCall(CallDetail(
                 call = directed.from, grid = grid, snr = m.snr, offset = offset, utcMs = now, tdrift = m.dt,
@@ -290,11 +366,17 @@ class Js8Activity {
                 cqMs = if (isCq) now else 0,
                 ackMs = if (toMe || upper.contains(": ACK") || directed.cmd.trim() == "ACK") now else 0
             ))
-            // GRID command: grids in the text
-            if (directed.cmd.trim().uppercase() == "GRID") {
+            logHeard(directed.from, directed.to, cfg.myCall)
+            // GRID command: grids in the text; a buffered one finishes in finishPending
+            val command = directed.cmd.trim().uppercase()
+            if (command == "GRID") {
                 directed.extra.split(Regex("\\s+")).filter { isGrid(it) }.forEach { g ->
                     callActivity[directed.from]?.grid = g
                 }
+            }
+            if (command == "HEARING") parseHeard(directed.from, directed.extra, cfg.myCall)
+            if (!isLast && (command == "GRID" || command == "HEARING" || (command == ">" && toMeCmd(directed, cfg)))) {
+                pending[offset] = Pending(directed.from, command, StringBuilder(directed.extra))
             }
             val isAllCall = directed.to == "@ALLCALL" || directed.to == "@HB"
             val isGroup = directed.to in cfg.groups
@@ -320,10 +402,61 @@ class Js8Activity {
         val near = abs(offset - myOffset) <= range
         if (!near && buffered == null) return true
         val sender = text.substringBefore(':', "").trim()
-        if (sender.isNotEmpty() && blocked(sender, cfg)) return true
+        if (sender.isNotEmpty() && blocked(sender, cfg)) {
+            blockedOffsets += offset
+            return true
+        }
+        // PC displayTextForFreq: continuation frames of a blocked station stay hidden too
+        blockedOffsets.firstOrNull { abs(it - offset) <= range }?.let { blockedAt ->
+            if (!isLast && !isFirst) return true
+            blockedOffsets -= blockedAt
+            if (!isFirst) return true
+        }
         writeRx(text, offset, now, isTx = false, newLine = isFirst, isLast = isLast, cfg = cfg, isData = m.isDataFrame())
         if (isLast && buffered != null) bufferedToMe.remove(buffered)
         return true
+    }
+
+    private fun toMeCmd(d: Directed, cfg: Config) = cfg.isToMe(d.to)
+
+    /** PC logHeardGraph. */
+    private fun logHeard(from: String, to: String, my: String) {
+        if (my.isEmpty()) return
+        hearing.getOrPut(my) { mutableSetOf() } += from
+        heardBy.getOrPut(from) { mutableSetOf() } += my
+        if (to == "@ALLCALL") return
+        hearing.getOrPut(from) { mutableSetOf() } += to
+        heardBy.getOrPut(to) { mutableSetOf() } += from
+    }
+
+    private fun parseHeard(from: String, text: String, my: String) =
+        text.split(Regex("\\s+")).filter { isCallsign(it) }.forEach { logHeard(from, it, my) }
+
+    /** Later frames of a buffered GRID, HEARING or relay at this offset; the last frame finishes it. */
+    private fun finishPending(offset: Int, range: Int, text: String, isLast: Boolean, m: DecodedMessage, my: String) {
+        val key = pending.keys.firstOrNull { abs(it - offset) <= range } ?: return
+        val p = pending[key] ?: return
+        p.text.append(text)
+        if (!isLast) return
+        pending.remove(key)
+        when (p.cmd) {
+            "GRID" -> p.text.toString().split(Regex("\\s+")).lastOrNull { isGrid(it) }?.let { callActivity[p.from]?.grid = it }
+            "HEARING" -> parseHeard(p.from, p.text.toString(), my)
+            ">" -> Regex("\\s(?:\\*DE\\*|VIA)\\s([A-Z0-9/]+)").findAll(p.text.toString().uppercase()).forEach {
+                // PC processCommandActivity: third-party calls join Call Activity, icon ⚟
+                logCall(CallDetail(it.groupValues[1], snr = -64, offset = offset, utcMs = System.currentTimeMillis(),
+                    tdrift = m.dt, submode = m.mode, through = p.from))
+            }
+        }
+    }
+
+    /** PC qsy: the rows move by the same amount as the dial. */
+    fun shiftBand(hzDelta: Int) {
+        val moved = bandActivity.entries.filter { it.value.isNotEmpty() }.associate { (off, list) ->
+            off - hzDelta to list.apply { this[lastIndex] = last().copy(offset = off - hzDelta) }
+        }
+        bandActivity.clear()
+        bandActivity.putAll(moved)
     }
 
     private fun blocked(call: String, cfg: Config) =
@@ -334,6 +467,7 @@ class Js8Activity {
         if (d.call.isBlank() || d.call.contains(">") || d.call.startsWith("@")) return
         val old = callActivity[d.call]
         if (old != null) {
+            if (d.through.isNotEmpty()) return // heard directly already
             if (d.grid.isEmpty()) d.grid = old.grid
             if (d.ackMs == 0L) d.ackMs = old.ackMs
             if (d.cqMs == 0L) d.cqMs = old.cqMs
@@ -465,7 +599,7 @@ class Js8Activity {
     }
 
     fun clearBand() = bandActivity.clear()
-    fun clearCalls() = callActivity.clear()
+    fun clearCalls() { callActivity.clear(); hearing.clear(); heardBy.clear() }
     fun clearRx() { rxLines.clear(); openRxLine.clear() }
 
     /**
