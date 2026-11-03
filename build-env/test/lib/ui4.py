@@ -101,11 +101,11 @@ def toggle(row, p, label, key, press='OK'):
         return
     setprefs(**OK0); start(); rotate('U'); time.sleep(1)
     a = pv_(key); page(p); seen = False
-    for _ in range(10):
+    for _ in range(10 if L == 'U' else 16):  # sideways a swipe moves the page about 340 px
         if find(x(), label):
             seen = True
             break
-        adb('shell', 'input', 'swipe', '600', '900', '600', '400', '350'); time.sleep(.6)
+        adb('shell', 'input', 'swipe', '600', '900' if L == 'U' else '780', '600', '400', '350'); time.sleep(.6)  # sideways 900 is on Save
     tapk(label, 1)
     tapk('← Back', 1.5)
     tapk(press, 2) if press == 'OK' else tapk('← Back', 2)

@@ -154,7 +154,8 @@ def i06():
     b = bounds_of(n[0]); p = ((b[0] + b[2]) // 2, (b[1] + b[3]) // 2)
     adb('shell', 'input', 'swipe', str(p[0]), str(p[1]), str(p[0]), str(p[1]), '900'); time.sleep(1.5)
     w = html.unescape(x())
-    ok = 'Show Columns...' in w and tapk('Show Columns...', 1.2) and has('Callsigns', 'Last heard timestamp')
+    # sideways the Show Columns box is too short to show the last column without scrolling: its two label items prove it opened
+    ok = 'Show Columns...' in w and tapk('Show Columns...', 1.2) and (has('Callsigns', 'Last heard timestamp') or 'Minimal Column Labels' in html.unescape(x()))
     return ok, re.findall(r' text="([^"]+)"', html.unescape(x()))[:6]
 
 
@@ -165,7 +166,7 @@ def i07():
     if not n:
         return False, 'no list'
     # press on the column rows: the empty part of the list below the last row
-    y = cb[3] - 25
+    y = cb[3] - (25 if L == 'U' else 120)  # sideways the bottom 10 dp is the divider's grab strip
     adb('shell', 'input', 'swipe', str((cb[0] + cb[2]) // 2), str(y), str((cb[0] + cb[2]) // 2), str(y), '900'); time.sleep(1.5)
     w = html.unescape(x())
     return 'Add New Station or Group...' in w and 'Clear Entire List' in w, re.findall(r' text="([^"]+)"', w)[:5]
@@ -190,10 +191,11 @@ def i25():
 
 
 def h02():
+    """Time Drift up: the drift shows by the callsign (js8_clock_drift, "+100ms", since 2026-11-03), then reset."""
     wf_tab('js8_wf_tab_timing'); reach('js8_wf_drift_up'); tapk('js8_wf_drift_up', 1.5)
-    reach('js8_btn_hb'); top(); t_ = find(x(), 'js8_clock')
+    reach('js8_btn_hb'); top(); t_ = find(x(), 'js8_clock_drift') or (reach('js8_clock_drift') and find(x(), 'js8_clock_drift'))  # Pages: Header tab
     wf_tab('js8_wf_tab_timing'); reach('js8_wf_drift_reset'); tapk('js8_wf_drift_reset', 1)
-    return bool(t_) and 'ms)' in t_[2], t_[2] if t_ else 'no clock'
+    return bool(t_) and t_[2].endswith('ms'), t_[2] if t_ else 'no drift label'
 
 
 def h27():

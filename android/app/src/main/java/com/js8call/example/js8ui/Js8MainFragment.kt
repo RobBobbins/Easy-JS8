@@ -88,12 +88,21 @@ class Js8MainFragment : Fragment() {
 
         const val PREF_LANDSCAPE_LAYOUT = "landscape_layout"
         private const val KEY_FULLSCREEN = "js8cfg_fullscreen"
+        private const val PRESS_ANCHOR = "press_anchor"
+        /** Message Window menu height: 6 rows of 36 dp (ThemeOverlay.Js8PopupMenu), 2 group dividers, padding. */
+        private const val MESSAGE_MENU_DP = 6 * 36 + 2 * 8 + 16
         /** Swipe page kept across rotation / returning from the Menu page. */
         private var swipePage = 1
         /** checkStartupWarnings runs once per app start, not on each rotation. */
         private var startupChecked = false
         /** RX / TX set from Receiver / Transmitter off at startup once per app start, not on each rotation. */
         private var startupRxTxDone = false
+
+        /** MainActivity closing (Back on the main screen, PC closeEvent): Android keeps the process, the next open is a new start. */
+        fun appClosed() {
+            startupRxTxDone = false
+            startupChecked = false // AUTO from Turn autoreply on at startup again, as a PC restart
+        }
         /** When each callsign was first selected: the QSO start time for Log QSO (m_callSelectedTime). */
         private val callSelectedTime = mutableMapOf<String, Long>()
     }
@@ -110,6 +119,9 @@ class Js8MainFragment : Fragment() {
     private var offsetValue: TextView? = null
     private lateinit var callsign: TextView
     private lateinit var clock: TextView
+    /** Time drift beside the callsign, and its invisible twin that keeps the callsign centred. */
+    private var clockDrift: TextView? = null
+    private var clockDriftPad: TextView? = null
     private lateinit var btnRx: View
     private lateinit var btnTx: View
     private lateinit var bandActivity: Js8TableView
@@ -185,7 +197,20 @@ class Js8MainFragment : Fragment() {
             val now = System.currentTimeMillis()
             // PC updateClockUI: the time drift after the time
             val drift = monitorVm.status.value?.timeDriftMs ?: 0L
-            clock.text = clockFormat.format(Date(now)) + if (drift == 0L) "" else " (${if (drift > 0) "+" else ""}${drift}ms)"
+            val driftText = if (drift == 0L) "" else "${if (drift > 0) "+" else ""}${drift}ms"
+            val driftView = clockDrift
+            if (driftView != null) {
+                // every layout: the drift right of the callsign (Rob, 2026-11-03)
+                clock.text = clockFormat.format(Date(now))
+                if (driftView.text.toString() != driftText) {
+                    driftView.text = driftText
+                    clockDriftPad?.text = driftText
+                    driftView.visibility = if (drift == 0L) View.GONE else View.VISIBLE
+                    clockDriftPad?.visibility = if (drift == 0L) View.GONE else View.INVISIBLE
+                }
+            } else {
+                clock.text = clockFormat.format(Date(now)) + if (drift == 0L) "" else " ($driftText)"
+            }
             progress.seconds = ((now / 1000) % progress.period).toInt()
             if (activityVm.activity.processIdle(now, Js8Activity.Config(prefs()))) activityDirty = true
             // PC updateTimer: lists redrawn at most once a second, when something changed;
@@ -231,6 +256,8 @@ class Js8MainFragment : Fragment() {
         }
         callsign = view.findViewById(R.id.js8_callsign)
         clock = view.findViewById(R.id.js8_clock)
+        clockDrift = view.findViewById(R.id.js8_clock_drift)
+        clockDriftPad = view.findViewById(R.id.js8_clock_drift_pad)
         btnRx = view.findViewById(R.id.js8_btn_rx)
         btnTx = view.findViewById(R.id.js8_btn_tx)
         bandActivity = view.findViewById(R.id.js8_band_activity)
@@ -346,16 +373,16 @@ class Js8MainFragment : Fragment() {
         if (!startupChecked) {
             startupChecked = true
             // AUTO starts as Station > Turn autoreply on at startup, which needs callsign and grid
-            // (Configuration::autoreply_on_at_startup). Before the split that checkbox was the live
-            // switch itself, so an install without the new key keeps its old setting.
+            // (UI_Constructor: setChecked(Configuration::autoreply_on_at_startup)): ticked on, unticked off, as the PC
+            // (Rob, 2026-11-03: "just do what the program does"; was unticked = AUTO as left, 2026-10-22).
+            // A new install starts ticked (PC AutoreplyOnAtStartup default true). Before the split that checkbox
+            // was the live switch itself, so an older install without the new key keeps its old setting.
             val p = prefs()
             val e = p.edit()
-            if (!p.contains(Js8SettingsSchema.AUTOREPLY_STARTUP_KEY)) {
-                e.putBoolean(Js8SettingsSchema.AUTOREPLY_STARTUP_KEY, p.getBoolean(Js8SettingsSchema.AUTOREPLY_KEY, false))
-            }
-            // Ticked: AUTO on. Unticked: AUTO as it was left (Rob, 2026-10-22: "all settings remembered";
-            // the PC turns it off)
-            val startAuto = (p.getBoolean(Js8SettingsSchema.AUTOREPLY_STARTUP_KEY, true) || p.getBoolean(Js8SettingsSchema.AUTOREPLY_KEY, false)) &&
+            val onAtStartup = if (p.contains(Js8SettingsSchema.AUTOREPLY_STARTUP_KEY)) p.getBoolean(Js8SettingsSchema.AUTOREPLY_STARTUP_KEY, true)
+                else (if (p.contains(Js8SettingsSchema.AUTOREPLY_KEY)) p.getBoolean(Js8SettingsSchema.AUTOREPLY_KEY, false) else true)
+                    .also { e.putBoolean(Js8SettingsSchema.AUTOREPLY_STARTUP_KEY, it) }
+            val startAuto = onAtStartup &&
                 p.getString("callsign", "").orEmpty().isNotBlank() && p.getString("grid", "").orEmpty().isNotBlank()
             e.putBoolean(Js8SettingsSchema.AUTOREPLY_KEY, startAuto).apply()
             // UI_Constructor::checkStartupWarnings: no callsign or grid opens Station
@@ -1572,7 +1599,7 @@ class Js8MainFragment : Fragment() {
             if (status.isNotBlank()) addMessageText("STATUS ${macro(status)}", send = true)
         }
         typingBox.setOnLongClickListener { showTypingMenu(it); true }
-        messageWindow.setOnLongClickListener { showMessageWindowMenu(it); true }
+        messageWindow.setOnLongClickListener { pressAnchor(MESSAGE_MENU_DP) { a -> showMessageWindowMenu(a) }; true }
         // Up and down drags scroll the box, not the page it sits in; sideways drags stay with the Swipe tabs.
         // Upright: every drag that starts in the box stays with the box, from the first touch (Rob, 2026-10-31)
         var downX = 0f
@@ -1582,6 +1609,8 @@ class Js8MainFragment : Fragment() {
                 android.view.MotionEvent.ACTION_DOWN -> {
                     downX = ev.x
                     downY = ev.y
+                    pressRawX = ev.rawX
+                    pressRawY = ev.rawY
                     if (isUprightLayout()) v.parent?.requestDisallowInterceptTouchEvent(true)
                 }
                 android.view.MotionEvent.ACTION_MOVE ->
@@ -1644,6 +1673,28 @@ class Js8MainFragment : Fragment() {
     /** Popup menus with the lists' text size and shorter rows (ThemeOverlay.Js8PopupMenu). */
     private fun popupMenu(anchor: View) =
         android.widget.PopupMenu(android.view.ContextThemeWrapper(requireContext(), R.style.ThemeOverlay_Js8PopupMenu), anchor)
+
+    /** Where the finger last went down on the Message Window, screen pixels. */
+    private var pressRawX = 0f
+    private var pressRawY = 0f
+
+    /**
+     * A menu opened from where the finger is, as the Band Activity row menus are: a 1 px view at the press
+     * point, raised only as far as the menu ([menuDp] tall) needs to fit below it, removed when the menu
+     * closes. Anchored to the whole Message Window, sideways the menu had two rows of room (Rob, 2026-11-03).
+     */
+    private fun pressAnchor(menuDp: Int, show: (View) -> Unit) {
+        val content = requireActivity().findViewById<android.widget.FrameLayout>(android.R.id.content)
+        val at = IntArray(2).also { content.getLocationOnScreen(it) }
+        val need = menuDp * resources.displayMetrics.density
+        val y = minOf(pressRawY - at[1], content.height - need).coerceAtLeast(0f)
+        val a = View(requireContext()).apply { tag = PRESS_ANCHOR }
+        content.addView(a, android.widget.FrameLayout.LayoutParams(1, 1).apply {
+            leftMargin = (pressRawX - at[0]).toInt().coerceAtLeast(0)
+            topMargin = y.toInt()
+        })
+        a.post { if (isAdded) show(a) else content.removeView(a) }
+    }
 
     private fun savedMessages() = prefs().getString(Js8SettingsSchema.SAVED_MESSAGES_KEY, Js8SettingsSchema.SAVED_MESSAGES_DEFAULT)
         .orEmpty().split('\n').filter { it.isNotBlank() }
@@ -2046,6 +2097,7 @@ class Js8MainFragment : Fragment() {
         m.add(2, 2, 2, "Clear")
         m.add(2, 3, 3, "Clear All Lists")
         m.add(3, 4, 4, "Save As...")
+        popup.setOnDismissListener { if (anchor.tag == PRESS_ANCHOR) (anchor.parent as? ViewGroup)?.removeView(anchor) }
         popup.setOnMenuItemClickListener { item ->
             when (item.itemId) {
                 1 -> (requireContext().getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager)
@@ -2725,7 +2777,8 @@ class Js8MainFragment : Fragment() {
         monitorVm.status.observe(viewLifecycleOwner) { status ->
             val running = status.state == EngineState.RUNNING || status.state == EngineState.STARTING
             btnRx.isActivated = running
-            levelMeter.setLevel(if (running) (status.powerDb + 90f).coerceIn(0f, 90f) else 0f)
+            // PC dataSink m_px: 10 log10 of the mean square of the raw samples, shown as is (+90 pinned it at 90)
+            levelMeter.setLevel(if (running) status.powerDb.coerceIn(0f, 90f) else 0f)
             renderStatus()
             offsetSlider?.let { if (it.progress != status.txOffsetHz.toInt()) it.progress = status.txOffsetHz.toInt() }
             offsetValue?.text = "${status.txOffsetHz.toInt()} Hz" // FT8Call has no slider to update it

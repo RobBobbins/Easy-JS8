@@ -11,7 +11,8 @@ def msg(frm, pl):
 
 
 def gesture(kind, px, py):
-    adb('shell', f'am broadcast -n {PKG}/com.js8call.example.debug.DebugGestureReceiver --es gesture {kind} --ef x {px} --ef y {py}')
+    o = bounds_of(re.findall(r'<node [^>]*>', x())[0])  # window pixels: sideways the window starts right of the camera cutout (x 136)
+    adb('shell', f'am broadcast -n {PKG}/com.js8call.example.debug.DebugGestureReceiver --es gesture {kind} --ef x {px - o[0]} --ef y {py - o[1]}')
     time.sleep(1.2)
 
 
@@ -19,7 +20,23 @@ def nodes(s):
     return [n for n in re.findall(r'<node [^>]*>', x()) if s in n]
 
 
+def drag(down, x_='540'):
+    """One page drag inside the screen: upright 800 to 1500, sideways 350 to 850 (the screen is 1080 high)."""
+    a, b = ('800', '1500') if L == 'U' else ('350', '850')
+    x_ = x_ if L == 'U' else '1200'
+    adb('shell', 'input', 'swipe', x_, a if down else b, x_, b if down else a, '300')
+
+
 def inbox_rows():
+    if L in ('P', 'F'):  # the inbox is its own screen there: View > Show Message Inbox... (Js8InboxFragment)
+        for _ in range(5):
+            if find(x(), 'js8_inbox_table'):
+                return True
+            if not (tp('js8_menubar_view', 1.2) and tapk('Show Message Inbox...', 2)):
+                home(); time.sleep(3)  # the New message notification at the top takes the tap until it goes
+        return False
+    if L == 'G':
+        return reach('js8_inbox_table')
     for _ in range(9):
         xml = x()
         b = bounds('js8_inbox_table')
@@ -87,7 +104,7 @@ def k03():
 
 def k04():
     top()
-    n = nodes('K4OLD')
+    n = [m for m in nodes('K4OLD') if L == 'U' or 'text="K4OLD"' in m]  # sideways Band Activity shows K4OLD too: the Callsigns row
     if not n:
         reach('js8_call_activity'); n = nodes('K4OLD')
     b = bounds_of(n[0]); p = ((b[0] + b[2]) // 2, (b[1] + b[3]) // 2)
@@ -114,11 +131,11 @@ def k02():
 def logpage():
     inj(f'K4WRD: {M} HELLO WORDONE', 900, 3, -5); time.sleep(2.5)
     top()
-    tapk('js8_btn_log', 2.5)
+    (tapk if L == 'U' else tp)('js8_btn_log', 2.5)  # Pages: LOG is on the Header tab
     for _ in range(6):
         if has_box():
             break
-        adb('shell', 'input', 'swipe', '540', '1500', '540', '700', '300'); time.sleep(.8)
+        drag(False); time.sleep(.8)
 
 
 def has_box():
@@ -146,7 +163,7 @@ def to_field(label):
             m = field_after(label)
             if m:
                 return bounds_of(m)
-            adb('shell', 'input', 'swipe', '540', ys[0], '540', ys[1], '300'); time.sleep(.7)
+            drag(ys[0] == '800'); time.sleep(.7)
 
 
 def kword(label, want):
@@ -158,16 +175,26 @@ def kword(label, want):
     for _ in range(6):
         if has_box():
             break
-        adb('shell', 'input', 'swipe', '540', '800', '540', '1500', '300'); time.sleep(.8)
+        drag(True); time.sleep(.8)
     if not has_box():
         for _ in range(14):
-            adb('shell', 'input', 'swipe', '540', '1500', '540', '800', '300'); time.sleep(.7)
+            drag(False); time.sleep(.7)
             if has_box():
                 break
+    if L != 'U':  # sideways the screen edge cuts the box: the page end shows it whole (8 lines of 57 px and 24 px padding)
+        for _ in range(6):
+            b_ = word_box()
+            if b_[3] - b_[1] >= 470:
+                break
+            drag(False); time.sleep(.7)
     w = word_box()
     # the word is near the end of the line
     t_ = [n for n in re.findall(r'<node [^>]*>', x()) if 'WORDONE' in n][0]
-    gesture('doubletap', w[0] + 620, w[1] + 40)
+    if L == 'U':
+        gesture('doubletap', w[0] + 620, w[1] + 40)
+    else:  # sideways a message is one line: WORDONE (characters 39 to 45) on the bottom line; measured 25 px a character on a 57 px line
+        gesture('doubletap', w[0] + 12 + int(42.5 * 25), w[3] - 12 - 28)
+        shot(f'kword_{label}_{L}_{_run}')
     time.sleep(1)
     m = field_after(label) or ''
     if not m:
@@ -184,7 +211,7 @@ def k12():
     for _ in range(10):
         if 'Export Log...' in html.unescape(x()):
             break
-        adb('shell', 'input', 'swipe', '600', '900', '600', '300', '350'); time.sleep(.7)
+        adb('shell', 'input', 'swipe', '600', '900' if L == 'U' else '780', '600', '300', '350'); time.sleep(.7)  # sideways 900 is on Save
     tapk('Export Log...', 2)
     def st():
         return [('checked="true"' in n) for n in re.findall(r'<node [^>]*>', x()) if 'CheckBox' in n]
@@ -201,7 +228,7 @@ def settings_to(word):
     for _ in range(10):
         if word in html.unescape(x()):
             return True
-        adb('shell', 'input', 'swipe', '600', '900', '600', '300', '350'); time.sleep(.7)
+        adb('shell', 'input', 'swipe', '600', '900' if L == 'U' else '780', '600', '300', '350'); time.sleep(.7)  # sideways 900 is on Save
     return False
 
 

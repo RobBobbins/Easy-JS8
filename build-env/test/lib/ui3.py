@@ -100,6 +100,8 @@ for row, bad, msg in (('M02', dict(callsign='B@D!'), 'callsign format you provid
                       ('M16', dict(js8cfg_auto_whitelist='B@D!'), 'is not a valid callsign to whitelist')):
     if want(row):
         xml = okbox(**bad)
+        if msg not in xml:
+            shot(f'{row.lower()}_{L}_{_run}')
         fix(row, msg in xml, msg[:40])
         closebox()
 if want('M03'):
@@ -118,11 +120,11 @@ def toggle(row, p, label, key, press='OK'):
         return
     setprefs(**OK0); start(); rotate('U'); time.sleep(1)
     a = pv_(key); page(p); seen = False
-    for _ in range(10):
+    for _ in range(10 if L == 'U' else 16):  # sideways a swipe moves the page about 340 px
         if find(x(), label):
             seen = True
             break
-        adb('shell', 'input', 'swipe', '600', '900', '600', '400', '350'); time.sleep(.6)
+        adb('shell', 'input', 'swipe', '600', '900' if L == 'U' else '780', '600', '400', '350'); time.sleep(.6)  # sideways 900 is on Save
     tapk(label, 1)
     tapk('← Back', 1.5)
     tapk(press, 2) if press == 'OK' else tapk('← Back', 2)
@@ -139,7 +141,7 @@ def pv_(key):
 toggle('M46', 'General', 'Display distance in miles', 'js8cfg_miles')
 toggle('M47', 'General', 'Display distance in miles', 'js8cfg_miles', 'Cancel')
 toggle('M09', 'General', 'Allow sending standard messages without callsign', 'js8cfg_avoid_forced_identify')
-toggle('M24', 'Radio', 'Hold PTT between frames while there are more to be transmitted', 'js8cfg_hold_ptt')
+toggle('M24', 'Radio', 'Hold PTT between frames while there are more to be transmitted' if L == 'U' else 'Hold PTT between frames', 'js8cfg_hold_ptt')  # sideways the short label (Rob, 2026-10-21)
 setprefs(**OK0); start()
 adb('shell', 'settings', 'put', 'system', 'user_rotation', '0')
 json.dump(t.res, open(f'ui3.{_run}.json', 'w'))

@@ -57,7 +57,8 @@ BASE = dict(autoreply_enabled=True, js8cfg_autoreply_startup=True, js8cfg_autore
             js8cfg_swl=False, js8cfg_auto_whitelist='', js8cfg_auto_blacklist='', js8cfg_rx_blocklist='', js8cfg_avoid_allcall=False, my_groups='@TESTG',
             my_info='TEST RIG', my_status='IDLE', js8cfg_hb=True, js8cfg_hb_ack=True, js8cfg_tx_watchdog='60', js8cfg_activity_aging='2',
             js8cfg_callsign_aging='0', js8cfg_tcp_enabled=True, js8cfg_tcp_accept=True, js8cfg_hb_blacklist='', js8cfg_hb_rate_limit=False,
-            js8cfg_heartbeat_qso_pause=True, heartbeat_interval='0')
+            js8cfg_heartbeat_qso_pause=True, heartbeat_interval='0',
+            time_drift_ms=Long(0), js8cfg_auto_drift_on=False)  # drift tests left +5897 ms behind (2026-11-03)
 
 
 def fresh(**k):

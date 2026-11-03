@@ -1,8 +1,18 @@
 # Easy JS8 test plan
 
-State at 2026-11-02 21:30 is in `HANDOFF.md`, "Test pass state". Steps 1 to 13 are done: all 988 rows passed twice or are N/A, 0 Failed.
+State at 2026-11-03 16:51 is in `HANDOFF.md`, "Test pass state (2026-11-03)". Steps 1 to 17 are done: 1,007 rows, 1,006 passed twice or are N/A, 0 Failed. Not run: W19 (real Hamlib rigctld), which needs Rob to start `rigctld.exe`.
 
-**Left:** step 14, phone and radio.
+**Rule (Rob, 2026-11-03):** EVERYTHING ON THE PC THAT CAN BE DONE, GETS DONE ON THE PC. THE PHONE AND RADIO ARE THE ABSOLUTELY LAST STEPS.
+
+**Rule (Rob, 2026-11-03): EVERY TEST RUNS WITH UPDATES AND TIMERS.**
+1. Before any work: a table, one line per step: step number; scripts and row IDs; estimate in minutes; clock time it should end; clock time of its limit, 10% over. Under it: total time and the clock time it should all be finished.
+2. Every test command: its description says "est N min, limit M min"; its `timeout` is exactly N × 1.1 minutes, in seconds.
+3. After every step, exactly 5 lines: **Step** (number and name); **Rows** (how many passed twice, which IDs failed, which weren't run); **Time** (minutes taken, estimate, percentage over or under); **Problems** (each on its own line, or "none"); **Next** (next step, its estimate, clock time it ends).
+4. Steps over 20 minutes: the same 5-line update at the halfway clock time.
+5. Over the limit: stop, give the 5-line update, wait for Rob.
+6. Background runs: a timer for halfway and one for the limit. No step ends without its update.
+
+**Left:** W19 on the PC once Rob has started `rigctld.exe`, then the phone and radio.
 
 ## How the tests change
 
@@ -33,7 +43,11 @@ State at 2026-11-02 21:30 is in `HANDOFF.md`, "Test pass state". Steps 1 to 13 a
 | 11 | JS8Call 3.0.2 on your PC as the other station (T), twice | 18 rows | 2 hours |
 | 12 | Real APRS and JS8NET, genuine traffic only (U), twice | 3 rows | 30 minutes |
 | 13 | Remaining Failed rows, one more try | whatever is left | 1 hour |
-| 14 | Phone and radio | not on this list | absolutely last |
+| 14 | Write scripts for the W rows (checklist section W) | none | 1 hour 30 minutes |
+| 15 | W rows, twice | 18 rows | 40 minutes |
+| 16 | Sideways rows that were N/A under the one-layout rule (H, I, K, L, M, N), twice, one layout at a time | 359 cells | 2 hours 50 minutes |
+| 17 | Failed rows, one more try; docs | whatever is left | 20 minutes |
+| 18 | Phone and radio | not on this list | absolutely last |
 
 ## What could change the time
 

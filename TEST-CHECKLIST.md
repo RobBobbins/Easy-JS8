@@ -253,7 +253,7 @@ From 2026-11-01 the test build's engine is compiled at -O3, the same as release.
 | S02 | No callsign: Station cannot be left | Pass | Pass | ['The callsign format you provided is not supported', 'OK'] |
 | S03 | RX off at startup | Pass | Pass |  |
 | S04 | TX off at startup | Pass | Pass |  |
-| S05 | Turn autoreply on at startup | Pass | Pass | no matching send:  |
+| S05 | Turn autoreply on at startup | Pass | Pass | box unticked starts AUTO off, ticked starts it on, as the PC (2026-11-03) |
 | S06 | HB timer kept after restart | Pass | Pass |  |
 | S07 | Reset activity at startup | Pass | Pass | corrected check |
 | S08 | Waterfall settings kept after restart | Pass | Pass |  |
@@ -289,26 +289,50 @@ From 2026-11-01 the test build's engine is compiled at -O3, the same as release.
 | U02 | Real APRS-IS @APRSIS GRID | Pass | Pass | VA3OSO EN94MN spot seen back on the APRS-IS feed |
 | U03 | Real JS8NET RX.LOCAL | Pass | Pass | RX.LOCAL VA3OSO EN94MN sent to spot.js8call.com; no answer expected |
 
+## W. More PC tests (2026-11-03)
+
+| ID | Test | Run 1 | Run 2 | Note |
+|---|---|---|---|---|
+| W01 | Real JS8 frame: red / cyan decode bracket on the waterfall | Pass | Pass | Upright |
+| W02 | Real JS8 frame: sharp lines on the waterfall (picture) | Pass | Pass | Upright |
+| W03 | Real JS8 frame: Cumulative spectrum rises at the signal | Pass | Pass | Upright |
+| W04 | Real JS8 frame: Avg N change smooths the spectrum | Pass | Pass | Upright |
+| W05 | Real JS8 frame: signal meter moves | Pass | Pass | Upright |
+| W06 | CAT button colours: no rig, rig connected, rig error | Pass | Pass | Upright |
+| W07 | PC heartbeat over audio: app sends HB ACK, PC decodes it | Pass | Pass | Upright |
+| W08 | App heartbeat over audio: PC sends HB ACK, app decodes it | Pass | Pass | Upright |
+| W09 | App timed heartbeat over audio decoded by the PC | Pass | Pass | Upright |
+| W10 | FT8Call Next Beacon countdown counts down | Pass | Pass | FT8Call |
+| W11 | Header Offset slider locked while a message is queued | Pass | Pass | PC |
+| W12 | RX and TX at startup after Back closes the app | Pass | Pass | Upright |
+| W13 | Notification sound plays (Android audio log) | Pass | Pass | Upright |
+| W14 | UI fonts in Pages and FT8Call (picture) | Pass | Pass | Pages, FT8Call |
+| W15 | Pages Station screen has ← Back | Pass | Pass | Pages |
+| W16 | Station > Radio sideways with a rig picked (picture) | Pass | Pass | PC |
+| W17 | Station > Audio in PC and FT8Call (picture) | Pass | Pass | PC, FT8Call |
+| W18 | Upright Station page list (picture) | Pass | Pass | Upright |
+| W19 | Real Hamlib rigctld dummy rig (needs Rob to OK a Hamlib download) |  |  | not run: rigctld.exe from the Hamlib zip needs Rob to start it |
+
 ## H. Main window
 
 | ID | Test | Run 1 | Run 2 | Note |
 |---|---|---|---|---|
 | H01U | Header shows callsign and UTC clock (Upright) | Pass | Pass |  |
-| H01P | Header shows callsign and UTC clock (PC) | Pass | N/A | Upright only (TEST-PLAN One layout) |
-| H01G | Header shows callsign and UTC clock (Pages) | Pass | N/A | Upright only (TEST-PLAN One layout) |
-| H01F | Header shows callsign and UTC clock (FT8Call) | Pass | N/A | Upright only (TEST-PLAN One layout) |
+| H01P | Header shows callsign and UTC clock (PC) | Pass | Pass |  |
+| H01G | Header shows callsign and UTC clock (Pages) | Pass | Pass |  |
+| H01F | Header shows callsign and UTC clock (FT8Call) | Pass | Pass |  |
 | H02U | Clock drift suffix (Upright) | Pass | Pass |  |
-| H02P | Clock drift suffix (PC) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| H02G | Clock drift suffix (Pages) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| H02F | Clock drift suffix (FT8Call) | N/A | N/A | Upright only (TEST-PLAN One layout) |
+| H02P | Clock drift suffix (PC) | Pass | Pass |  |
+| H02G | Clock drift suffix (Pages) | Pass | Pass |  |
+| H02F | Clock drift suffix (FT8Call) | Pass | Pass |  |
 | H03U | RX button (Upright) | Pass | Pass |  |
-| H03P | RX button (PC) | Pass | N/A | Upright only (TEST-PLAN One layout) |
-| H03G | RX button (Pages) | Pass | N/A | Upright only (TEST-PLAN One layout) |
-| H03F | RX button (FT8Call) | Pass | N/A | Upright only (TEST-PLAN One layout) |
+| H03P | RX button (PC) | Pass | Pass |  |
+| H03G | RX button (Pages) | Pass | Pass |  |
+| H03F | RX button (FT8Call) | Pass | Pass |  |
 | H04U | TX button (Upright) | Pass | Pass |  |
-| H04P | TX button (PC) | Pass | N/A | Upright only (TEST-PLAN One layout) |
-| H04G | TX button (Pages) | Pass | N/A | Upright only (TEST-PLAN One layout) |
-| H04F | TX button (FT8Call) | Pass | N/A | Upright only (TEST-PLAN One layout) |
+| H04P | TX button (PC) | Pass | Pass |  |
+| H04G | TX button (Pages) | Pass | Pass |  |
+| H04F | TX button (FT8Call) | Pass | Pass |  |
 | H05U | Mode button menu (Upright) | Pass | Pass |  |
 | H05P | Mode button menu (PC) | Pass | Pass |  |
 | H05G | Mode button menu (Pages) | Pass | Pass |  |
@@ -318,17 +342,17 @@ From 2026-11-01 the test build's engine is compiled at -O3, the same as release.
 | H06G | Settings button (Pages) | Pass | Pass |  |
 | H06F | Settings button (FT8Call) | Pass | Pass |  |
 | H07U | SPOT button (Upright) | Pass | Pass |  |
-| H07P | SPOT button (PC) | Pass | N/A | Upright only (TEST-PLAN One layout) |
-| H07G | SPOT button (Pages) | Pass | N/A | Upright only (TEST-PLAN One layout) |
-| H07F | SPOT button (FT8Call) | Pass | N/A | Upright only (TEST-PLAN One layout) |
+| H07P | SPOT button (PC) | Pass | Pass |  |
+| H07G | SPOT button (Pages) | Pass | Pass |  |
+| H07F | SPOT button (FT8Call) | Pass | Pass |  |
 | H08U | LOG button opens Log QSO (Upright) | Pass | Pass |  |
-| H08P | LOG button opens Log QSO (PC) | Pass | N/A | Upright only (TEST-PLAN One layout) |
-| H08G | LOG button opens Log QSO (Pages) | Pass | N/A | Upright only (TEST-PLAN One layout) |
-| H08F | LOG button opens Log QSO (FT8Call) | Pass | N/A | Upright only (TEST-PLAN One layout) |
+| H08P | LOG button opens Log QSO (PC) | Pass | Pass |  |
+| H08G | LOG button opens Log QSO (Pages) | Pass | Pass |  |
+| H08F | LOG button opens Log QSO (FT8Call) | Pass | Pass |  |
 | H09U | TUNE button (Upright) | Pass | Pass |  |
-| H09P | TUNE button (PC) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| H09G | TUNE button (Pages) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| H09F | TUNE button (FT8Call) | N/A | N/A | Upright only (TEST-PLAN One layout) |
+| H09P | TUNE button (PC) | Pass | Pass |  |
+| H09G | TUNE button (Pages) | Pass | Pass |  |
+| H09F | TUNE button (FT8Call) | Pass | Pass |  |
 | H10U | HB press-and-hold menu (Upright) | Pass | Pass |  |
 | H10P | HB press-and-hold menu (PC) | Pass | Pass |  |
 | H10G | HB press-and-hold menu (Pages) | Pass | Pass |  |
@@ -338,109 +362,109 @@ From 2026-11-01 the test build's engine is compiled at -O3, the same as release.
 | H11G | CQ press-and-hold menu (Pages) | Pass | Pass |  |
 | H11F | CQ press-and-hold menu (FT8Call) | Pass | Pass |  |
 | H12U | REPLY button (Upright) | Pass | Pass |  |
-| H12P | REPLY button (PC) | Pass | N/A | Upright only (TEST-PLAN One layout) |
-| H12G | REPLY button (Pages) | Pass | N/A | Upright only (TEST-PLAN One layout) |
-| H12F | REPLY button (FT8Call) | Pass | N/A | Upright only (TEST-PLAN One layout) |
+| H12P | REPLY button (PC) | Pass | Pass |  |
+| H12G | REPLY button (Pages) | Pass | Pass |  |
+| H12F | REPLY button (FT8Call) | Pass | Pass |  |
 | H13U | SNR button (Upright) | Pass | Pass |  |
-| H13P | SNR button (PC) | Pass | N/A | Upright only (TEST-PLAN One layout) |
-| H13G | SNR button (Pages) | Pass | N/A | Upright only (TEST-PLAN One layout) |
-| H13F | SNR button (FT8Call) | Pass | N/A | Upright only (TEST-PLAN One layout) |
+| H13P | SNR button (PC) | Pass | Pass |  |
+| H13G | SNR button (Pages) | Pass | Pass |  |
+| H13F | SNR button (FT8Call) | Pass | Pass |  |
 | H14U | INFO button (Upright) | Pass | Pass |  |
-| H14P | INFO button (PC) | Pass | N/A | Upright only (TEST-PLAN One layout) |
-| H14G | INFO button (Pages) | Pass | N/A | Upright only (TEST-PLAN One layout) |
-| H14F | INFO button (FT8Call) | Pass | N/A | Upright only (TEST-PLAN One layout) |
+| H14P | INFO button (PC) | Pass | Pass |  |
+| H14G | INFO button (Pages) | Pass | Pass |  |
+| H14F | INFO button (FT8Call) | Pass | Pass |  |
 | H15U | STATUS button (Upright) | Pass | Pass |  |
-| H15P | STATUS button (PC) | Pass | N/A | Upright only (TEST-PLAN One layout) |
-| H15G | STATUS button (Pages) | Pass | N/A | Upright only (TEST-PLAN One layout) |
-| H15F | STATUS button (FT8Call) | Pass | N/A | Upright only (TEST-PLAN One layout) |
+| H15P | STATUS button (PC) | Pass | Pass |  |
+| H15G | STATUS button (Pages) | Pass | Pass |  |
+| H15F | STATUS button (FT8Call) | Pass | Pass |  |
 | H16U | Saved menu (Upright) | Pass | Pass |  |
 | H16P | Saved menu (PC) | Pass | Pass |  |
 | H16G | Saved menu (Pages) | Pass | Pass |  |
 | H16F | Saved menu (FT8Call) | Pass | Pass |  |
 | H17U | Saved > Edit Saved Messages (Upright) | Pass | Pass |  |
-| H17P | Saved > Edit Saved Messages (PC) | Pass | N/A | Upright only (TEST-PLAN One layout) |
-| H17G | Saved > Edit Saved Messages (Pages) | Pass | N/A | Upright only (TEST-PLAN One layout) |
-| H17F | Saved > Edit Saved Messages (FT8Call) | Pass | N/A | Upright only (TEST-PLAN One layout) |
+| H17P | Saved > Edit Saved Messages (PC) | Pass | Pass |  |
+| H17G | Saved > Edit Saved Messages (Pages) | Pass | Pass |  |
+| H17F | Saved > Edit Saved Messages (FT8Call) | Pass | Pass |  |
 | H18U | Saved > APRS EMAIL (Upright) | Pass | Pass |  |
-| H18P | Saved > APRS EMAIL (PC) | Pass | N/A | Upright only (TEST-PLAN One layout) |
-| H18G | Saved > APRS EMAIL (Pages) | Pass | N/A | Upright only (TEST-PLAN One layout) |
-| H18F | Saved > APRS EMAIL (FT8Call) | Pass | N/A | Upright only (TEST-PLAN One layout) |
+| H18P | Saved > APRS EMAIL (PC) | Pass | Pass |  |
+| H18G | Saved > APRS EMAIL (Pages) | Pass | Pass |  |
+| H18F | Saved > APRS EMAIL (FT8Call) | Pass | Pass |  |
 | H19U | Saved > APRS TXT (Upright) | Pass | Pass |  |
-| H19P | Saved > APRS TXT (PC) | Pass | Pass | see screenshot |
-| H19G | Saved > APRS TXT (Pages) | Pass | N/A | Upright only (TEST-PLAN One layout) |
-| H19F | Saved > APRS TXT (FT8Call) | Pass | N/A | Upright only (TEST-PLAN One layout) |
+| H19P | Saved > APRS TXT (PC) | Pass | Pass |  |
+| H19G | Saved > APRS TXT (Pages) | Pass | Pass |  |
+| H19F | Saved > APRS TXT (FT8Call) | Pass | Pass |  |
 | H20U | Saved > APRS GRID (Upright) | Pass | Pass |  |
-| H20P | Saved > APRS GRID (PC) | Pass | Pass | see screenshot |
-| H20G | Saved > APRS GRID (Pages) | Pass | N/A | Upright only (TEST-PLAN One layout) |
-| H20F | Saved > APRS GRID (FT8Call) | Pass | N/A | Upright only (TEST-PLAN One layout) |
+| H20P | Saved > APRS GRID (PC) | Pass | Pass |  |
+| H20G | Saved > APRS GRID (Pages) | Pass | Pass |  |
+| H20F | Saved > APRS GRID (FT8Call) | Pass | Pass |  |
 | H21U | Saved > APRS MSG (Upright) | Pass | Pass |  |
-| H21P | Saved > APRS MSG (PC) | Pass | Pass | see screenshot |
-| H21G | Saved > APRS MSG (Pages) | Pass | N/A | Upright only (TEST-PLAN One layout) |
-| H21F | Saved > APRS MSG (FT8Call) | Pass | N/A | Upright only (TEST-PLAN One layout) |
+| H21P | Saved > APRS MSG (PC) | Pass | Pass |  |
+| H21G | Saved > APRS MSG (Pages) | Pass | Pass |  |
+| H21F | Saved > APRS MSG (FT8Call) | Pass | Pass |  |
 | H22U | Directed menu greying (Upright) | Pass | Pass |  |
-| H22P | Directed menu greying (PC) | Pass | N/A | Upright only (TEST-PLAN One layout) |
-| H22G | Directed menu greying (Pages) | Pass | N/A | Upright only (TEST-PLAN One layout) |
-| H22F | Directed menu greying (FT8Call) | Pass | N/A | Upright only (TEST-PLAN One layout) |
+| H22P | Directed menu greying (PC) | Pass | Pass |  |
+| H22G | Directed menu greying (Pages) | Pass | Pass |  |
+| H22F | Directed menu greying (FT8Call) | Pass | Pass |  |
 | H23U | Deselect button (Upright) | Pass | Pass |  |
-| H23P | Deselect button (PC) | Pass | N/A | Upright only (TEST-PLAN One layout) |
-| H23G | Deselect button (Pages) | Pass | N/A | Upright only (TEST-PLAN One layout) |
-| H23F | Deselect button (FT8Call) | Pass | N/A | Upright only (TEST-PLAN One layout) |
+| H23P | Deselect button (PC) | Pass | Pass |  |
+| H23G | Deselect button (Pages) | Pass | Pass |  |
+| H23F | Deselect button (FT8Call) | Pass | Pass |  |
 | H24U | Send button texts (Upright) | Pass | Pass |  |
-| H24P | Send button texts (PC) | Pass | N/A | Upright only (TEST-PLAN One layout) |
-| H24G | Send button texts (Pages) | Pass | N/A | Upright only (TEST-PLAN One layout) |
-| H24F | Send button texts (FT8Call) | Pass | N/A | Upright only (TEST-PLAN One layout) |
+| H24P | Send button texts (PC) | Pass | Pass |  |
+| H24G | Send button texts (Pages) | Pass | Pass |  |
+| H24F | Send button texts (FT8Call) | Pass | Pass |  |
 | H25U | Halt button (Upright) | Pass | Pass |  |
-| H25P | Halt button (PC) | Pass | N/A | Upright only (TEST-PLAN One layout) |
-| H25G | Halt button (Pages) | Pass | N/A | Upright only (TEST-PLAN One layout) |
-| H25F | Halt button (FT8Call) | Pass | N/A | Upright only (TEST-PLAN One layout) |
+| H25P | Halt button (PC) | Pass | Pass |  |
+| H25G | Halt button (Pages) | Pass | Pass |  |
+| H25F | Halt button (FT8Call) | Pass | Pass |  |
 | H26U | Typing Box hint with a selection (Upright) | Pass | Pass |  |
-| H26P | Typing Box hint with a selection (PC) | Pass | N/A | Upright only (TEST-PLAN One layout) |
-| H26G | Typing Box hint with a selection (Pages) | Pass | N/A | Upright only (TEST-PLAN One layout) |
-| H26F | Typing Box hint with a selection (FT8Call) | Pass | N/A | Upright only (TEST-PLAN One layout) |
+| H26P | Typing Box hint with a selection (PC) | Pass | Pass |  |
+| H26G | Typing Box hint with a selection (Pages) | Pass | Pass |  |
+| H26F | Typing Box hint with a selection (FT8Call) | Pass | Pass |  |
 | H27U | wpm box (Upright) | Pass | Pass |  |
-| H27P | wpm box (PC) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| H27G | wpm box (Pages) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| H27F | wpm box (FT8Call) | N/A | N/A | Upright only (TEST-PLAN One layout) |
+| H27P | wpm box (PC) | Pass | Pass |  |
+| H27G | wpm box (Pages) | Pass | Pass |  |
+| H27F | wpm box (FT8Call) | Pass | Pass |  |
 | H28U | Status bar labels (Upright) | Pass | Pass | corrected check |
-| H28P | Status bar labels (PC) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| H28G | Status bar labels (Pages) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| H28F | Status bar labels (FT8Call) | N/A | N/A | Upright only (TEST-PLAN One layout) |
+| H28P | Status bar labels (PC) | Pass | Pass |  |
+| H28G | Status bar labels (Pages) | Pass | Pass |  |
+| H28F | Status bar labels (FT8Call) | Pass | Pass | check fixed: FT8Call's bar has no Freq or Auto Reply (js8_status_bar_ft8call.xml) |
 | H29U | Signal meter (Upright) | Pass | Pass |  |
-| H29P | Signal meter (PC) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| H29G | Signal meter (Pages) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| H29F | Signal meter (FT8Call) | N/A | N/A | Upright only (TEST-PLAN One layout) |
+| H29P | Signal meter (PC) | Pass | Pass |  |
+| H29G | Signal meter (Pages) | Pass | Pass |  |
+| H29F | Signal meter (FT8Call) | Pass | Pass |  |
 | H30U | CAT button colours (Upright) | Pass | Pass |  |
-| H30P | CAT button colours (PC) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| H30G | CAT button colours (Pages) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| H30F | CAT button colours (FT8Call) | N/A | N/A | Upright only (TEST-PLAN One layout) |
+| H30P | CAT button colours (PC) | Pass | Pass |  |
+| H30G | CAT button colours (Pages) | Pass | Pass |  |
+| H30F | CAT button colours (FT8Call) | Pass | Pass |  |
 | H31U | Power slider (Upright) | N/A | N/A | no Power slider upright; Power is in the Settings window (L09U) |
-| H31P | Power slider (PC) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| H31G | Power slider (Pages) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| H31F | Power slider (FT8Call) | N/A | N/A | Upright only (TEST-PLAN One layout) |
+| H31P | Power slider (PC) | Pass | Pass |  |
+| H31G | Power slider (Pages) | Pass | Pass |  |
+| H31F | Power slider (FT8Call) | Pass | Pass |  |
 | H32U | Message Window scrolls (Upright) | Pass | Pass |  |
-| H32P | Message Window scrolls (PC) | Pass | N/A | Upright only (TEST-PLAN One layout) |
-| H32G | Message Window scrolls (Pages) | Pass | N/A | Upright only (TEST-PLAN One layout) |
-| H32F | Message Window scrolls (FT8Call) | Pass | N/A | Upright only (TEST-PLAN One layout) |
+| H32P | Message Window scrolls (PC) | Pass | Pass |  |
+| H32G | Message Window scrolls (Pages) | Pass | Pass |  |
+| H32F | Message Window scrolls (FT8Call) | Pass | Pass |  |
 | H33U | Message Window menu Cut Copy Paste (Upright) | Pass | Pass |  |
-| H33P | Message Window menu Cut Copy Paste (PC) | Pass | N/A | Upright only (TEST-PLAN One layout) |
-| H33G | Message Window menu Cut Copy Paste (Pages) | Pass | N/A | Upright only (TEST-PLAN One layout) |
-| H33F | Message Window menu Cut Copy Paste (FT8Call) | Pass | N/A | Upright only (TEST-PLAN One layout) |
+| H33P | Message Window menu Cut Copy Paste (PC) | Pass | Pass |  |
+| H33G | Message Window menu Cut Copy Paste (Pages) | Pass | Pass |  |
+| H33F | Message Window menu Cut Copy Paste (FT8Call) | Pass | Pass |  |
 | H34U | Message Window Clear (Upright) | Pass | Pass |  |
-| H34P | Message Window Clear (PC) | Pass | N/A | Upright only (TEST-PLAN One layout) |
-| H34G | Message Window Clear (Pages) | Pass | N/A | Upright only (TEST-PLAN One layout) |
-| H34F | Message Window Clear (FT8Call) | Pass | N/A | Upright only (TEST-PLAN One layout) |
+| H34P | Message Window Clear (PC) | Pass | Pass | app fixed 2026-11-03: the menu opens at the press point, all 6 items show |
+| H34G | Message Window Clear (Pages) | Pass | Pass |  |
+| H34F | Message Window Clear (FT8Call) | Pass | Pass |  |
 | H35U | Double tap a word in the Message Window (Upright) | Pass | Pass |  |
-| H35P | Double tap a word in the Message Window (PC) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| H35G | Double tap a word in the Message Window (Pages) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| H35F | Double tap a word in the Message Window (FT8Call) | N/A | N/A | Upright only (TEST-PLAN One layout) |
+| H35P | Double tap a word in the Message Window (PC) | Pass | Pass |  |
+| H35G | Double tap a word in the Message Window (Pages) | Pass | Pass |  |
+| H35F | Double tap a word in the Message Window (FT8Call) | Pass | Pass |  |
 | H36U | Typing Box menu (Upright) | Pass | Pass |  |
 | H36P | Typing Box menu (PC) | Pass | Pass | fixed: grab strips no longer cover the Typing Box |
-| H36G | Typing Box menu (Pages) | Pass | N/A | Upright only (TEST-PLAN One layout) |
-| H36F | Typing Box menu (FT8Call) | Pass | N/A | Upright only (TEST-PLAN One layout) |
+| H36G | Typing Box menu (Pages) | Pass | Pass |  |
+| H36F | Typing Box menu (FT8Call) | Pass | Pass |  |
 | H37U | Restore Previous Message fills the box (Upright) | Pass | Pass | corrected check |
-| H37P | Restore Previous Message fills the box (PC) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| H37G | Restore Previous Message fills the box (Pages) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| H37F | Restore Previous Message fills the box (FT8Call) | N/A | N/A | Upright only (TEST-PLAN One layout) |
+| H37P | Restore Previous Message fills the box (PC) | Pass | Pass |  |
+| H37G | Restore Previous Message fills the box (Pages) | Pass | Pass |  |
+| H37F | Restore Previous Message fills the box (FT8Call) | Pass | Pass |  |
 
 ## I. Lists
 
@@ -450,98 +474,98 @@ From 2026-11-01 the test build's engine is compiled at -O3, the same as release.
 | I01P | Band Activity header tap sorts (PC) | Pass | Pass |  |
 | I01G | Band Activity header tap sorts (Pages) | Pass | Pass |  |
 | I01F | Band Activity header tap sorts (FT8Call) | Pass | Pass |  |
-| I02U | Band Activity press-and-hold columns (Upright) | Pass | Pass | see screenshot |
+| I02U | Band Activity press-and-hold columns (Upright) | Pass | Pass |  |
 | I02P | Band Activity press-and-hold columns (PC) | Pass | Pass |  |
 | I02G | Band Activity press-and-hold columns (Pages) | Pass | Pass |  |
 | I02F | Band Activity press-and-hold columns (FT8Call) | Pass | Pass |  |
-| I03U | Band Activity row menu (Upright) | Pass | Pass | see screenshot |
-| I03P | Band Activity row menu (PC) | Pass | Pass | see screenshot |
-| I03G | Band Activity row menu (Pages) | Pass | Pass | see screenshot |
-| I03F | Band Activity row menu (FT8Call) | Pass | Pass | see screenshot |
+| I03U | Band Activity row menu (Upright) | Pass | Pass |  |
+| I03P | Band Activity row menu (PC) | Pass | Pass |  |
+| I03G | Band Activity row menu (Pages) | Pass | Pass |  |
+| I03F | Band Activity row menu (FT8Call) | Pass | Pass |  |
 | I04U | Band Activity double tap (Upright) | Pass | Pass |  |
-| I04P | Band Activity double tap (PC) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| I04G | Band Activity double tap (Pages) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| I04F | Band Activity double tap (FT8Call) | N/A | N/A | Upright only (TEST-PLAN One layout) |
+| I04P | Band Activity double tap (PC) | Pass | Pass |  |
+| I04G | Band Activity double tap (Pages) | Pass | Pass |  |
+| I04F | Band Activity double tap (FT8Call) | Pass | Pass |  |
 | I05U | Call Activity header tap sorts (Upright) | Pass | Pass |  |
 | I05P | Call Activity header tap sorts (PC) | Pass | Pass |  |
 | I05G | Call Activity header tap sorts (Pages) | Pass | Pass |  |
 | I05F | Call Activity header tap sorts (FT8Call) | Pass | Pass |  |
 | I06U | Call Activity press-and-hold columns (Upright) | Pass | Pass |  |
-| I06P | Call Activity press-and-hold columns (PC) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| I06G | Call Activity press-and-hold columns (Pages) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| I06F | Call Activity press-and-hold columns (FT8Call) | N/A | N/A | Upright only (TEST-PLAN One layout) |
+| I06P | Call Activity press-and-hold columns (PC) | Pass | Pass |  |
+| I06G | Call Activity press-and-hold columns (Pages) | Pass | Pass |  |
+| I06F | Call Activity press-and-hold columns (FT8Call) | Pass | Pass |  |
 | I07U | Call Activity empty list menu (Upright) | Pass | Pass |  |
-| I07P | Call Activity empty list menu (PC) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| I07G | Call Activity empty list menu (Pages) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| I07F | Call Activity empty list menu (FT8Call) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| I08U | Call menu Jump to offset (Upright) | Pass | Pass | see screenshot |
+| I07P | Call Activity empty list menu (PC) | Pass | Pass |  |
+| I07G | Call Activity empty list menu (Pages) | Pass | Pass |  |
+| I07F | Call Activity empty list menu (FT8Call) | Pass | Pass |  |
+| I08U | Call menu Jump to offset (Upright) | Pass | Pass |  |
 | I08P | Call menu Jump to offset (PC) | Pass | Pass |  |
 | I08G | Call menu Jump to offset (Pages) | Pass | Pass |  |
-| I08F | Call menu Jump to offset (FT8Call) | Pass | Pass | see screenshot |
+| I08F | Call menu Jump to offset (FT8Call) | Pass | Pass |  |
 | I09U | Call menu Jump to speed (Upright) | Pass | Pass |  |
-| I09P | Call menu Jump to speed (PC) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| I09G | Call menu Jump to speed (Pages) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| I09F | Call menu Jump to speed (FT8Call) | N/A | N/A | Upright only (TEST-PLAN One layout) |
+| I09P | Call menu Jump to speed (PC) | Pass | Pass |  |
+| I09G | Call menu Jump to speed (Pages) | Pass | Pass |  |
+| I09F | Call menu Jump to speed (FT8Call) | Pass | Pass |  |
 | I10U | Call menu Jump to time drift (Upright) | Pass | Pass |  |
-| I10P | Call menu Jump to time drift (PC) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| I10G | Call menu Jump to time drift (Pages) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| I10F | Call menu Jump to time drift (FT8Call) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| I11U | Call menu Log... (Upright) | Pass | Pass | see screenshot |
+| I10P | Call menu Jump to time drift (PC) | Pass | Pass |  |
+| I10G | Call menu Jump to time drift (Pages) | Pass | Pass |  |
+| I10F | Call menu Jump to time drift (FT8Call) | Pass | Pass |  |
+| I11U | Call menu Log... (Upright) | Pass | Pass |  |
 | I11P | Call menu Log... (PC) | Pass | Pass |  |
-| I11G | Call menu Log... (Pages) | Pass | Pass | see screenshot |
-| I11F | Call menu Log... (FT8Call) | Pass | Pass | see screenshot |
-| I12U | Call menu Show Message Inbox... (Upright) | Pass | Pass | see screenshot |
+| I11G | Call menu Log... (Pages) | Pass | Pass |  |
+| I11F | Call menu Log... (FT8Call) | Pass | Pass |  |
+| I12U | Call menu Show Message Inbox... (Upright) | Pass | Pass |  |
 | I12P | Call menu Show Message Inbox... (PC) | Pass | Pass |  |
 | I12G | Call menu Show Message Inbox... (Pages) | Pass | Pass |  |
-| I12F | Call menu Show Message Inbox... (FT8Call) | Pass | Pass | see screenshot |
-| I13U | Call menu Store Message... (Upright) | Pass | Pass | see screenshot |
+| I12F | Call menu Show Message Inbox... (FT8Call) | Pass | Pass |  |
+| I13U | Call menu Store Message... (Upright) | Pass | Pass |  |
 | I13P | Call menu Store Message... (PC) | Pass | Pass |  |
 | I13G | Call menu Store Message... (Pages) | Pass | Pass |  |
-| I13F | Call menu Store Message... (FT8Call) | Pass | Pass | see screenshot |
-| I14U | Call menu Saved Messages (Upright) | Pass | Pass | see screenshot |
+| I13F | Call menu Store Message... (FT8Call) | Pass | Pass |  |
+| I14U | Call menu Saved Messages (Upright) | Pass | Pass |  |
 | I14P | Call menu Saved Messages (PC) | Pass | Pass |  |
 | I14G | Call menu Saved Messages (Pages) | Pass | Pass |  |
-| I14F | Call menu Saved Messages (FT8Call) | Pass | Pass | see screenshot |
-| I15U | Call menu Directed to CALL... (Upright) | Pass | Pass | see screenshot |
-| I15P | Call menu Directed to CALL... (PC) | Pass | Pass | see screenshot |
+| I14F | Call menu Saved Messages (FT8Call) | Pass | Pass |  |
+| I15U | Call menu Directed to CALL... (Upright) | Pass | Pass |  |
+| I15P | Call menu Directed to CALL... (PC) | Pass | Pass |  |
 | I15G | Call menu Directed to CALL... (Pages) | Pass | Pass |  |
-| I15F | Call menu Directed to CALL... (FT8Call) | Pass | Pass | see screenshot |
-| I16U | Call menu Relay via CALL... (Upright) | Pass | Pass | see screenshot |
-| I16P | Call menu Relay via CALL... (PC) | Pass | Pass | see screenshot |
+| I15F | Call menu Directed to CALL... (FT8Call) | Pass | Pass |  |
+| I16U | Call menu Relay via CALL... (Upright) | Pass | Pass |  |
+| I16P | Call menu Relay via CALL... (PC) | Pass | Pass |  |
 | I16G | Call menu Relay via CALL... (Pages) | Pass | Pass |  |
-| I16F | Call menu Relay via CALL... (FT8Call) | Pass | Pass | see screenshot |
-| I17U | Call menu Deselect (Upright) | Pass | Pass | see screenshot |
-| I17P | Call menu Deselect (PC) | Pass | Pass | see screenshot |
+| I16F | Call menu Relay via CALL... (FT8Call) | Pass | Pass |  |
+| I17U | Call menu Deselect (Upright) | Pass | Pass |  |
+| I17P | Call menu Deselect (PC) | Pass | Pass |  |
 | I17G | Call menu Deselect (Pages) | Pass | Pass |  |
-| I17F | Call menu Deselect (FT8Call) | Pass | Pass | see screenshot |
-| I18U | Call menu Add New Station or Group... (Upright) | Pass | Pass | see screenshot |
+| I17F | Call menu Deselect (FT8Call) | Pass | Pass |  |
+| I18U | Call menu Add New Station or Group... (Upright) | Pass | Pass |  |
 | I18P | Call menu Add New Station or Group... (PC) | Pass | Pass |  |
 | I18G | Call menu Add New Station or Group... (Pages) | Pass | Pass |  |
-| I18F | Call menu Add New Station or Group... (FT8Call) | Pass | Pass | see screenshot |
-| I19U | Call menu Remove This Station/Group (Upright) | Pass | Pass | see screenshot |
-| I19P | Call menu Remove This Station/Group (PC) | Pass | Pass | see screenshot |
+| I18F | Call menu Add New Station or Group... (FT8Call) | Pass | Pass |  |
+| I19U | Call menu Remove This Station/Group (Upright) | Pass | Pass |  |
+| I19P | Call menu Remove This Station/Group (PC) | Pass | Pass |  |
 | I19G | Call menu Remove This Station/Group (Pages) | Pass | Pass |  |
-| I19F | Call menu Remove This Station/Group (FT8Call) | Pass | Pass | see screenshot |
-| I20U | Call menu Block This Station (Upright) | Pass | Pass | see screenshot |
+| I19F | Call menu Remove This Station/Group (FT8Call) | Pass | Pass |  |
+| I20U | Call menu Block This Station (Upright) | Pass | Pass |  |
 | I20P | Call menu Block This Station (PC) | Pass | Pass |  |
-| I20G | Call menu Block This Station (Pages) | Pass | Pass | see screenshot |
-| I20F | Call menu Block This Station (FT8Call) | Pass | Pass | see screenshot |
-| I21U | Call menu Clear Entire List (Upright) | Pass | Pass | see screenshot |
+| I20G | Call menu Block This Station (Pages) | Pass | Pass |  |
+| I20F | Call menu Block This Station (FT8Call) | Pass | Pass |  |
+| I21U | Call menu Clear Entire List (Upright) | Pass | Pass |  |
 | I21P | Call menu Clear Entire List (PC) | Pass | Pass |  |
-| I21G | Call menu Clear Entire List (Pages) | Pass | Pass | see screenshot |
-| I21F | Call menu Clear Entire List (FT8Call) | Pass | Pass | see screenshot |
+| I21G | Call menu Clear Entire List (Pages) | Pass | Pass |  |
+| I21F | Call menu Clear Entire List (FT8Call) | Pass | Pass |  |
 | I22U | Call menu Clear All Lists asks first (Upright) | Pass | Pass |  |
-| I22P | Call menu Clear All Lists asks first (PC) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| I22G | Call menu Clear All Lists asks first (Pages) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| I22F | Call menu Clear All Lists asks first (FT8Call) | N/A | N/A | Upright only (TEST-PLAN One layout) |
+| I22P | Call menu Clear All Lists asks first (PC) | Pass | Pass |  |
+| I22G | Call menu Clear All Lists asks first (Pages) | Pass | Pass |  |
+| I22F | Call menu Clear All Lists asks first (FT8Call) | Pass | Pass |  |
 | I23U | Lists kept after restart (Upright) | Pass | Pass |  |
-| I23P | Lists kept after restart (PC) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| I23G | Lists kept after restart (Pages) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| I23F | Lists kept after restart (FT8Call) | N/A | N/A | Upright only (TEST-PLAN One layout) |
+| I23P | Lists kept after restart (PC) | Pass | Pass |  |
+| I23G | Lists kept after restart (Pages) | Pass | Pass |  |
+| I23F | Lists kept after restart (FT8Call) | Pass | Pass |  |
 | I24U | Line dividers drag (Upright) | Pass | Pass |  |
 | I24P | Line dividers drag (PC) | Pass | Pass |  |
 | I24G | Line dividers drag (Pages) | Pass | Pass |  |
-| I24F | Line dividers drag (FT8Call) | Pass | N/A | Upright only (TEST-PLAN One layout) |
+| I24F | Line dividers drag (FT8Call) | Pass | Pass |  |
 | I25U | Reset Frame Sizes (Upright) | Pass | Pass |  |
 | I25P | Reset Frame Sizes (PC) | Pass | Pass | View menu and Settings button both reset (Settings fixed 2026-11-03, ui12.py) |
 | I25G | Reset Frame Sizes (Pages) | Pass | Pass |  |
@@ -552,9 +576,9 @@ From 2026-11-01 the test build's engine is compiled at -O3, the same as release.
 | ID | Test | Run 1 | Run 2 | Note |
 |---|---|---|---|---|
 | J01U | Tap sets offset (Upright) | Pass | Pass |  |
-| J01P | Tap sets offset (PC) | Pass | Pass | see screenshot |
+| J01P | Tap sets offset (PC) | Pass | Pass |  |
 | J01G | Tap sets offset (Pages) | Pass | Pass |  |
-| J01F | Tap sets offset (FT8Call) | Pass | Pass | see screenshot |
+| J01F | Tap sets offset (FT8Call) | Pass | Pass |  |
 | J02U | Scale tap sets offset (Upright) | Pass | Pass |  |
 | J02P | Scale tap sets offset (PC) | Pass | Pass |  |
 | J02G | Scale tap sets offset (Pages) | Pass | Pass |  |
@@ -565,72 +589,72 @@ From 2026-11-01 the test build's engine is compiled at -O3, the same as release.
 | J03F | Tap refused while a message is queued (FT8Call) | Pass | Pass |  |
 | J04U | Control tab Offset arrows (Upright) | N/A | N/A | no Offset group upright by design, Offset is in Settings |
 | J04P | Control tab Offset arrows (PC) | Pass | Pass |  |
-| J04G | Control tab Offset arrows (Pages) | Pass | Pass | see screenshot |
-| J04F | Control tab Offset arrows (FT8Call) | Pass | Pass | see screenshot |
-| J05U | QSY (Upright) | Pass | Pass | see screenshot |
+| J04G | Control tab Offset arrows (Pages) | Pass | Pass |  |
+| J04F | Control tab Offset arrows (FT8Call) | Pass | Pass |  |
+| J05U | QSY (Upright) | Pass | Pass |  |
 | J05P | QSY (PC) | Pass | Pass |  |
-| J05G | QSY (Pages) | Pass | Pass | see screenshot |
-| J05F | QSY (FT8Call) | Pass | Pass | see screenshot |
-| J06U | Center arrows (Upright) | Pass | Pass | see screenshot |
+| J05G | QSY (Pages) | Pass | Pass |  |
+| J05F | QSY (FT8Call) | Pass | Pass |  |
+| J06U | Center arrows (Upright) | Pass | Pass |  |
 | J06P | Center arrows (PC) | Pass | Pass |  |
-| J06G | Center arrows (Pages) | Pass | Pass | see screenshot |
-| J06F | Center arrows (FT8Call) | Pass | Pass | see screenshot |
-| J07U | Enable Filter (Upright) | Pass | Pass | see screenshot |
+| J06G | Center arrows (Pages) | Pass | Pass |  |
+| J06F | Center arrows (FT8Call) | Pass | Pass |  |
+| J07U | Enable Filter (Upright) | Pass | Pass |  |
 | J07P | Enable Filter (PC) | Pass | Pass |  |
-| J07G | Enable Filter (Pages) | Pass | Pass | see screenshot |
-| J07F | Enable Filter (FT8Call) | Pass | Pass | see screenshot |
+| J07G | Enable Filter (Pages) | Pass | Pass |  |
+| J07F | Enable Filter (FT8Call) | Pass | Pass |  |
 | J08U | Sync (Upright) | Pass | Pass |  |
 | J08P | Sync (PC) | Pass | Pass |  |
 | J08G | Sync (Pages) | Pass | Pass |  |
 | J08F | Sync (FT8Call) | Pass | Pass |  |
-| J09U | Filter Center and Width arrows (Upright) | Pass | Pass | see screenshot |
+| J09U | Filter Center and Width arrows (Upright) | Pass | Pass |  |
 | J09P | Filter Center and Width arrows (PC) | Pass | Pass |  |
-| J09G | Filter Center and Width arrows (Pages) | Pass | Pass | see screenshot |
-| J09F | Filter Center and Width arrows (FT8Call) | Pass | Pass | see screenshot |
+| J09G | Filter Center and Width arrows (Pages) | Pass | Pass |  |
+| J09F | Filter Center and Width arrows (FT8Call) | Pass | Pass |  |
 | J10U | Filter knobs (Upright) | Pass | Pass |  |
 | J10P | Filter knobs (PC) | Pass | Pass |  |
 | J10G | Filter knobs (Pages) | Pass | Pass |  |
 | J10F | Filter knobs (FT8Call) | Pass | Pass |  |
-| J11U | Timing tab Time Drift arrows (Upright) | Pass | Pass | see screenshot |
+| J11U | Timing tab Time Drift arrows (Upright) | Pass | Pass |  |
 | J11P | Timing tab Time Drift arrows (PC) | Pass | Pass |  |
-| J11G | Timing tab Time Drift arrows (Pages) | Pass | Pass | see screenshot |
-| J11F | Timing tab Time Drift arrows (FT8Call) | Pass | Pass | see screenshot |
-| J12U | Start Automatic Time Drift (Upright) | Pass | Pass | see screenshot |
+| J11G | Timing tab Time Drift arrows (Pages) | Pass | Pass |  |
+| J11F | Timing tab Time Drift arrows (FT8Call) | Pass | Pass |  |
+| J12U | Start Automatic Time Drift (Upright) | Pass | Pass |  |
 | J12P | Start Automatic Time Drift (PC) | Pass | Pass |  |
-| J12G | Start Automatic Time Drift (Pages) | Pass | Pass | see screenshot |
-| J12F | Start Automatic Time Drift (FT8Call) | Pass | Pass | see screenshot |
+| J12G | Start Automatic Time Drift (Pages) | Pass | Pass |  |
+| J12F | Start Automatic Time Drift (FT8Call) | Pass | Pass |  |
 | J13U | Stop After count (Upright) | Pass | Pass |  |
 | J13P | Stop After count (PC) | Pass | Pass |  |
 | J13G | Stop After count (Pages) | Pass | Pass |  |
 | J13F | Stop After count (FT8Call) | Pass | Pass |  |
-| J14U | Manual buttons (Upright) | Pass | Pass | see screenshot |
-| J14P | Manual buttons (PC) | Pass | Pass | see screenshot |
-| J14G | Manual buttons (Pages) | Pass | Pass | see screenshot |
-| J14F | Manual buttons (FT8Call) | Pass | Pass | see screenshot |
-| J15U | Display tab Start (Upright) | Pass | Pass | see screenshot |
-| J15P | Display tab Start (PC) | Pass | Pass | see screenshot |
-| J15G | Display tab Start (Pages) | Pass | Pass | see screenshot |
-| J15F | Display tab Start (FT8Call) | Pass | Pass | see screenshot |
-| J16U | Bins Per Pixel (Upright) | Pass | Pass | see screenshot |
-| J16P | Bins Per Pixel (PC) | Pass | Pass | see screenshot |
-| J16G | Bins Per Pixel (Pages) | Pass | Pass | see screenshot |
-| J16F | Bins Per Pixel (FT8Call) | Pass | Pass | see screenshot |
-| J17U | Palette list (Upright) | Pass | Pass | see screenshot |
-| J17P | Palette list (PC) | Pass | Pass | see screenshot |
-| J17G | Palette list (Pages) | Pass | Pass | see screenshot |
-| J17F | Palette list (FT8Call) | Pass | Pass | see screenshot |
-| J18U | Adjust... Palette Designer (Upright) | Pass | Pass | see screenshot |
-| J18P | Adjust... Palette Designer (PC) | Pass | Pass | see screenshot |
-| J18G | Adjust... Palette Designer (Pages) | Pass | Pass | see screenshot |
-| J18F | Adjust... Palette Designer (FT8Call) | Pass | Pass | see screenshot |
-| J19U | Scroll Speed (Upright) | Pass | Pass | see screenshot |
-| J19P | Scroll Speed (PC) | Pass | Pass | see screenshot |
-| J19G | Scroll Speed (Pages) | Pass | Pass | see screenshot |
-| J19F | Scroll Speed (FT8Call) | Pass | Pass | see screenshot |
-| J20U | Flatten off (Upright) | Pass | Pass | see screenshot |
-| J20P | Flatten off (PC) | Pass | Pass | see screenshot |
-| J20G | Flatten off (Pages) | Pass | Pass | see screenshot |
-| J20F | Flatten off (FT8Call) | Pass | Pass | see screenshot |
+| J14U | Manual buttons (Upright) | Pass | Pass |  |
+| J14P | Manual buttons (PC) | Pass | Pass |  |
+| J14G | Manual buttons (Pages) | Pass | Pass |  |
+| J14F | Manual buttons (FT8Call) | Pass | Pass |  |
+| J15U | Display tab Start (Upright) | Pass | Pass |  |
+| J15P | Display tab Start (PC) | Pass | Pass |  |
+| J15G | Display tab Start (Pages) | Pass | Pass |  |
+| J15F | Display tab Start (FT8Call) | Pass | Pass |  |
+| J16U | Bins Per Pixel (Upright) | Pass | Pass |  |
+| J16P | Bins Per Pixel (PC) | Pass | Pass |  |
+| J16G | Bins Per Pixel (Pages) | Pass | Pass |  |
+| J16F | Bins Per Pixel (FT8Call) | Pass | Pass |  |
+| J17U | Palette list (Upright) | Pass | Pass |  |
+| J17P | Palette list (PC) | Pass | Pass |  |
+| J17G | Palette list (Pages) | Pass | Pass |  |
+| J17F | Palette list (FT8Call) | Pass | Pass |  |
+| J18U | Adjust... Palette Designer (Upright) | Pass | Pass |  |
+| J18P | Adjust... Palette Designer (PC) | Pass | Pass |  |
+| J18G | Adjust... Palette Designer (Pages) | Pass | Pass |  |
+| J18F | Adjust... Palette Designer (FT8Call) | Pass | Pass |  |
+| J19U | Scroll Speed (Upright) | Pass | Pass |  |
+| J19P | Scroll Speed (PC) | Pass | Pass |  |
+| J19G | Scroll Speed (Pages) | Pass | Pass |  |
+| J19F | Scroll Speed (FT8Call) | Pass | Pass |  |
+| J20U | Flatten off (Upright) | Pass | Pass |  |
+| J20P | Flatten off (PC) | Pass | Pass |  |
+| J20G | Flatten off (Pages) | Pass | Pass |  |
+| J20F | Flatten off (FT8Call) | Pass | Pass |  |
 | J21U | Gain (Upright) | Pass | Pass |  |
 | J21P | Gain (PC) | Pass | Pass |  |
 | J21G | Gain (Pages) | Pass | Pass |  |
@@ -643,22 +667,22 @@ From 2026-11-01 the test build's engine is compiled at -O3, the same as release.
 | J23P | Filter Opacity (PC) | Pass | Pass |  |
 | J23G | Filter Opacity (Pages) | Pass | Pass |  |
 | J23F | Filter Opacity (FT8Call) | Pass | Pass |  |
-| J24U | Avg N (Upright) | Pass | Pass | see screenshot |
-| J24P | Avg N (PC) | Pass | Pass | see screenshot |
-| J24G | Avg N (Pages) | Pass | Pass | see screenshot |
-| J24F | Avg N (FT8Call) | Pass | Pass | see screenshot |
+| J24U | Avg N (Upright) | Pass | Pass |  |
+| J24P | Avg N (PC) | Pass | Pass |  |
+| J24G | Avg N (Pages) | Pass | Pass |  |
+| J24F | Avg N (FT8Call) | Pass | Pass |  |
 | J25U | Current list and Smooth (Upright) | Pass | Pass |  |
 | J25P | Current list and Smooth (PC) | Pass | Pass |  |
 | J25G | Current list and Smooth (Pages) | Pass | Pass |  |
 | J25F | Current list and Smooth (FT8Call) | Pass | Pass |  |
-| J26U | Display Decode Attempts (Upright) | Pass | Pass | see screenshot |
-| J26P | Display Decode Attempts (PC) | Pass | Pass | see screenshot |
-| J26G | Display Decode Attempts (Pages) | Pass | Pass | see screenshot |
-| J26F | Display Decode Attempts (FT8Call) | Pass | Pass | see screenshot |
-| J27U | Spectrum Height, Gain, Zero (Upright) | Pass | Pass | see screenshot |
-| J27P | Spectrum Height, Gain, Zero (PC) | Pass | Pass | see screenshot |
-| J27G | Spectrum Height, Gain, Zero (Pages) | Pass | Pass | see screenshot |
-| J27F | Spectrum Height, Gain, Zero (FT8Call) | Pass | Pass | see screenshot |
+| J26U | Display Decode Attempts (Upright) | Pass | Pass |  |
+| J26P | Display Decode Attempts (PC) | Pass | Pass |  |
+| J26G | Display Decode Attempts (Pages) | Pass | Pass |  |
+| J26F | Display Decode Attempts (FT8Call) | Pass | Pass |  |
+| J27U | Spectrum Height, Gain, Zero (Upright) | Pass | Pass |  |
+| J27P | Spectrum Height, Gain, Zero (PC) | Pass | Pass |  |
+| J27G | Spectrum Height, Gain, Zero (Pages) | Pass | Pass |  |
+| J27F | Spectrum Height, Gain, Zero (FT8Call) | Pass | Pass |  |
 | J28U | Green cycle line and text (Upright) | Pass | Pass | checked by eye in shots/jlook_*.png |
 | J28P | Green cycle line and text (PC) | Pass | Pass | checked by eye in shots/jlook_*.png |
 | J28G | Green cycle line and text (Pages) | Pass | Pass | checked by eye in shots/jlook_*.png |
@@ -677,166 +701,166 @@ From 2026-11-01 the test build's engine is compiled at -O3, the same as release.
 | ID | Test | Run 1 | Run 2 | Note |
 |---|---|---|---|---|
 | K01U | Inbox list newest first (Upright) | Pass | Pass |  |
-| K01P | Inbox list newest first (PC) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| K01G | Inbox list newest first (Pages) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| K01F | Inbox list newest first (FT8Call) | N/A | N/A | Upright only (TEST-PLAN One layout) |
+| K01P | Inbox list newest first (PC) | Pass | Pass |  |
+| K01G | Inbox list newest first (Pages) | Pass | Pass |  |
+| K01F | Inbox list newest first (FT8Call) | Pass | Pass |  |
 | K02U | Inbox multi-row Delete (Upright) | Pass | Pass |  |
-| K02P | Inbox multi-row Delete (PC) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| K02G | Inbox multi-row Delete (Pages) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| K02F | Inbox multi-row Delete (FT8Call) | N/A | N/A | Upright only (TEST-PLAN One layout) |
+| K02P | Inbox multi-row Delete (PC) | Pass | Pass |  |
+| K02G | Inbox multi-row Delete (Pages) | Pass | Pass |  |
+| K02F | Inbox multi-row Delete (FT8Call) | Pass | Pass |  |
 | K03U | Inbox Reply (Upright) | Pass | Pass |  |
-| K03P | Inbox Reply (PC) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| K03G | Inbox Reply (Pages) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| K03F | Inbox Reply (FT8Call) | N/A | N/A | Upright only (TEST-PLAN One layout) |
+| K03P | Inbox Reply (PC) | Pass | Pass |  |
+| K03G | Inbox Reply (Pages) | Pass | Pass |  |
+| K03F | Inbox Reply (FT8Call) | Pass | Pass |  |
 | K04U | Inbox filter by call (Upright) | Pass | Pass |  |
-| K04P | Inbox filter by call (PC) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| K04G | Inbox filter by call (Pages) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| K04F | Inbox filter by call (FT8Call) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| K05U | Log QSO fills from selection (Upright) | Pass | Pass | see screenshot |
-| K05P | Log QSO fills from selection (PC) | Pass | Pass | see screenshot |
-| K05G | Log QSO fills from selection (Pages) | Pass | Pass | see screenshot |
-| K05F | Log QSO fills from selection (FT8Call) | Pass | Pass | see screenshot |
+| K04P | Inbox filter by call (PC) | Pass | Pass |  |
+| K04G | Inbox filter by call (Pages) | Pass | Pass |  |
+| K04F | Inbox filter by call (FT8Call) | Pass | Pass |  |
+| K05U | Log QSO fills from selection (Upright) | Pass | Pass |  |
+| K05P | Log QSO fills from selection (PC) | Pass | Pass |  |
+| K05G | Log QSO fills from selection (Pages) | Pass | Pass |  |
+| K05F | Log QSO fills from selection (FT8Call) | Pass | Pass |  |
 | K06U | Log QSO Now buttons (Upright) | Pass | Pass |  |
 | K06P | Log QSO Now buttons (PC) | Pass | Pass |  |
-| K06G | Log QSO Now buttons (Pages) | Pass | Pass | see screenshot |
-| K06F | Log QSO Now buttons (FT8Call) | Pass | Pass | see screenshot |
-| K07U | Log QSO Add New Field (Upright) | Pass | Pass | see screenshot |
-| K07P | Log QSO Add New Field (PC) | Pass | Pass | see screenshot |
-| K07G | Log QSO Add New Field (Pages) | Pass | Pass | see screenshot |
-| K07F | Log QSO Add New Field (FT8Call) | Pass | Pass | see screenshot |
-| K08U | Log QSO Retain Comments (Upright) | Pass | Pass | see screenshot |
-| K08P | Log QSO Retain Comments (PC) | Pass | Pass | see screenshot |
-| K08G | Log QSO Retain Comments (Pages) | Pass | Pass | see screenshot |
-| K08F | Log QSO Retain Comments (FT8Call) | Pass | Pass | see screenshot |
+| K06G | Log QSO Now buttons (Pages) | Pass | Pass |  |
+| K06F | Log QSO Now buttons (FT8Call) | Pass | Pass |  |
+| K07U | Log QSO Add New Field (Upright) | Pass | Pass |  |
+| K07P | Log QSO Add New Field (PC) | Pass | Pass |  |
+| K07G | Log QSO Add New Field (Pages) | Pass | Pass |  |
+| K07F | Log QSO Add New Field (FT8Call) | Pass | Pass |  |
+| K08U | Log QSO Retain Comments (Upright) | Pass | Pass |  |
+| K08P | Log QSO Retain Comments (PC) | Pass | Pass |  |
+| K08G | Log QSO Retain Comments (Pages) | Pass | Pass |  |
+| K08F | Log QSO Retain Comments (FT8Call) | Pass | Pass |  |
 | K09U | Log QSO word into focused field (Upright) | Pass | Pass |  |
-| K09P | Log QSO word into focused field (PC) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| K09G | Log QSO word into focused field (Pages) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| K09F | Log QSO word into focused field (FT8Call) | N/A | N/A | Upright only (TEST-PLAN One layout) |
+| K09P | Log QSO word into focused field (PC) | Pass | Pass |  |
+| K09G | Log QSO word into focused field (Pages) | Pass | Pass |  |
+| K09F | Log QSO word into focused field (FT8Call) | Pass | Pass |  |
 | K10U | Log QSO word into Comments (Upright) | Pass | Pass |  |
-| K10P | Log QSO word into Comments (PC) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| K10G | Log QSO word into Comments (Pages) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| K10F | Log QSO word into Comments (FT8Call) | N/A | N/A | Upright only (TEST-PLAN One layout) |
+| K10P | Log QSO word into Comments (PC) | Pass | Pass |  |
+| K10G | Log QSO word into Comments (Pages) | Pass | Pass |  |
+| K10F | Log QSO word into Comments (FT8Call) | Pass | Pass |  |
 | K11U | Log QSO Start/End word exclusion (Upright) | Pass | Pass |  |
-| K11P | Log QSO Start/End word exclusion (PC) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| K11G | Log QSO Start/End word exclusion (Pages) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| K11F | Log QSO Start/End word exclusion (FT8Call) | N/A | N/A | Upright only (TEST-PLAN One layout) |
+| K11P | Log QSO Start/End word exclusion (PC) | Pass | Pass |  |
+| K11G | Log QSO Start/End word exclusion (Pages) | Pass | Pass |  |
+| K11F | Log QSO Start/End word exclusion (FT8Call) | Pass | Pass |  |
 | K12U | Export Options checkboxes (Upright) | Pass | Pass |  |
-| K12P | Export Options checkboxes (PC) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| K12G | Export Options checkboxes (Pages) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| K12F | Export Options checkboxes (FT8Call) | N/A | N/A | Upright only (TEST-PLAN One layout) |
+| K12P | Export Options checkboxes (PC) | Pass | Pass |  |
+| K12G | Export Options checkboxes (Pages) | Pass | Pass |  |
+| K12F | Export Options checkboxes (FT8Call) | Pass | Pass |  |
 
 ## L. Settings window
 
 | ID | Test | Run 1 | Run 2 | Note |
 |---|---|---|---|---|
 | L01U | MULTI (Upright) | Pass | Pass |  |
-| L01P | MULTI (PC) | Pass | N/A | Upright only (TEST-PLAN One layout) |
-| L01G | MULTI (Pages) | Pass | N/A | Upright only (TEST-PLAN One layout) |
-| L01F | MULTI (FT8Call) | Pass | N/A | Upright only (TEST-PLAN One layout) |
+| L01P | MULTI (PC) | Pass | Pass |  |
+| L01G | MULTI (Pages) | Pass | Pass |  |
+| L01F | MULTI (FT8Call) | Pass | Pass |  |
 | L02U | AUTO (Upright) | Pass | Pass |  |
-| L02P | AUTO (PC) | Pass | N/A | Upright only (TEST-PLAN One layout) |
-| L02G | AUTO (Pages) | Pass | N/A | Upright only (TEST-PLAN One layout) |
-| L02F | AUTO (FT8Call) | Pass | N/A | Upright only (TEST-PLAN One layout) |
+| L02P | AUTO (PC) | Pass | Pass |  |
+| L02G | AUTO (Pages) | Pass | Pass |  |
+| L02F | AUTO (FT8Call) | Pass | Pass |  |
 | L03U | HB (Upright) | Pass | Pass |  |
-| L03P | HB (PC) | Pass | N/A | Upright only (TEST-PLAN One layout) |
-| L03G | HB (Pages) | Pass | N/A | Upright only (TEST-PLAN One layout) |
-| L03F | HB (FT8Call) | Pass | N/A | Upright only (TEST-PLAN One layout) |
+| L03P | HB (PC) | Pass | Pass |  |
+| L03G | HB (Pages) | Pass | Pass |  |
+| L03F | HB (FT8Call) | Pass | Pass |  |
 | L04U | ACK greying (Upright) | Pass | Pass |  |
-| L04P | ACK greying (PC) | Pass | N/A | Upright only (TEST-PLAN One layout) |
-| L04G | ACK greying (Pages) | Pass | N/A | Upright only (TEST-PLAN One layout) |
-| L04F | ACK greying (FT8Call) | Pass | N/A | Upright only (TEST-PLAN One layout) |
+| L04P | ACK greying (PC) | Pass | Pass |  |
+| L04G | ACK greying (Pages) | Pass | Pass |  |
+| L04F | ACK greying (FT8Call) | Pass | Pass |  |
 | L05U | Speed list (Upright) | Pass | Pass |  |
-| L05P | Speed list (PC) | Pass | N/A | Upright only (TEST-PLAN One layout) |
-| L05G | Speed list (Pages) | Pass | N/A | Upright only (TEST-PLAN One layout) |
-| L05F | Speed list (FT8Call) | Pass | N/A | Upright only (TEST-PLAN One layout) |
+| L05P | Speed list (PC) | Pass | Pass |  |
+| L05G | Speed list (Pages) | Pass | Pass |  |
+| L05F | Speed list (FT8Call) | Pass | Pass |  |
 | L06U | Frequency list (Upright) | Pass | Pass |  |
-| L06P | Frequency list (PC) | Pass | N/A | Upright only (TEST-PLAN One layout) |
-| L06G | Frequency list (Pages) | Pass | N/A | Upright only (TEST-PLAN One layout) |
-| L06F | Frequency list (FT8Call) | Pass | N/A | Upright only (TEST-PLAN One layout) |
+| L06P | Frequency list (PC) | Pass | Pass |  |
+| L06G | Frequency list (Pages) | Pass | Pass |  |
+| L06F | Frequency list (FT8Call) | Pass | Pass |  |
 | L07U | Custom frequency (Upright) | Pass | Pass |  |
-| L07P | Custom frequency (PC) | Pass | N/A | Upright only (TEST-PLAN One layout) |
-| L07G | Custom frequency (Pages) | Pass | N/A | Upright only (TEST-PLAN One layout) |
-| L07F | Custom frequency (FT8Call) | Pass | N/A | Upright only (TEST-PLAN One layout) |
+| L07P | Custom frequency (PC) | Pass | Pass |  |
+| L07G | Custom frequency (Pages) | Pass | Pass |  |
+| L07F | Custom frequency (FT8Call) | Pass | Pass |  |
 | L08U | Offset box (Upright) | Pass | Pass |  |
-| L08P | Offset box (PC) | Pass | N/A | Upright only (TEST-PLAN One layout) |
-| L08G | Offset box (Pages) | Pass | N/A | Upright only (TEST-PLAN One layout) |
-| L08F | Offset box (FT8Call) | Pass | N/A | Upright only (TEST-PLAN One layout) |
+| L08P | Offset box (PC) | Pass | Pass |  |
+| L08G | Offset box (Pages) | Pass | Pass |  |
+| L08F | Offset box (FT8Call) | Pass | Pass |  |
 | L09U | Power (Upright) | Pass | Pass |  |
-| L09P | Power (PC) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| L09G | Power (Pages) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| L09F | Power (FT8Call) | N/A | N/A | Upright only (TEST-PLAN One layout) |
+| L09P | Power (PC) | Pass | Pass |  |
+| L09G | Power (Pages) | Pass | Pass |  |
+| L09F | Power (FT8Call) | Pass | Pass |  |
 | L10U | Show Band Heartbeats and ACKs (Upright) | Pass | Pass |  |
-| L10P | Show Band Heartbeats and ACKs (PC) | Pass | N/A | Upright only (TEST-PLAN One layout) |
-| L10G | Show Band Heartbeats and ACKs (Pages) | Pass | N/A | Upright only (TEST-PLAN One layout) |
-| L10F | Show Band Heartbeats and ACKs (FT8Call) | Pass | N/A | Upright only (TEST-PLAN One layout) |
+| L10P | Show Band Heartbeats and ACKs (PC) | Pass | Pass |  |
+| L10G | Show Band Heartbeats and ACKs (Pages) | Pass | Pass |  |
+| L10F | Show Band Heartbeats and ACKs (FT8Call) | Pass | Pass |  |
 | L11U | Show Offset in Band Activity (Upright) | Pass | Pass |  |
-| L11P | Show Offset in Band Activity (PC) | Pass | N/A | Upright only (TEST-PLAN One layout) |
-| L11G | Show Offset in Band Activity (Pages) | Pass | N/A | Upright only (TEST-PLAN One layout) |
-| L11F | Show Offset in Band Activity (FT8Call) | Pass | N/A | Upright only (TEST-PLAN One layout) |
+| L11P | Show Offset in Band Activity (PC) | Pass | Pass |  |
+| L11G | Show Offset in Band Activity (Pages) | Pass | Pass |  |
+| L11F | Show Offset in Band Activity (FT8Call) | Pass | Pass |  |
 | L12U | Show SNR in Band Activity (Upright) | Pass | Pass |  |
-| L12P | Show SNR in Band Activity (PC) | Pass | N/A | Upright only (TEST-PLAN One layout) |
-| L12G | Show SNR in Band Activity (Pages) | Pass | N/A | Upright only (TEST-PLAN One layout) |
-| L12F | Show SNR in Band Activity (FT8Call) | Pass | N/A | Upright only (TEST-PLAN One layout) |
+| L12P | Show SNR in Band Activity (PC) | Pass | Pass |  |
+| L12G | Show SNR in Band Activity (Pages) | Pass | Pass |  |
+| L12F | Show SNR in Band Activity (FT8Call) | Pass | Pass |  |
 | L13U | Show Column Labels (Upright) | Pass | Pass |  |
-| L13P | Show Column Labels (PC) | Pass | N/A | Upright only (TEST-PLAN One layout) |
-| L13G | Show Column Labels (Pages) | Pass | N/A | Upright only (TEST-PLAN One layout) |
-| L13F | Show Column Labels (FT8Call) | Pass | N/A | Upright only (TEST-PLAN One layout) |
+| L13P | Show Column Labels (PC) | Pass | Pass |  |
+| L13G | Show Column Labels (Pages) | Pass | Pass |  |
+| L13F | Show Column Labels (FT8Call) | Pass | Pass |  |
 | L14U | Show FT8 decodes (Upright) | Pass | Pass |  |
-| L14P | Show FT8 decodes (PC) | Pass | N/A | Upright only (TEST-PLAN One layout) |
-| L14G | Show FT8 decodes (Pages) | Pass | N/A | Upright only (TEST-PLAN One layout) |
-| L14F | Show FT8 decodes (FT8Call) | Pass | N/A | Upright only (TEST-PLAN One layout) |
+| L14P | Show FT8 decodes (PC) | Pass | Pass |  |
+| L14G | Show FT8 decodes (Pages) | Pass | Pass |  |
+| L14F | Show FT8 decodes (FT8Call) | Pass | Pass |  |
 | L15U | Show panels (Upright) | Pass | Pass |  |
-| L15P | Show panels (PC) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| L15G | Show panels (Pages) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| L15F | Show panels (FT8Call) | N/A | N/A | Upright only (TEST-PLAN One layout) |
+| L15P | Show panels (PC) | Pass | Pass |  |
+| L15G | Show panels (Pages) | Pass | Pass |  |
+| L15F | Show panels (FT8Call) | Pass | Pass |  |
 | L16U | Clear Band Activity (Upright) | Pass | Pass |  |
-| L16P | Clear Band Activity (PC) | Pass | N/A | Upright only (TEST-PLAN One layout) |
-| L16G | Clear Band Activity (Pages) | Pass | N/A | Upright only (TEST-PLAN One layout) |
-| L16F | Clear Band Activity (FT8Call) | Pass | N/A | Upright only (TEST-PLAN One layout) |
+| L16P | Clear Band Activity (PC) | Pass | Pass |  |
+| L16G | Clear Band Activity (Pages) | Pass | Pass |  |
+| L16F | Clear Band Activity (FT8Call) | Pass | Pass |  |
 | L17U | Clear Call Activity (Upright) | Pass | Pass |  |
-| L17P | Clear Call Activity (PC) | Pass | N/A | Upright only (TEST-PLAN One layout) |
-| L17G | Clear Call Activity (Pages) | Pass | N/A | Upright only (TEST-PLAN One layout) |
-| L17F | Clear Call Activity (FT8Call) | Pass | N/A | Upright only (TEST-PLAN One layout) |
+| L17P | Clear Call Activity (PC) | Pass | Pass |  |
+| L17G | Clear Call Activity (Pages) | Pass | Pass |  |
+| L17F | Clear Call Activity (FT8Call) | Pass | Pass |  |
 | L18U | Clear RX Activity (Upright) | Pass | Pass |  |
-| L18P | Clear RX Activity (PC) | Pass | N/A | Upright only (TEST-PLAN One layout) |
-| L18G | Clear RX Activity (Pages) | Pass | N/A | Upright only (TEST-PLAN One layout) |
-| L18F | Clear RX Activity (FT8Call) | Pass | N/A | Upright only (TEST-PLAN One layout) |
+| L18P | Clear RX Activity (PC) | Pass | Pass |  |
+| L18G | Clear RX Activity (Pages) | Pass | Pass |  |
+| L18F | Clear RX Activity (FT8Call) | Pass | Pass |  |
 | L19U | Clear All Activity (Upright) | Pass | Pass |  |
-| L19P | Clear All Activity (PC) | Pass | N/A | Upright only (TEST-PLAN One layout) |
-| L19G | Clear All Activity (Pages) | Pass | N/A | Upright only (TEST-PLAN One layout) |
-| L19F | Clear All Activity (FT8Call) | Pass | N/A | Upright only (TEST-PLAN One layout) |
+| L19P | Clear All Activity (PC) | Pass | Pass |  |
+| L19G | Clear All Activity (Pages) | Pass | Pass |  |
+| L19F | Clear All Activity (FT8Call) | Pass | Pass |  |
 | L20U | Configurations... (Upright) | Pass | Pass |  |
-| L20P | Configurations... (PC) | Pass | N/A | Upright only (TEST-PLAN One layout) |
-| L20G | Configurations... (Pages) | Pass | N/A | Upright only (TEST-PLAN One layout) |
-| L20F | Configurations... (FT8Call) | Pass | N/A | Upright only (TEST-PLAN One layout) |
+| L20P | Configurations... (PC) | Pass | Pass |  |
+| L20G | Configurations... (Pages) | Pass | Pass |  |
+| L20F | Configurations... (FT8Call) | Pass | Pass |  |
 | L21U | Exit (Upright) | Pass | Pass |  |
-| L21P | Exit (PC) | Pass | N/A | Upright only (TEST-PLAN One layout) |
-| L21G | Exit (Pages) | Pass | N/A | Upright only (TEST-PLAN One layout) |
-| L21F | Exit (FT8Call) | Pass | N/A | Upright only (TEST-PLAN One layout) |
+| L21P | Exit (PC) | Pass | Pass |  |
+| L21G | Exit (Pages) | Pass | Pass |  |
+| L21F | Exit (FT8Call) | Pass | Pass |  |
 | L22U | Copyright notice (Upright) | Pass | Pass |  |
-| L22P | Copyright notice (PC) | Pass | N/A | Upright only (TEST-PLAN One layout) |
-| L22G | Copyright notice (Pages) | Pass | N/A | Upright only (TEST-PLAN One layout) |
-| L22F | Copyright notice (FT8Call) | Pass | N/A | Upright only (TEST-PLAN One layout) |
+| L22P | Copyright notice (PC) | Pass | Pass |  |
+| L22G | Copyright notice (Pages) | Pass | Pass |  |
+| L22F | Copyright notice (FT8Call) | Pass | Pass |  |
 | L23U | Check for Updates (Upright) | Pass | Pass |  |
-| L23P | Check for Updates (PC) | Pass | N/A | Upright only (TEST-PLAN One layout) |
-| L23G | Check for Updates (Pages) | Pass | N/A | Upright only (TEST-PLAN One layout) |
-| L23F | Check for Updates (FT8Call) | Pass | N/A | Upright only (TEST-PLAN One layout) |
+| L23P | Check for Updates (PC) | Pass | Pass |  |
+| L23G | Check for Updates (Pages) | Pass | Pass |  |
+| L23F | Check for Updates (FT8Call) | Pass | Pass |  |
 | L24U | JS8Call User Guide (Upright) | Pass | Pass |  |
-| L24P | JS8Call User Guide (PC) | Pass | N/A | Upright only (TEST-PLAN One layout) |
-| L24G | JS8Call User Guide (Pages) | Pass | N/A | Upright only (TEST-PLAN One layout) |
-| L24F | JS8Call User Guide (FT8Call) | Pass | N/A | Upright only (TEST-PLAN One layout) |
+| L24P | JS8Call User Guide (PC) | Pass | Pass |  |
+| L24G | JS8Call User Guide (Pages) | Pass | Pass |  |
+| L24F | JS8Call User Guide (FT8Call) | Pass | Pass |  |
 | L25U | Save (Upright) | Pass | Pass |  |
-| L25P | Save (PC) | Pass | N/A | Upright only (TEST-PLAN One layout) |
-| L25G | Save (Pages) | Pass | N/A | Upright only (TEST-PLAN One layout) |
-| L25F | Save (FT8Call) | Pass | N/A | Upright only (TEST-PLAN One layout) |
+| L25P | Save (PC) | Pass | Pass |  |
+| L25G | Save (Pages) | Pass | Pass |  |
+| L25F | Save (FT8Call) | Pass | Pass |  |
 | L26U | Cancel (Upright) | Pass | Pass |  |
-| L26P | Cancel (PC) | Pass | N/A | Upright only (TEST-PLAN One layout) |
-| L26G | Cancel (Pages) | Pass | N/A | Upright only (TEST-PLAN One layout) |
-| L26F | Cancel (FT8Call) | Pass | N/A | Upright only (TEST-PLAN One layout) |
+| L26P | Cancel (PC) | Pass | Pass |  |
+| L26G | Cancel (Pages) | Pass | Pass |  |
+| L26F | Cancel (FT8Call) | Pass | Pass |  |
 | L27U | gear opens Station (Upright) | Pass | Pass |  |
-| L27P | gear opens Station (PC) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| L27G | gear opens Station (Pages) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| L27F | gear opens Station (FT8Call) | N/A | N/A | Upright only (TEST-PLAN One layout) |
+| L27P | gear opens Station (PC) | Pass | Pass |  |
+| L27G | gear opens Station (Pages) | Pass | Pass |  |
+| L27F | gear opens Station (FT8Call) | Pass | Pass |  |
 
 ## M. Station window
 
@@ -847,113 +871,113 @@ From 2026-11-01 the test build's engine is compiled at -O3, the same as release.
 | M01G | General page opens (Pages) | Pass | Pass |  |
 | M01F | General page opens (FT8Call) | Pass | Pass |  |
 | M02U | My Callsign refuses bad call (Upright) | Pass | Pass |  |
-| M02P | My Callsign refuses bad call (PC) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| M02G | My Callsign refuses bad call (Pages) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| M02F | My Callsign refuses bad call (FT8Call) | N/A | N/A | Upright only (TEST-PLAN One layout) |
+| M02P | My Callsign refuses bad call (PC) | Pass | Pass |  |
+| M02G | My Callsign refuses bad call (Pages) | Pass | Pass |  |
+| M02F | My Callsign refuses bad call (FT8Call) | Pass | Pass |  |
 | M03U | SWL (Listening only) (Upright) | Pass | Pass | OK leaves Station with no callsign when SWL is ticked |
-| M03P | SWL (Listening only) (PC) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| M03G | SWL (Listening only) (Pages) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| M03F | SWL (Listening only) (FT8Call) | N/A | N/A | Upright only (TEST-PLAN One layout) |
+| M03P | SWL (Listening only) (PC) | Pass | Pass |  |
+| M03G | SWL (Listening only) (Pages) | Pass | Pass |  |
+| M03F | SWL (Listening only) (FT8Call) | Pass | Pass |  |
 | M04U | Grid refuses bad grid (Upright) | Pass | Pass |  |
-| M04P | Grid refuses bad grid (PC) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| M04G | Grid refuses bad grid (Pages) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| M04F | Grid refuses bad grid (FT8Call) | N/A | N/A | Upright only (TEST-PLAN One layout) |
+| M04P | Grid refuses bad grid (PC) | Pass | Pass |  |
+| M04G | Grid refuses bad grid (Pages) | Pass | Pass |  |
+| M04F | Grid refuses bad grid (FT8Call) | Pass | Pass |  |
 | M05U | Acquire GPS and Set (Upright) | Pass | Pass |  |
-| M05P | Acquire GPS and Set (PC) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| M05G | Acquire GPS and Set (Pages) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| M05F | Acquire GPS and Set (FT8Call) | N/A | N/A | Upright only (TEST-PLAN One layout) |
+| M05P | Acquire GPS and Set (PC) | Pass | Pass |  |
+| M05G | Acquire GPS and Set (Pages) | Pass | Pass |  |
+| M05F | Acquire GPS and Set (FT8Call) | Pass | Pass |  |
 | M06U | Callsign Groups refuses bad group (Upright) | Pass | Pass |  |
-| M06P | Callsign Groups refuses bad group (PC) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| M06G | Callsign Groups refuses bad group (Pages) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| M06F | Callsign Groups refuses bad group (FT8Call) | N/A | N/A | Upright only (TEST-PLAN One layout) |
+| M06P | Callsign Groups refuses bad group (PC) | Pass | Pass |  |
+| M06G | Callsign Groups refuses bad group (Pages) | Pass | Pass |  |
+| M06F | Callsign Groups refuses bad group (FT8Call) | Pass | Pass |  |
 | M07U | CQ Message refuses bad format (Upright) | Pass | Pass |  |
-| M07P | CQ Message refuses bad format (PC) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| M07G | CQ Message refuses bad format (Pages) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| M07F | CQ Message refuses bad format (FT8Call) | N/A | N/A | Upright only (TEST-PLAN One layout) |
+| M07P | CQ Message refuses bad format (PC) | Pass | Pass |  |
+| M07G | CQ Message refuses bad format (Pages) | Pass | Pass |  |
+| M07F | CQ Message refuses bad format (FT8Call) | Pass | Pass |  |
 | M08U | Reply, Info, Status text (Upright) | Pass | Pass |  |
-| M08P | Reply, Info, Status text (PC) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| M08G | Reply, Info, Status text (Pages) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| M08F | Reply, Info, Status text (FT8Call) | N/A | N/A | Upright only (TEST-PLAN One layout) |
+| M08P | Reply, Info, Status text (PC) | Pass | Pass |  |
+| M08G | Reply, Info, Status text (Pages) | Pass | Pass |  |
+| M08F | Reply, Info, Status text (FT8Call) | Pass | Pass |  |
 | M09U | Behavior checkboxes save (Upright) | Pass | Pass |  |
-| M09P | Behavior checkboxes save (PC) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| M09G | Behavior checkboxes save (Pages) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| M09F | Behavior checkboxes save (FT8Call) | N/A | N/A | Upright only (TEST-PLAN One layout) |
+| M09P | Behavior checkboxes save (PC) | Pass | Pass |  |
+| M09G | Behavior checkboxes save (Pages) | Pass | Pass |  |
+| M09F | Behavior checkboxes save (FT8Call) | Pass | Pass |  |
 | M10U | Aging spin boxes (Upright) | Pass | Pass |  |
-| M10P | Aging spin boxes (PC) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| M10G | Aging spin boxes (Pages) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| M10F | Aging spin boxes (FT8Call) | N/A | N/A | Upright only (TEST-PLAN One layout) |
+| M10P | Aging spin boxes (PC) | Pass | Pass |  |
+| M10G | Aging spin boxes (Pages) | Pass | Pass |  |
+| M10F | Aging spin boxes (FT8Call) | Pass | Pass |  |
 | M11U | End of Transmission Character Indicator refuses empty (Upright) | Pass | Pass |  |
-| M11P | End of Transmission Character Indicator refuses empty (PC) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| M11G | End of Transmission Character Indicator refuses empty (Pages) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| M11F | End of Transmission Character Indicator refuses empty (FT8Call) | N/A | N/A | Upright only (TEST-PLAN One layout) |
+| M11P | End of Transmission Character Indicator refuses empty (PC) | Pass | Pass |  |
+| M11G | End of Transmission Character Indicator refuses empty (Pages) | Pass | Pass |  |
+| M11F | End of Transmission Character Indicator refuses empty (FT8Call) | Pass | Pass |  |
 | M12U | Missing Frame Character Indicator (Upright) | Pass | Pass |  |
-| M12P | Missing Frame Character Indicator (PC) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| M12G | Missing Frame Character Indicator (Pages) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| M12F | Missing Frame Character Indicator (FT8Call) | N/A | N/A | Upright only (TEST-PLAN One layout) |
+| M12P | Missing Frame Character Indicator (PC) | Pass | Pass |  |
+| M12G | Missing Frame Character Indicator (Pages) | Pass | Pass |  |
+| M12F | Missing Frame Character Indicator (FT8Call) | Pass | Pass |  |
 | M13U | Heartbeat interval (Upright) | Pass | Pass |  |
-| M13P | Heartbeat interval (PC) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| M13G | Heartbeat interval (Pages) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| M13F | Heartbeat interval (FT8Call) | N/A | N/A | Upright only (TEST-PLAN One layout) |
+| M13P | Heartbeat interval (PC) | Pass | Pass |  |
+| M13G | Heartbeat interval (Pages) | Pass | Pass |  |
+| M13F | Heartbeat interval (FT8Call) | Pass | Pass |  |
 | M14U | Heartbeat Network group (Upright) | Pass | Pass |  |
-| M14P | Heartbeat Network group (PC) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| M14G | Heartbeat Network group (Pages) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| M14F | Heartbeat Network group (FT8Call) | N/A | N/A | Upright only (TEST-PLAN One layout) |
+| M14P | Heartbeat Network group (PC) | Pass | Pass |  |
+| M14G | Heartbeat Network group (Pages) | Pass | Pass |  |
+| M14F | Heartbeat Network group (FT8Call) | Pass | Pass |  |
 | M15U | Autoreply group (Upright) | Pass | Pass |  |
-| M15P | Autoreply group (PC) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| M15G | Autoreply group (Pages) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| M15F | Autoreply group (FT8Call) | N/A | N/A | Upright only (TEST-PLAN One layout) |
+| M15P | Autoreply group (PC) | Pass | Pass |  |
+| M15G | Autoreply group (Pages) | Pass | Pass |  |
+| M15F | Autoreply group (FT8Call) | Pass | Pass |  |
 | M16U | Only autoreply refuses bad callsign (Upright) | Pass | Pass |  |
-| M16P | Only autoreply refuses bad callsign (PC) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| M16G | Only autoreply refuses bad callsign (Pages) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| M16F | Only autoreply refuses bad callsign (FT8Call) | N/A | N/A | Upright only (TEST-PLAN One layout) |
+| M16P | Only autoreply refuses bad callsign (PC) | Pass | Pass |  |
+| M16G | Only autoreply refuses bad callsign (Pages) | Pass | Pass |  |
+| M16F | Only autoreply refuses bad callsign (FT8Call) | Pass | Pass | failed once in run 2 (cause not known, no screenshot then); passed in a trial and on retry |
 | M17U | Callsign Filtering (Upright) | Pass | Pass |  |
-| M17P | Callsign Filtering (PC) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| M17G | Callsign Filtering (Pages) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| M17F | Callsign Filtering (FT8Call) | N/A | N/A | Upright only (TEST-PLAN One layout) |
+| M17P | Callsign Filtering (PC) | Pass | Pass |  |
+| M17G | Callsign Filtering (Pages) | Pass | Pass |  |
+| M17F | Callsign Filtering (FT8Call) | Pass | Pass |  |
 | M18U | Radio page Rig search (Upright) | Pass | Pass |  |
 | M18P | Radio page Rig search (PC) | Pass | Pass |  |
 | M18G | Radio page Rig search (Pages) | Pass | Pass |  |
 | M18F | Radio page Rig search (FT8Call) | Pass | Pass |  |
 | M19U | Radio page greying follows the rig (Upright) | Pass | Pass |  |
-| M19P | Radio page greying follows the rig (PC) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| M19G | Radio page greying follows the rig (Pages) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| M19F | Radio page greying follows the rig (FT8Call) | N/A | N/A | Upright only (TEST-PLAN One layout) |
+| M19P | Radio page greying follows the rig (PC) | Pass | Pass |  |
+| M19G | Radio page greying follows the rig (Pages) | Pass | Pass |  |
+| M19F | Radio page greying follows the rig (FT8Call) | Pass | Pass |  |
 | M20U | Test CAT (Upright) | Pass | Pass |  |
-| M20P | Test CAT (PC) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| M20G | Test CAT (Pages) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| M20F | Test CAT (FT8Call) | N/A | N/A | Upright only (TEST-PLAN One layout) |
+| M20P | Test CAT (PC) | Pass | Pass |  |
+| M20G | Test CAT (Pages) | Pass | Pass |  |
+| M20F | Test CAT (FT8Call) | Pass | Pass |  |
 | M21U | Test PTT (Upright) | Pass | Pass |  |
-| M21P | Test PTT (PC) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| M21G | Test PTT (Pages) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| M21F | Test PTT (FT8Call) | N/A | N/A | Upright only (TEST-PLAN One layout) |
+| M21P | Test PTT (PC) | Pass | Pass |  |
+| M21G | Test PTT (Pages) | Pass | Pass |  |
+| M21F | Test PTT (FT8Call) | Pass | Pass |  |
 | M22U | Split Operation (Upright) | Pass | Pass |  |
-| M22P | Split Operation (PC) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| M22G | Split Operation (Pages) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| M22F | Split Operation (FT8Call) | N/A | N/A | Upright only (TEST-PLAN One layout) |
+| M22P | Split Operation (PC) | Pass | Pass |  |
+| M22G | Split Operation (Pages) | Pass | Pass |  |
+| M22F | Split Operation (FT8Call) | Pass | Pass |  |
 | M23U | Tx delay (Upright) | Pass | Pass |  |
-| M23P | Tx delay (PC) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| M23G | Tx delay (Pages) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| M23F | Tx delay (FT8Call) | N/A | N/A | Upright only (TEST-PLAN One layout) |
+| M23P | Tx delay (PC) | Pass | Pass |  |
+| M23G | Tx delay (Pages) | Pass | Pass |  |
+| M23F | Tx delay (FT8Call) | Pass | Pass |  |
 | M24U | Hold PTT (Upright) | Pass | Pass |  |
-| M24P | Hold PTT (PC) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| M24G | Hold PTT (Pages) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| M24F | Hold PTT (FT8Call) | N/A | N/A | Upright only (TEST-PLAN One layout) |
+| M24P | Hold PTT (PC) | Pass | Pass |  |
+| M24G | Hold PTT (Pages) | Pass | Pass |  |
+| M24F | Hold PTT (FT8Call) | Pass | Pass |  |
 | M25U | Audio page Input (Upright) | Pass | Pass |  |
 | M25P | Audio page Input (PC) | Pass | Pass |  |
 | M25G | Audio page Input (Pages) | Pass | Pass |  |
 | M25F | Audio page Input (FT8Call) | Pass | Pass |  |
 | M26U | Audio page Output (Upright) | Pass | Pass |  |
-| M26P | Audio page Output (PC) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| M26G | Audio page Output (Pages) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| M26F | Audio page Output (FT8Call) | N/A | N/A | Upright only (TEST-PLAN One layout) |
+| M26P | Audio page Output (PC) | Pass | Pass |  |
+| M26G | Audio page Output (Pages) | Pass | Pass |  |
+| M26F | Audio page Output (FT8Call) | Pass | Pass |  |
 | M27U | Input channel list has no Both (Upright) | Pass | Pass |  |
-| M27P | Input channel list has no Both (PC) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| M27G | Input channel list has no Both (Pages) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| M27F | Input channel list has no Both (FT8Call) | N/A | N/A | Upright only (TEST-PLAN One layout) |
+| M27P | Input channel list has no Both (PC) | Pass | Pass |  |
+| M27G | Input channel list has no Both (Pages) | Pass | Pass |  |
+| M27F | Input channel list has no Both (FT8Call) | Pass | Pass |  |
 | M28U | Remember power settings by band (Upright) | Pass | Pass |  |
-| M28P | Remember power settings by band (PC) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| M28G | Remember power settings by band (Pages) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| M28F | Remember power settings by band (FT8Call) | N/A | N/A | Upright only (TEST-PLAN One layout) |
+| M28P | Remember power settings by band (PC) | Pass | Pass |  |
+| M28G | Remember power settings by band (Pages) | Pass | Pass |  |
+| M28F | Remember power settings by band (FT8Call) | Pass | Pass |  |
 | M29U | Layout page (Upright) | N/A | N/A | Layout page is listed only sideways; open check in PC |
 | M29P | Layout page (PC) | Pass | Pass |  |
 | M29G | Layout page (Pages) | Pass | Pass |  |
@@ -963,37 +987,37 @@ From 2026-11-01 the test build's engine is compiled at -O3, the same as release.
 | M30G | Reporting Network Services (Pages) | Pass | Pass |  |
 | M30F | Reporting Network Services (FT8Call) | Pass | Pass |  |
 | M31U | Reporting API group (Upright) | Pass | Pass |  |
-| M31P | Reporting API group (PC) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| M31G | Reporting API group (Pages) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| M31F | Reporting API group (FT8Call) | N/A | N/A | Upright only (TEST-PLAN One layout) |
+| M31P | Reporting API group (PC) | Pass | Pass |  |
+| M31G | Reporting API group (Pages) | Pass | Pass |  |
+| M31F | Reporting API group (FT8Call) | Pass | Pass |  |
 | M32U | Reporting N3FJP group (Upright) | Pass | Pass |  |
-| M32P | Reporting N3FJP group (PC) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| M32G | Reporting N3FJP group (Pages) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| M32F | Reporting N3FJP group (FT8Call) | N/A | N/A | Upright only (TEST-PLAN One layout) |
+| M32P | Reporting N3FJP group (PC) | Pass | Pass |  |
+| M32G | Reporting N3FJP group (Pages) | Pass | Pass |  |
+| M32F | Reporting N3FJP group (FT8Call) | Pass | Pass |  |
 | M33U | Reporting N1MM group (Upright) | Pass | Pass |  |
-| M33P | Reporting N1MM group (PC) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| M33G | Reporting N1MM group (Pages) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| M33F | Reporting N1MM group (FT8Call) | N/A | N/A | Upright only (TEST-PLAN One layout) |
+| M33P | Reporting N1MM group (PC) | Pass | Pass |  |
+| M33G | Reporting N1MM group (Pages) | Pass | Pass |  |
+| M33F | Reporting N1MM group (FT8Call) | Pass | Pass |  |
 | M34U | Frequencies Calibration (Upright) | Pass | Pass |  |
 | M34P | Frequencies Calibration (PC) | Pass | Pass |  |
 | M34G | Frequencies Calibration (Pages) | Pass | Pass |  |
 | M34F | Frequencies Calibration (FT8Call) | Pass | Pass |  |
 | M35U | Frequency table Insert Delete Reset (Upright) | Pass | Pass |  |
-| M35P | Frequency table Insert Delete Reset (PC) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| M35G | Frequency table Insert Delete Reset (Pages) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| M35F | Frequency table Insert Delete Reset (FT8Call) | N/A | N/A | Upright only (TEST-PLAN One layout) |
+| M35P | Frequency table Insert Delete Reset (PC) | Pass | Pass |  |
+| M35G | Frequency table Insert Delete Reset (Pages) | Pass | Pass |  |
+| M35F | Frequency table Insert Delete Reset (FT8Call) | Pass | Pass |  |
 | M36U | Frequency table edit in place (Upright) | Pass | Pass |  |
-| M36P | Frequency table edit in place (PC) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| M36G | Frequency table edit in place (Pages) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| M36F | Frequency table edit in place (FT8Call) | N/A | N/A | Upright only (TEST-PLAN One layout) |
+| M36P | Frequency table edit in place (PC) | Pass | Pass |  |
+| M36G | Frequency table edit in place (Pages) | Pass | Pass |  |
+| M36F | Frequency table edit in place (FT8Call) | Pass | Pass |  |
 | M37U | Frequency table Load Save as Merge (Upright) | Pass | Pass |  |
-| M37P | Frequency table Load Save as Merge (PC) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| M37G | Frequency table Load Save as Merge (Pages) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| M37F | Frequency table Load Save as Merge (FT8Call) | N/A | N/A | Upright only (TEST-PLAN One layout) |
+| M37P | Frequency table Load Save as Merge (PC) | Pass | Pass |  |
+| M37G | Frequency table Load Save as Merge (Pages) | Pass | Pass |  |
+| M37F | Frequency table Load Save as Merge (FT8Call) | Pass | Pass |  |
 | M38U | Frequency Schedule (Upright) | Pass | Pass |  |
-| M38P | Frequency Schedule (PC) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| M38G | Frequency Schedule (Pages) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| M38F | Frequency Schedule (FT8Call) | N/A | N/A | Upright only (TEST-PLAN One layout) |
+| M38P | Frequency Schedule (PC) | Pass | Pass |  |
+| M38G | Frequency Schedule (Pages) | Pass | Pass |  |
+| M38F | Frequency Schedule (FT8Call) | Pass | Pass |  |
 | M39U | Saved Messages drag and edit (Upright) | Pass | Pass |  |
 | M39P | Saved Messages drag and edit (PC) | Pass | Pass |  |
 | M39G | Saved Messages drag and edit (Pages) | Pass | Pass |  |
@@ -1007,9 +1031,9 @@ From 2026-11-01 the test build's engine is compiled at -O3, the same as release.
 | M41G | UI colours (Pages) | Pass | Pass |  |
 | M41F | UI colours (FT8Call) | Pass | Pass |  |
 | M42U | UI fonts (Upright) | Pass | Pass |  |
-| M42P | UI fonts (PC) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| M42G | UI fonts (Pages) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| M42F | UI fonts (FT8Call) | N/A | N/A | Upright only (TEST-PLAN One layout) |
+| M42P | UI fonts (PC) | Pass | Pass |  |
+| M42G | UI fonts (Pages) | Pass | Pass |  |
+| M42F | UI fonts (FT8Call) | Pass | Pass |  |
 | M43U | Run Diagnostics (Upright) | Pass | Pass |  |
 | M43P | Run Diagnostics (PC) | Pass | Pass |  |
 | M43G | Run Diagnostics (Pages) | Pass | Pass |  |
@@ -1023,13 +1047,13 @@ From 2026-11-01 the test build's engine is compiled at -O3, the same as release.
 | M45G | About (Pages) | Pass | Pass |  |
 | M45F | About (FT8Call) | Pass | Pass |  |
 | M46U | OK (Upright) | Pass | Pass |  |
-| M46P | OK (PC) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| M46G | OK (Pages) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| M46F | OK (FT8Call) | N/A | N/A | Upright only (TEST-PLAN One layout) |
+| M46P | OK (PC) | Pass | Pass |  |
+| M46G | OK (Pages) | Pass | Pass |  |
+| M46F | OK (FT8Call) | Pass | Pass |  |
 | M47U | Cancel (Upright) | Pass | Pass |  |
-| M47P | Cancel (PC) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| M47G | Cancel (Pages) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| M47F | Cancel (FT8Call) | N/A | N/A | Upright only (TEST-PLAN One layout) |
+| M47P | Cancel (PC) | Pass | Pass |  |
+| M47G | Cancel (Pages) | Pass | Pass |  |
+| M47F | Cancel (FT8Call) | Pass | Pass |  |
 
 ## N. Menus
 
@@ -1037,65 +1061,65 @@ From 2026-11-01 the test build's engine is compiled at -O3, the same as release.
 |---|---|---|---|---|
 | N01U | File menu (Upright) | N/A | N/A | No menu bar in Upright |
 | N01P | File menu (PC) | Pass | Pass |  |
-| N01G | File menu (Pages) | N/A | N/A | Upright only (TEST-PLAN One layout) |
+| N01G | File menu (Pages) | N/A | N/A | No menu bar in Pages (Rob, 2026-10-20: no ⋮ menu) |
 | N01F | File menu (FT8Call) | Pass | Pass |  |
 | N02U | Configurations Clone (Upright) | N/A | N/A | No menu bar in Upright |
 | N02P | Configurations Clone (PC) | Pass | Pass |  |
-| N02G | Configurations Clone (Pages) | N/A | N/A | Upright only (TEST-PLAN One layout) |
+| N02G | Configurations Clone (Pages) | N/A | N/A | No menu bar in Pages (Rob, 2026-10-20: no ⋮ menu) |
 | N02F | Configurations Clone (FT8Call) | Pass | Pass |  |
 | N03U | Configurations Clone Into (Upright) | N/A | N/A | No menu bar in Upright |
-| N03P | Configurations Clone Into (PC) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| N03G | Configurations Clone Into (Pages) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| N03F | Configurations Clone Into (FT8Call) | N/A | N/A | Upright only (TEST-PLAN One layout) |
+| N03P | Configurations Clone Into (PC) | Pass | Pass |  |
+| N03G | Configurations Clone Into (Pages) | N/A | N/A | N/A: no menu bar in Pages |
+| N03F | Configurations Clone Into (FT8Call) | Pass | Pass |  |
 | N04U | Configurations Rename (Upright) | N/A | N/A | No menu bar in Upright |
-| N04P | Configurations Rename (PC) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| N04G | Configurations Rename (Pages) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| N04F | Configurations Rename (FT8Call) | N/A | N/A | Upright only (TEST-PLAN One layout) |
+| N04P | Configurations Rename (PC) | Pass | Pass |  |
+| N04G | Configurations Rename (Pages) | N/A | N/A | N/A: no menu bar in Pages |
+| N04F | Configurations Rename (FT8Call) | Pass | Pass |  |
 | N05U | Configurations Reset (Upright) | N/A | N/A | No menu bar in Upright |
-| N05P | Configurations Reset (PC) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| N05G | Configurations Reset (Pages) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| N05F | Configurations Reset (FT8Call) | N/A | N/A | Upright only (TEST-PLAN One layout) |
+| N05P | Configurations Reset (PC) | Pass | Pass |  |
+| N05G | Configurations Reset (Pages) | N/A | N/A | N/A: no menu bar in Pages |
+| N05F | Configurations Reset (FT8Call) | Pass | Pass |  |
 | N06U | Configurations Delete (Upright) | N/A | N/A | No menu bar in Upright |
-| N06P | Configurations Delete (PC) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| N06G | Configurations Delete (Pages) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| N06F | Configurations Delete (FT8Call) | N/A | N/A | Upright only (TEST-PLAN One layout) |
+| N06P | Configurations Delete (PC) | Pass | Pass |  |
+| N06G | Configurations Delete (Pages) | N/A | N/A | N/A: no menu bar in Pages |
+| N06F | Configurations Delete (FT8Call) | Pass | Pass |  |
 | N07U | Configurations Switch To (Upright) | N/A | N/A | No menu bar in Upright |
-| N07P | Configurations Switch To (PC) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| N07G | Configurations Switch To (Pages) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| N07F | Configurations Switch To (FT8Call) | N/A | N/A | Upright only (TEST-PLAN One layout) |
+| N07P | Configurations Switch To (PC) | Pass | Pass |  |
+| N07G | Configurations Switch To (Pages) | N/A | N/A | N/A: no menu bar in Pages |
+| N07F | Configurations Switch To (FT8Call) | Pass | Pass |  |
 | N08U | View menu (Upright) | N/A | N/A | No menu bar in Upright |
 | N08P | View menu (PC) | Pass | Pass |  |
-| N08G | View menu (Pages) | N/A | N/A | Upright only (TEST-PLAN One layout) |
+| N08G | View menu (Pages) | N/A | N/A | No menu bar in Pages (Rob, 2026-10-20: no ⋮ menu) |
 | N08F | View menu (FT8Call) | Pass | Pass |  |
 | N09U | Mode menu (Upright) | N/A | N/A | No menu bar in Upright |
 | N09P | Mode menu (PC) | Pass | Pass |  |
-| N09G | Mode menu (Pages) | N/A | N/A | Upright only (TEST-PLAN One layout) |
+| N09G | Mode menu (Pages) | N/A | N/A | No menu bar in Pages (Rob, 2026-10-20: no ⋮ menu) |
 | N09F | Mode menu (FT8Call) | Pass | Pass |  |
 | N10U | Control menu (Upright) | N/A | N/A | No menu bar in Upright |
 | N10P | Control menu (PC) | Pass | Pass |  |
-| N10G | Control menu (Pages) | N/A | N/A | Upright only (TEST-PLAN One layout) |
+| N10G | Control menu (Pages) | N/A | N/A | No menu bar in Pages (Rob, 2026-10-20: no ⋮ menu) |
 | N10F | Control menu (FT8Call) | Pass | Pass |  |
 | N11U | Log menu (Upright) | N/A | N/A | No menu bar in Upright |
 | N11P | Log menu (PC) | Pass | Pass |  |
-| N11G | Log menu (Pages) | N/A | N/A | Upright only (TEST-PLAN One layout) |
+| N11G | Log menu (Pages) | N/A | N/A | No menu bar in Pages (Rob, 2026-10-20: no ⋮ menu) |
 | N11F | Log menu (FT8Call) | Pass | Pass | open check |
 | N12U | Help menu (Upright) | N/A | N/A | No menu bar in Upright |
 | N12P | Help menu (PC) | Pass | Pass |  |
-| N12G | Help menu (Pages) | N/A | N/A | Upright only (TEST-PLAN One layout) |
+| N12G | Help menu (Pages) | N/A | N/A | No menu bar in Pages (Rob, 2026-10-20: no ⋮ menu) |
 | N12F | Help menu (FT8Call) | Pass | Pass |  |
 | N13U | Show Fullscreen (Upright) | N/A | N/A | No menu bar in Upright |
-| N13P | Show Fullscreen (PC) | Pass | N/A | Upright only (TEST-PLAN One layout) |
-| N13G | Show Fullscreen (Pages) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| N13F | Show Fullscreen (FT8Call) | Pass | N/A | Upright only (TEST-PLAN One layout) |
+| N13P | Show Fullscreen (PC) | Pass | Pass |  |
+| N13G | Show Fullscreen (Pages) | N/A | N/A | No menu bar in Pages (Rob, 2026-10-20: no ⋮ menu) |
+| N13F | Show Fullscreen (FT8Call) | Pass | Pass |  |
 | N14U | Show Time Drift Controls... (Upright) | N/A | N/A | No menu bar in Upright |
-| N14P | Show Time Drift Controls... (PC) | Pass | N/A | Upright only (TEST-PLAN One layout) |
-| N14G | Show Time Drift Controls... (Pages) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| N14F | Show Time Drift Controls... (FT8Call) | Pass | N/A | Upright only (TEST-PLAN One layout) |
+| N14P | Show Time Drift Controls... (PC) | Pass | Pass |  |
+| N14G | Show Time Drift Controls... (Pages) | N/A | N/A | No menu bar in Pages (Rob, 2026-10-20: no ⋮ menu) |
+| N14F | Show Time Drift Controls... (FT8Call) | Pass | Pass |  |
 | N15U | Open Log Directory... (Upright) | N/A | N/A | No menu bar in Upright |
-| N15P | Open Log Directory... (PC) | Pass | N/A | Upright only (TEST-PLAN One layout) |
-| N15G | Open Log Directory... (Pages) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| N15F | Open Log Directory... (FT8Call) | Pass | N/A | Upright only (TEST-PLAN One layout) |
+| N15P | Open Log Directory... (PC) | Pass | Pass |  |
+| N15G | Open Log Directory... (Pages) | N/A | N/A | No menu bar in Pages (Rob, 2026-10-20: no ⋮ menu) |
+| N15F | Open Log Directory... (FT8Call) | Pass | Pass |  |
 | N16U | Status bar configuration name (Upright) | N/A | N/A | No menu bar in Upright |
-| N16P | Status bar configuration name (PC) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| N16G | Status bar configuration name (Pages) | N/A | N/A | Upright only (TEST-PLAN One layout) |
-| N16F | Status bar configuration name (FT8Call) | N/A | N/A | Upright only (TEST-PLAN One layout) |
+| N16P | Status bar configuration name (PC) | Pass | Pass |  |
+| N16G | Status bar configuration name (Pages) | N/A | N/A | N/A: no menu bar in Pages |
+| N16F | Status bar configuration name (FT8Call) | Pass | Pass |  |

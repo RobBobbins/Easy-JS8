@@ -55,7 +55,9 @@ def bar():
 if want('H28U'):
     up()
     w = bar()
-    fix('H28U', 'Freq:' in w and 'Auto Reply' in w and 'JS8' in w, re.findall(r' text="((?:JS8|Freq:|Auto Reply)[^"]*)"', w))
+    # FT8Call's bar has no Freq or Auto Reply (js8_status_bar_ft8call.xml, FT8Call v0.4.2 order, Rob 2026-10-20)
+    ok = ('JS8' in w and 'Freq:' not in w and 'Auto Reply' not in w) if L == 'F' else ('Freq:' in w and 'Auto Reply' in w and 'JS8' in w)
+    fix('H28U', ok, re.findall(r' text="((?:JS8|Freq:|Auto Reply)[^"]*)"', w))
     home()
 if want('E36'):
     up()

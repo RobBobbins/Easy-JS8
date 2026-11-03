@@ -1,9 +1,23 @@
 # Easy JS8 — Handoff (2026-10-20, end of the third session)
 
+## Next session starts here (2026-11-03)
+
+1. **First:** read the two rules at the top of `TEST-PLAN.md`: PC first (phone and radio absolutely last), and every test runs with updates and timers.
+2. **Steps 1 to 17 are done** (2026-11-03, 16:51); see "Test pass state (2026-11-03)". Left on the PC: W19, the real Hamlib rigctld dummy rig. Then the phone and radio.
+3. **Waiting on Rob for W19:** the Hamlib zip is downloaded to `C:\Users\Robert\AppData\Local\Temp\claude\E--new-w3bguru-websites-easy-js8\f8df57d0-2324-45f1-b508-d9d9199b79c9\scratchpad\hamlib-dl\hamlib-w64-4.7.2.zip`, not extracted. Running `rigctld.exe` from it was refused on this PC, so Rob starts it (`rigctld.exe -m 1 -t 4532` in its `bin` folder). The script is `build-env/test/lib/wham.py`.
+4. **Running on the PC:** JS8Call with `--rig-name ELINK` (test profile, MyCall K4PCT, HB and ACK on); `fakes.py`, `fakeaprs.py`, `fakepsk.py`, `fakespot.py`.
+5. **Emulator:** S22-Fresh, restarted 16:24 with `-cores 8 -memory 4096 -gpu host`. Test values are left as the last test set them.
+6. **Not committed:** the clock drift display (point 9), the app fixes in "Test pass state (2026-11-03)", checklist section W, the `TEST-PLAN.md` changes, `tlink2.py`, `wlink.py`, `wui.py`, `wside.py`, `wham.py`, `side.py`, `side16.sh`, `need.py`, `markjson.py` and the test script changes. (The Reset Frame Sizes fix is committed and pushed, d113e7ef.)
+7. **JS8Call heartbeat script:** the "Exception in thread Thread-6 (play)" line `tlink2.py` prints when it closes is not looked into.
+8. **Talking to Rob:** name tests by what they check, never by checklist codes (W01, H28 ...).
+9. **Clock drift display (done 2026-11-03, Rob):** the drift no longer goes in the clock box (it wrapped and was cut off in Upright, PC and Pages). Upright, PC, Pages: small grey text (12 dp, #888888) right of the callsign, an invisible copy on the left keeps the callsign centred (`js8_call_clock_block.xml`). FT8Call: its own line under the time, 9 dp grey (`js8_call_clock_block_ft8call.xml`). Hidden at 0. Code: `Js8MainFragment.kt` clock tick (`clockDrift`, `clockDriftPad`). Checked in screenshots in all four layouts, with the drift on and at 0, and FT8Call with Next Beacon showing.
+10. **Open question about earlier results:** the tests ran for hours with the clock drift at +3530 ms, later +5897 ms (pref `time_drift_ms`), left by the drift tests; no script set it back to 0. Not known yet which passed tests ran with drift on, or whether it changed their results. Every test script should set the drift to 0 at the start.
+11. **Emulator now:** drift +5897 ms (left on so Rob could see it), speed JS8 Fast, HB on, HB timer off, FT8Call layout, sideways.
+
 Read this first, then `LAYOUT.md` (the layout spec and the PC values it copies; updated for
 this session too).
 
-**Latest state:** see "Test pass state (2026-11-02, 21:30)".
+**Latest state:** see "Test pass state (2026-11-03)".
 
 **Fourth session (2026-10-20) worked on sideways, mostly PC mode** (see "Sideways, fourth session").
 **Fifth session (2026-10-20):** Waterfall Controls → **Timing** and **Display** tabs built (see
@@ -660,6 +674,26 @@ Read `TEST-PLAN.md` and `TEST-CHECKLIST.md` for the steps and every result. Phon
 **Test traps found.** `js8cfg_wf_center` must be an int: a string crashes the app on start. `js8cfg_api_dynamic_info` true overrides `my_status`. `psk_reporter` must be on for APRS and for RX.SPOT. Injected decodes never make a spot report; Q07, R11, R12 play a real frame. `js8cfg_heartbeat_anywhere` left on breaks E18. The PC heartbeat slot pick is random, as in JS8Call.
 
 **Stand-ins.** `fakes.py`, `fakeaprs.py`, `fakepsk.py`, and `fakespot.py` may still be running on the PC. Nothing from today is committed.
+
+## Test pass state (2026-11-03)
+
+**Checklist count.** 1,007 rows: 1,006 passed twice or are N/A, 0 Failed. W19 (real Hamlib rigctld) not run; it waits for Rob to start `rigctld.exe`. 35 cells are N/A, none of them "Upright only (TEST-PLAN One layout)" any more: step 16 ran every sideways copy twice, one layout at a time, with `side16.sh <run> <P|G|F> <script> <limit s>` (`need.py` picks the rows left, `side.py` patches the upright scripts for the layout).
+
+**W rows.** W01 to W18 passed twice: `wlink.py` (W01 to W05), `tlink2.py` (W07 to W09), `wui.py` (W06, W10 to W18). Their result files name the rows with the layout letter (W06U), so they were copied onto the checklist by hand in step 17.
+
+**App fixes (2026-11-03, uncommitted).**
+- Signal meter value held to 0 to 90 dB (`status.powerDb.coerceIn`).
+- RX and TX at startup work again after Back closes the app: `MainActivity.onStop` calls `Js8MainFragment.appClosed()` when finishing (W12).
+- Message Window press-and-hold menu opens at the press point, as the Band Activity row menus do (`pressAnchor` in `Js8MainFragment`). Sideways it had only two rows of room above the Message Window, so Clear needed a scroll (H34P). All 6 items show in all four layouts; pictures `shots/d1_menu_U/P/G/F.png`.
+- AUTO at startup as the PC (Rob, "just do what the program does"): Station > **Turn autoreply on at startup** ticked starts AUTO on (with a callsign and grid), unticked starts it off even if it was left on (UI_Constructor.cpp 691). A new install starts ticked (PC default). Replaces the 2026-10-22 rule "unticked = AUTO as left". S05 now checks both.
+
+**Test script fixes for sideways (step 16).** Gestures subtract the app window's origin (camera cutout, x 136); swipes kept away from the Save / OK bar; PC and FT8Call reach the Inbox through View > **Show Message Inbox...**; Settings and Station scroll more times sideways; dialog fields scrolled into view before typing. H28 in FT8Call checks no Freq or Auto Reply (FT8Call's bar has none, `js8_status_bar_ft8call.xml`). M16 takes a screenshot when it fails: M16F failed once in run 2, cause not known (no screenshot then), passed in a trial and on retry. `ui7.py` line endings put back to LF.
+
+**Test traps found.** The **New message from …** notification banner covers the PC menu bar for about 5 s; `ui8.py` goes Home and waits when a tap is taken. In `ui1.py` the Settings (L) and menu (N) sections record every row whatever `JS8_ROWS` says; rerun H rows with section `H` only. S22-Fresh slowed to 4950 ms frames twice today (14:29, 16:24) and its Android system died once (12:31); a restart fixed each.
+
+**Seen, not changed.** On Station > Audio the bottom edge of the **Remember power settings by band** box is cut off (the page scrolls a little).
+
+**Backups.** Checklist before step 16 and step 17, and the result files step 17 overwrote: `C:\Users\Robert\AppData\Local\Temp\claude\E--new-w3bguru-websites-easy-js8\f8df57d0-2324-45f1-b508-d9d9199b79c9\scratchpad\` (`TEST-CHECKLIST.before-step16.md`, `results-before-step17\`).
 
 ## Build (Windows, Git Bash, folder `E:\new-w3bguru-websites\easy js8`)
 

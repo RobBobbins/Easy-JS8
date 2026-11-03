@@ -1,19 +1,47 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Header middle: callsign over UTC clock. -->
+<!-- Header middle: callsign over UTC clock. The time drift sits right of the callsign in small grey
+     text (Rob, 2026-11-03: it did not fit in the clock box); an invisible copy on the left keeps the
+     callsign centred. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="wrap_content"
     android:layout_height="wrap_content"
     android:gravity="center_horizontal"
     android:orientation="vertical">
 
-    <TextView
-        android:id="@+id/js8_callsign"
-        style="@style/Js8Text"
+    <LinearLayout
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_marginBottom="8dp"
-        android:text="NOCALL"
-        android:textSize="@dimen/js8_text_callsign" />
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <TextView
+            android:id="@+id/js8_clock_drift_pad"
+            style="@style/Js8Text"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginEnd="6dp"
+            android:textSize="12dp"
+            android:visibility="gone" />
+
+        <TextView
+            android:id="@+id/js8_callsign"
+            style="@style/Js8Text"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:text="NOCALL"
+            android:textSize="@dimen/js8_text_callsign" />
+
+        <TextView
+            android:id="@+id/js8_clock_drift"
+            style="@style/Js8Text"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="6dp"
+            android:textColor="#888888"
+            android:textSize="12dp"
+            android:visibility="gone" />
+    </LinearLayout>
 
     <TextView
         android:id="@+id/js8_clock"

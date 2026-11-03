@@ -1,6 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!-- FT8Call layout header, middle box (Rob, 2026-10-20; FT8Call v0.4.2): callsign, date, time
-     (js8_clock, two lines) and Next Beacon (the HB countdown, empty while HB is off), white on black. -->
+     (js8_clock, two lines), the time drift in small grey under the time (Rob, 2026-11-03; empty
+     at 0) and Next Beacon (the HB countdown, empty while HB is off), white on black. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="727dp"
     android:layout_height="match_parent"
@@ -26,6 +27,16 @@
         android:lineSpacingExtra="1dp"
         android:text="2026 Oct 19\n12:45:18"
         android:textSize="12dp" />
+
+    <TextView
+        android:id="@+id/js8_clock_drift"
+        style="@style/Js8Ft8CallHeaderText"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="2dp"
+        android:textColor="#888888"
+        android:textSize="9dp"
+        android:visibility="gone" />
 
     <TextView
         android:id="@+id/js8_next_beacon"

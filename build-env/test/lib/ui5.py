@@ -60,7 +60,7 @@ def menu_send(btn, item):
 
 
 def halted(wait=6):
-    tapk('js8_btn_halt', .5)
+    (tapk if L == 'U' else tp)('js8_btn_halt', .5)  # Pages: Halt may be on another tab
     end = time.time() + wait
     while time.time() < end:
         s = state()
@@ -74,7 +74,7 @@ def halted(wait=6):
 NOAUTO = dict(autoreply_enabled=False, js8cfg_autoreply_startup=False, js8cfg_transmit_directed=False, log_messages_to_file=True)
 up(**NOAUTO)
 if want('H09'):
-    tp('js8_btn_tune', 2); s_ = state(); ok = 'Tuning' in s_; halted(); fix('H09', ok, str(s_)); time.sleep(1)
+    tp('js8_btn_tune', 2); s_ = state() or (reach('js8_status_state') and state()); ok = 'Tuning' in s_; halted(); fix('H09', ok, str(s_)); time.sleep(1)  # Pages: status on another tab
 if want('H28'):
     ok = reach('js8_status_state') and reach('js8_status_mode') and reach('js8_status_freq') and reach('js8_status_autoreply')
     w = html.unescape(x()); fix('H28', ok and 'Freq:' in w and 'Auto Reply' in w and 'JS8' in w, ''); home()

@@ -13,12 +13,15 @@ def stop(): adb('shell', 'am', 'force-stop', PKG)
 def start():
     adb('shell', 'am', 'start', '-n', f'{PKG}/com.js8call.example.MainActivity'); time.sleep(6)
 def getprefs(): return adb('exec-out', 'run-as', PKG, 'cat', PREFS).decode('utf8')
+class Long(int):
+    """A pref the app keeps with putLong, e.g. time_drift_ms: written as <long>, an <int> would crash its getLong."""
 def setprefs(**kv):
     stop(); x = getprefs()
     for k, v in kv.items():
         x = re.sub(r'\s*<[a-z]+ name="%s"[^>]*?(/>|>.*?</string>)' % re.escape(k), '', x, flags=re.S)
         if v is None: continue
         if isinstance(v, bool): e = f'<boolean name="{k}" value="{str(v).lower()}" />'
+        elif isinstance(v, Long): e = f'<long name="{k}" value="{int(v)}" />'
         elif isinstance(v, int): e = f'<int name="{k}" value="{v}" />'
         else: e = f'<string name="{k}">{html.escape(v, quote=False)}</string>'
         x = x.replace('</map>', f'    {e}\n</map>')

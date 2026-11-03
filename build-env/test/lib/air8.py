@@ -97,6 +97,11 @@ if want('S03'):
 if want('S04'):
     up(js8cfg_transmit_off=True); a = c(); t.silent('S04', [f'{a}: {M} SNR?'], a, 12)
 if want('S05'):
+    # Unticked, AUTO starts off even when it was left on, as the PC (UI_Constructor: setChecked(autoreply_on_at_startup))
+    up(autoreply_enabled=True, js8cfg_autoreply_startup=False); time.sleep(2)
+    m = re.search(r'name="autoreply_enabled" value="([^"]*)"', getprefs())
+    if not (m and m.group(1) == 'false'):
+        fix('S05', False, f'box unticked, AUTO at start {m.group(1) if m else None}')
     up(autoreply_enabled=False, js8cfg_autoreply_startup=True); a = c(); t.expect('S05', [f'{a}: {M} SNR?'], f'{a} SNR')
     idle()
 if want('S06'):

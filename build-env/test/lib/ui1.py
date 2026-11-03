@@ -76,6 +76,8 @@ def anr():
         print('ANR dialog seen', flush=True)
         shot(f'anr_{int(time.time())}')
         tapk('Wait', 2)
+        if "isn't responding" in html.unescape(x()):  # the box can outlive the freeze (2026-11-03): Close app
+            tapk('Close app', 2)
         return True
     return False
 

@@ -440,6 +440,7 @@ class MainActivity : AppCompatActivity() {
         if (isFinishing && !isChangingConfigurations) {
             Js8Api.closing() // PC closeEvent: STATION.CLOSING
             stopEngineService()
+            com.js8call.example.js8ui.Js8MainFragment.appClosed()
         }
         super.onStop()
     }

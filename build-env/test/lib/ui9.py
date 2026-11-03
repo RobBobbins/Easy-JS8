@@ -15,11 +15,12 @@ def page(name):
 
 
 def scroll_to(word, n=14):
-    for ys in (('1500', '700'), ('700', '1500')):
+    sx = '60' if L == 'U' else '150'  # sideways the window starts at x 136 (camera cutout) and the screen is 1080 high
+    for ys in ((('1500', '700'), ('700', '1500')) if L == 'U' else (('850', '350'), ('350', '850'))):
         for _ in range(n):
             if word in html.unescape(x()):
                 return True
-            adb('shell', 'input', 'swipe', '30' if False else '60', ys[0], '60', ys[1], '300'); time.sleep(.6)
+            adb('shell', 'input', 'swipe', sx, ys[0], sx, ys[1], '300'); time.sleep(.6)
     return False
 
 
@@ -32,6 +33,18 @@ def after(label, what):
                     return m
 
 
+def show_below(label):
+    """Sideways a label at the bottom edge has its box below the screen: the label is dragged up to y 400."""
+    if L == 'U':
+        return
+    for n in nodes():
+        if label in html.unescape(n) and 'text=' in n:
+            b = bounds_of(n); y = (b[1] + b[3]) // 2
+            if y > 600:
+                adb('shell', 'input', 'swipe', '150', str(y), '150', '400', '800'); time.sleep(1)
+            return
+
+
 def tap_n(n):
     b = bounds_of(n)
     adb('shell', 'input', 'tap', str((b[0] + b[2]) // 2), str((b[1] + b[3]) // 2)); time.sleep(1)
@@ -42,7 +55,7 @@ def ok():
 
 
 def spin(p_, label, key):
-    page(p_); scroll_to(label)
+    page(p_); scroll_to(label); show_below(label)
     a = pv(key)
     tap_n(after(label, 'text="▲"')); ok(); time.sleep(1)
     c = pv(key)
@@ -50,7 +63,7 @@ def spin(p_, label, key):
 
 
 def typefield(p_, label, key, val):
-    page(p_); scroll_to(label)
+    page(p_); scroll_to(label); show_below(label)
     tap_n(after(label, 'EditText')); adb('shell', 'input', 'keyevent', '123')
     for _ in range(40):
         adb('shell', 'input', 'keyevent', '67')
@@ -132,9 +145,14 @@ def fill_freq(mhz, desc):
     """Dialog boxes get their text through uiautomator; adb text does not reach them."""
     import uiautomator2
     d = uiautomator2.connect('emulator-5600')
-    e = d(className='android.widget.EditText')
-    n = e.count
-    e[n - 2].set_text(mhz); e[n - 1].set_text(desc); time.sleep(.5)
+    if L == 'U':
+        e = d(className='android.widget.EditText')
+        n = e.count
+        e[n - 2].set_text(mhz); e[n - 1].set_text(desc); time.sleep(.5)
+    else:  # sideways the box shows one field at a time: Frequency, then scrolled down, Description
+        d(text='Frequency (MHz):').down(className='android.widget.EditText').set_text(mhz)
+        adb('shell', 'input', 'swipe', '1200', '700', '1200', '300', '400'); time.sleep(.8)
+        d(text='Description:').down(className='android.widget.EditText').set_text(desc); time.sleep(.5)
     tapk('button1', 2)
 
 
@@ -142,7 +160,7 @@ def m35():
     page('Frequencies'); scroll_to('Insert ...')
     tapk('Insert ...', 2); fill_freq('0.137', 'ZTEST')
     shot(f'm35_{_run}')
-    ins = '0.137000' in x()
+    ins = scroll_to('0.137000', 6)  # sideways the new row is below the screen edge
     n = [n for n in nodes() if '0.137000' in n]
     tap_n(n[0]); tapk('Delete', 1.5)
     gone = '0.137000' not in x()
@@ -154,7 +172,7 @@ def m35():
 
 def m36():
     page('Frequencies'); scroll_to('Insert ...')
-    tapk('Insert ...', 2); fill_freq('0.137', 'ZTEST')
+    tapk('Insert ...', 2); fill_freq('0.137', 'ZTEST'); scroll_to('0.137000', 6)
     n = [n for n in nodes() if '0.137000' in n]; b = bounds_of(n[0]); p = ((b[0] + b[2]) // 2, (b[1] + b[3]) // 2)
     adb('shell', 'input', 'swipe', str(p[0]), str(p[1]), str(p[0]), str(p[1]), '900'); time.sleep(1.5)
     filled = '0.137' in html.unescape(x())
