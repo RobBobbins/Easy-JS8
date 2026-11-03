@@ -3,6 +3,8 @@
 Read this first, then `LAYOUT.md` (the layout spec and the PC values it copies; updated for
 this session too).
 
+**Latest state:** see "Test pass state (2026-11-02, 21:30)".
+
 **Fourth session (2026-10-20) worked on sideways, mostly PC mode** (see "Sideways, fourth session").
 **Fifth session (2026-10-20):** Waterfall Controls → **Timing** and **Display** tabs built (see
 "Timing tab", "Display tab"), engine waterfall detail fixed ("Engine spectrum detail").
@@ -632,6 +634,32 @@ Station window sideways = PC tabs, no About tab.
 - Decided: **File > Station…** stays (Rob, 2026-10-19). **About** stays, it opens the Easy JS8 About. **Directed to CALL** falls back to **Directed** where the button is too narrow. Send shows Send, Ready, Sending with no seconds yet.
 - Rob, 2026-10-31: come back to the decoder stages; they are committed, the question of keeping them is open until they are tried on real signals.
 - Lines 404-406 above are out of date, see audit section 15.
+
+## Test pass state (2026-11-02, 21:30)
+
+Read `TEST-PLAN.md` and `TEST-CHECKLIST.md` for the steps and every result. Phone and real radio stay last.
+
+**Checklist count.** 988 rows: all done twice, 0 Failed. 379 cells are N/A; 359 of them are sideways copies of H, I, K, L, M, N rows ("Upright only (TEST-PLAN One layout)").
+
+**U rows (real networks), Rob said use VA3OSO.** `ureal.py` with `realrelay.py` running (stop `fakespot.py` first, both use UDP 50000). The relay passes TCP 127.0.0.1:14581 to rotate.aprs2.net:14580 and UDP 50000 to spot.js8call.com, logs both to `realrelay.log`, and watches APRS-IS read-only as EJS8TEST for packets from VA3OSO. The app logs in as APJ8CL (as JS8Call does) and gets "verified"; an injected `VA3OSO: @APRSIS GRID EN94MN` came back on the APRS-IS feed as `VA3OSO>APJ8CL,qAS,VA3OSO:=4432.50N/08100.00WG#JS8 14.079500MHz -05dB`; RX.LOCAL with VA3OSO and EN94MN went to spot.js8call.com (JS8NET sends no answer, so delivery is not proven). Each run sent one APRS position and one RX.DIRECTED to JS8NET for VA3OSO.
+
+**Old Failed rows.** S07, Q10, E36, H28, H37 were test faults ("corrected check"). J04U is N/A: no Offset group upright by design. H36P was an app fault, fixed: the PC and FT8Call grab strips covered the Typing Box (`Js8LineDividers.kt`, `Js8PcSplitters.kt`). Downside: inside the Typing Box only its top and bottom 10 PC dp grab the dividers.
+
+**Fixed 2026-11-03 (Rob).** The Settings **Reset Frame Sizes** button now also clears the PC and FT8Call sizes (`Js8PcSplitters.clear`, also used by **View > Reset Frame Sizes**). One tap resets all four layouts; the dividers move back when Settings closes. Checked with `ui12.py` in PC and FT8Call twice, with screenshots, and I24 / I25 rerun twice in PC and Pages.
+
+**App code changed, uncommitted.** The Typing Box fix above, the Reset Frame Sizes fix. `JS8EngineService.kt` debug decode hook takes `--ef quality` (for A13; debug receiver only).
+
+**Weak passes.** H29, H30 and J rows that only reach a control prove it is on screen. J28 to J30 passed from pictures (`shots/jlook_*.png`). O08 measures only the difference between two Tx delays (0.39 to 0.40 s for 0.4 s); the emulator clock is about 1 s off the PC clock. Pictures show the clock with "(+3530ms)" drift left by the auto-drift tests.
+
+**T rows (JS8Call on the PC).** `tlink.py` runs JS8Call 3.0.2 as K4PCT with `--rig-name ELINK`; its profile is `%LOCALAPPDATA%\JS8Call - ELINK\` and `JS8Call - ELINK.ini`, built by `pcprofile.py` from Rob's `JS8Call.ini` (only read, never changed). No rig, no PTT port, every reporting network off, API on TCP 2443. Audio: JS8Call hears VBMatrix Out 4 and plays to VBMatrix In 8; the script records VBMatrix Out 8, cuts each slot, feeds it to the app with DebugJs8Receiver, and plays the app's TX.FRAME tones into VBMatrix In 4. About 1090 s a run.
+
+**Test scripts added.** `air12.py` to `air14.py`, `ui10.py`, `ui11.py`, `tlink.py`, `pcprofile.py`, run scripts `air13run.sh`, `air14run.sh`, `tlrun.sh`, `step7.sh`, `step8.sh`, `step8b.sh`, `j13.sh`. `fakes.py` logs milliseconds; `fakepsk.py` logs the whole packet. Run times in `build-env/test/lib/timing.log`.
+
+**Emulator.** Check `dumpsys gfxinfo com.easyjs8.app` "50th gpu percentile" before each long run. At 4950 ms restart S22-Fresh; it happened twice today. The first start after a kill fails, the second works.
+
+**Test traps found.** `js8cfg_wf_center` must be an int: a string crashes the app on start. `js8cfg_api_dynamic_info` true overrides `my_status`. `psk_reporter` must be on for APRS and for RX.SPOT. Injected decodes never make a spot report; Q07, R11, R12 play a real frame. `js8cfg_heartbeat_anywhere` left on breaks E18. The PC heartbeat slot pick is random, as in JS8Call.
+
+**Stand-ins.** `fakes.py`, `fakeaprs.py`, `fakepsk.py`, and `fakespot.py` may still be running on the PC. Nothing from today is committed.
 
 ## Build (Windows, Git Bash, folder `E:\new-w3bguru-websites\easy js8`)
 

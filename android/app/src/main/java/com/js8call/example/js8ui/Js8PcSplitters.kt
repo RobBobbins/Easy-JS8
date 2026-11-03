@@ -76,10 +76,16 @@ class Js8PcSplitters(private val window: FrameLayout, private val prefs: SharedP
 
         /** Touch strip along each line, PC dp (about 24 dp on the phone when the window is fitted; Rob, 2026-10-31). */
         private const val STRIP = 48f
+        /** The two strips over the Typing Box cover all of it: they keep only this much of each edge, PC dp. */
+        private const val TYPING_EDGE = 10f
         /** The bar under the lists, PC dp above the buttons. */
         private const val MAIN_BAR_ABOVE_BUTTONS = 12f
         /** Bar drawn along each line, PC dp. */
         private const val BAR = 4f
+
+        /** The saved PC and FT8Call sizes go; also Settings > Reset Frame Sizes. */
+        fun clear(prefs: SharedPreferences) =
+            prefs.edit().remove(KEY_BAND).remove(KEY_CALL).remove(KEY_TEXT).remove(KEY_MAIN).remove(KEY_WF).apply()
     }
 
     private val density = window.resources.displayMetrics.density
@@ -99,9 +105,23 @@ class Js8PcSplitters(private val window: FrameLayout, private val prefs: SharedP
 
     init {
         mainLine.barCentrePx = (STRIP - MAIN_BAR_ABOVE_BUTTONS) * density
+        textLine.passTouch = { ev -> overTyping(mainDp(textLine.top, ev.y)) }
+        mainLine.passTouch = { ev ->
+            val x = mainDp(mainLine.left, ev.x)
+            x >= typingLeft && x <= typingRight && overTyping(mainDp(mainLine.top, ev.y))
+        }
         listOf(bandLine, callLine, textLine, mainLine, wfLine).forEach { window.addView(it) }
         apply()
     }
+
+    private var typingLeft = 0f
+    private var typingRight = 0f
+    private var typingTop = 0f
+    private var typingBottom = 0f
+
+    /** A strip's touch position as PC dp in the window. */
+    private fun mainDp(start: Int, pos: Float) = (start + pos) / density
+    private fun overTyping(y: Float) = y > typingTop + TYPING_EDGE && y < typingBottom - TYPING_EDGE
 
     /** View > Reset Window Sizes (PC actionReset_Window_Sizes). */
     /** The STATUS / Saved gap moves right while the HB button shows (Js8MainFragment). */
@@ -119,7 +139,7 @@ class Js8PcSplitters(private val window: FrameLayout, private val prefs: SharedP
 
     fun reset() {
         band = BAND_RIGHT; call = CALL_LEFT; text = TEXT_BOTTOM; main = MAIN_BOTTOM; wf = CONTROLS_LEFT
-        prefs.edit().remove(KEY_BAND).remove(KEY_CALL).remove(KEY_TEXT).remove(KEY_MAIN).remove(KEY_WF).apply()
+        clear(prefs)
         apply()
     }
 
@@ -161,6 +181,7 @@ class Js8PcSplitters(private val window: FrameLayout, private val prefs: SharedP
         place(v(R.id.js8_band_activity), LEFT, top, band - LEFT, main - top)
         place(v(R.id.js8_message_window), midLeft, top, midRight - midLeft, text - top)
         place(v(R.id.js8_typing_box), midLeft, text + GAP_TEXT, midRight - midLeft, main - text - GAP_TEXT)
+        typingLeft = midLeft; typingRight = midRight; typingTop = text + GAP_TEXT; typingBottom = main
         place(v(R.id.js8_call_activity), call, top, RIGHT - call, main - top)
         val buttonsTop = main + BUTTONS_GAP
         top(v(R.id.js8_pc_buttons), buttonsTop)

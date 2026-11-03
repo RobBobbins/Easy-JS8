@@ -3,13 +3,30 @@ import subprocess, re, os, sys, html, time, socket
 ADB = os.path.expandvars(r'%LOCALAPPDATA%\Android\Sdk\platform-tools\adb.exe')
 def adb(*a):
     return subprocess.run([ADB, '-s', 'emulator-5600', *a], capture_output=True).stdout
+_d = None
 def dump():
-    adb('shell', 'uiautomator', 'dump', '/sdcard/u.xml')
-    return adb('exec-out', 'cat', '/sdcard/u.xml').decode('utf8', 'replace')
+    """uiautomator2 stays running, about 0.3 s a read. JS8_READ=old is the 2.1 s uiautomator dump."""
+    global _d
+    if os.environ.get('JS8_READ') == 'old':
+        adb('shell', 'uiautomator', 'dump', '/sdcard/u.xml')
+        return adb('exec-out', 'cat', '/sdcard/u.xml').decode('utf8', 'replace')
+    import uiautomator2
+    for i in range(3):
+        try:
+            if _d is None:
+                _d = uiautomator2.connect('emulator-5600')
+            return _d.dump_hierarchy(root_in_active=True)
+        except Exception as e:
+            print('READER RESTART', repr(e)[:80], flush=True)
+            _d = None
+            time.sleep(2)
+    return ''
 def find(xml, key):
     for n in re.findall(r'<node [^>]*>', xml):
-        t = html.unescape(re.search(r' text="([^"]*)"', n).group(1))
-        r = re.search(r'resource-id="([^"]*)"', n).group(1)
+        mt, mr = re.search(r' text="([^"]*)"', n), re.search(r'resource-id="([^"]*)"', n)
+        if not mt or not mr:  # text with a stray character cuts the node short
+            continue
+        t, r = html.unescape(mt.group(1)), mr.group(1)
         if t == key or r.endswith('/' + key):
             a, b, c, d = map(int, re.search(r'bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"', n).groups())
             return (a + c) // 2, (b + d) // 2, t

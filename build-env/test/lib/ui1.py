@@ -22,10 +22,26 @@ def layout(code):
     x_ = getprefs()
     stale = {k: None for k in re.findall(r'name="(js8cfg_up_split_[^"]*)"', x_)}
     setprefs(**{**BASE, **prefs, **stale})
-    adb('shell', 'settings', 'put', 'system', 'accelerometer_rotation', '0')
-    adb('shell', 'settings', 'put', 'system', 'user_rotation', '0' if code == 'U' else '1')
     start()
+    rotate(code)
     time.sleep(2)
+
+
+def rotated(code):
+    m = re.search(r'cur=(\d+)x(\d+)', adb('shell', 'dumpsys', 'window', 'displays').decode('utf8', 'replace'))
+    return (int(m.group(1)) < int(m.group(2))) == (code == 'U')
+
+
+def rotate(code):
+    """With the reader running, a plain user_rotation change can snap back to upright, so it is rechecked."""
+    adb('shell', 'settings', 'put', 'system', 'accelerometer_rotation', '0')
+    for _ in range(5):
+        adb('shell', 'settings', 'put', 'system', 'user_rotation', '0' if code == 'U' else '1')
+        time.sleep(2)
+        if rotated(code):
+            return True
+        print('ROTATION RETRY', flush=True)
+    return False
 
 
 def x(): return dump()
@@ -147,12 +163,9 @@ def rec(row, ok, note=''):
 def check(row, fn, note=''):
     if ONLY and row + L not in ONLY and row not in ONLY:
         return
-    d = adb('shell', 'dumpsys', 'window', 'displays') if L != 'U' else 'ROTATION_0'
-    want = '0' if L == 'U' else '90'
-    if f'ROTATION_{want}' not in str(d):
-        print(row, 'ROTATION CHANGED', re.findall(r'mCurrentRotation=\S+', str(d))[:1], flush=True)
-        adb('shell', 'settings', 'put', 'system', 'user_rotation', '0' if L == 'U' else '1')
-        time.sleep(3)
+    if not rotated(L):
+        print(row, 'ROTATION CHANGED', flush=True)
+        rotate(L)
     try:
         rec(row, fn(), note)
     except Exception as e:
@@ -272,14 +285,19 @@ STATION = {'General': ('My Callsign:', 'Callsign Groups', 'Station Messages', 'D
 
 def open_station():
     tp('js8_btn_settings', 2)
-    p = None
-    xml = x()
-    gear = [n for n in re.findall(r'<node [^>]*>', xml) if 'ImageButton' in n or 'ImageView' in n]
-    if gear:
-        a, b, c, d = map(int, re.search(r'bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"', gear[0]).groups())
-        adb('shell', 'input', 'tap', str((a + c) // 2), str((b + d) // 2))
-        time.sleep(2)
-    return 'Radio' in x() and 'Audio' in x()
+    for _ in range(3):
+        time.sleep(1)
+        xml = x()
+        gear = [n for n in re.findall(r'<node [^>]*>', xml) if 'ImageButton' in n or 'ImageView' in n]
+        if gear:
+            a, b, c, d = map(int, re.search(r'bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"', gear[0]).groups())
+            adb('shell', 'input', 'tap', str((a + c) // 2), str((b + d) // 2))
+        for _ in range(8):
+            time.sleep(1)
+            xml = x()
+            if 'Radio' in xml and 'Audio' in xml:
+                return True
+    return False
 
 
 def sec_m():

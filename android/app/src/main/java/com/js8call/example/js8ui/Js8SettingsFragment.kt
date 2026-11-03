@@ -1279,7 +1279,7 @@ class Js8SettingsFragment : Fragment() {
                 activityVm().activity.clearBand(); activityVm().activity.clearCalls(); activityVm().activity.clearRx()
                 activityVm().changed(); toast("All Activity cleared")
             }
-            "reset_window_sizes" -> { Js8LineDividers.reset(draft.prefs); toast("Window sizes reset") }
+            "reset_window_sizes" -> { Js8LineDividers.reset(draft.prefs); Js8PcSplitters.clear(draft.prefs); toast("Window sizes reset") }
             "copyright" -> AlertDialog.Builder(requireContext()).setMessage(Js8MainFragment.COPYRIGHT_NOTICE)
                 .setPositiveButton(android.R.string.ok, null).show()
             "check_updates" -> Js8Updates.check(requireActivity(), true)

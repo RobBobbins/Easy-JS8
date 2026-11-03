@@ -3,7 +3,7 @@ import socket, struct, threading, time, re
 
 LOG = open('fakes.log', 'a', buffering=1)
 def log(*a):
-    LOG.write(time.strftime('%H:%M:%S ') + ' '.join(str(x) for x in a) + '\n')
+    LOG.write(time.strftime('%H:%M:%S') + '.%03d ' % (time.time() % 1 * 1000) + ' '.join(str(x) for x in a) + '\n')
 
 def serve(port, handler):
     s = socket.socket(); s.setsockopt(socket.SOL_SOCKET, socket.SO_REUSEADDR, 1)

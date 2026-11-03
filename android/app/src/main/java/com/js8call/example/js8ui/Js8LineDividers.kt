@@ -24,6 +24,8 @@ import kotlin.math.roundToInt
 class Js8LineHandle(context: Context, private val sideways: Boolean, private val barPx: Float) : View(context) {
     var onMove: (Float) -> Unit = {}
     var onEnd: () -> Unit = {}
+    /** A press this returns true for goes to the view under the strip. */
+    var passTouch: (MotionEvent) -> Boolean = { false }
     /** Middle of the bar across the strip, px; null = the strip's middle. */
     var barCentrePx: Float? = null
     private val bar = Paint().apply { color = Color.parseColor("#8A8A8A") }
@@ -33,6 +35,7 @@ class Js8LineHandle(context: Context, private val sideways: Boolean, private val
         // Above its neighbours, so a touch in the strip reaches the handle first
         translationZ = 1f
         setOnTouchListener { _, ev ->
+            if (ev.actionMasked == MotionEvent.ACTION_DOWN && passTouch(ev)) return@setOnTouchListener false
             val pos = if (sideways) ev.rawX else ev.rawY
             when (ev.actionMasked) {
                 MotionEvent.ACTION_DOWN -> {

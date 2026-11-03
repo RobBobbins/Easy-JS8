@@ -4,4 +4,4 @@ s = socket.socket(socket.AF_INET, socket.SOCK_DGRAM); s.bind(('0.0.0.0', 4739))
 log = open('fakepsk.log', 'a', buffering=1)
 while True:
     b, a = s.recvfrom(65535)
-    log.write(f"{time.strftime('%H:%M:%S')} {a} {len(b)} {b[:200]!r}\n")
+    log.write(f"{time.strftime('%H:%M:%S')} {a} {len(b)} {b!r}\n")

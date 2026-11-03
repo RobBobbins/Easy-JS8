@@ -1,10 +1,8 @@
 # Easy JS8 test plan
 
-Nothing here has started. Times are estimates at about 45 seconds a screen row, measured on the 2026-11-02 run.
+State at 2026-11-02 21:30 is in `HANDOFF.md`, "Test pass state". Steps 1 to 13 are done: all 988 rows passed twice or are N/A, 0 Failed.
 
-**Total: about 14 hours before the phone. It could be 12 to 16.**
-
-The 10 hours I gave earlier was too low. It left out 29 controls that have never been tested and the time to write missing test scripts.
+**Left:** step 14, phone and radio.
 
 ## How the tests change
 
@@ -14,6 +12,7 @@ The 10 hours I gave earlier was too low. It left out 29 controls that have never
 - **One row first:** a changed script must pass on one row before any long run.
 - **Failure limit:** a row that fails twice is written on the checklist as Failed, and testing moves on.
 - **Time check:** after each step, real time is compared to the estimate. More than 10% over: stop and tell Rob. Long steps also get a check at the halfway point.
+- **Time limit in the command:** every run starts with `timeout` set to 10% over its estimate, so it stops itself. Long runs also get a timer for the halfway check.
 - **Every row still runs twice**, with an app restart between runs.
 - **No settings sweep:** I counted the rows, and it saves about 25 minutes of testing but takes about 30 minutes to write.
 
@@ -24,11 +23,11 @@ The 10 hours I gave earlier was too low. It left out 29 controls that have never
 | 1 | Change the scripts to Upright only, add the hook that blocks four-layout runs, save the rule to memory | none | 30 minutes |
 | 2 | Crash records: find the cause of the saved-screen crash, fix it if it is a real fault | none | 45 minutes |
 | 3 | Write the missing test scripts | none | 2 hours |
-| 4 | Header (H): second run, Upright | 37 controls | 30 minutes |
-| 5 | Lists, waterfall, Log QSO (I, J, K): controls never tested, twice | 29 controls | 45 minutes |
-| 6 | Settings, Station, menus (L, M, N), twice, skipping runs already passed | 90 controls | 1 hour 50 minutes |
-| 7 | Open checks in PC, Pages and FT8Call | about 15 windows | 25 minutes |
-| 8 | Failed screen rows (H, J, K) | 44 rows | 45 minutes |
+| 4 | Header (H): second run, Upright | 37 controls | 8 minutes |
+| 5 | Lists, waterfall, Log QSO (I, J, K): controls never tested, twice | 29 controls | 12 minutes |
+| 6 | Settings, Station, menus (L, M, N), twice, skipping runs already passed | 90 controls | 29 minutes |
+| 7 | Open checks in PC, Pages and FT8Call | about 15 windows | 7 minutes |
+| 8 | Failed screen rows (H, J, K) | 44 rows | 12 minutes |
 | 9 | Decoding and on-air rows still open (A, B, D, E, F, G), twice | 56 rows | 3 hours |
 | 10 | Rig, API, server and startup rows still open (O, P, Q, R, S), twice | 33 rows | 1 hour 15 minutes |
 | 11 | JS8Call 3.0.2 on your PC as the other station (T), twice | 18 rows | 2 hours |

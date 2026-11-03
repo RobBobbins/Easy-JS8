@@ -2296,7 +2296,7 @@ class JS8EngineService : Service() {
         val utc = now.get(Calendar.HOUR_OF_DAY) * 10000 +
             now.get(Calendar.MINUTE) * 100 + now.get(Calendar.SECOND)
         Log.i(TAG, "Injected decode: '$text' snr=$snr freq=$freq type=$type mode=$mode")
-        handleDecode(utc, snr, 0f, freq, text, type, 1f, mode, 0)
+        handleDecode(utc, snr, 0f, freq, text, type, intent.getFloatExtra(EXTRA_QUALITY, 1f), mode, 0)
     }
 
     private fun broadcastDecode(
