@@ -6,9 +6,11 @@ Easy JS8 is a fork of JS8Android with added features and a new screen layout.
 
 Early test version. Tested on the Android emulator only, not on a real phone or radio yet.
 
+Emulator test pass (2026-11-01 to 11-03): 1,007 checks, each run twice, 36 hours of test runs; 1,006 passed, 1 not run yet.
+
 ## Added
 
-- New layout: one scrolling page when the phone is upright; PC-style or swipe screens when it's sideways
+- New layout: one scrolling page when the phone is upright; PC, Pages or FT8Call when it's sideways
 - Settings window: speed, frequency, offset, MULTI / AUTO / HB / ACK
 - Station window: callsign, grid, radio, audio and the rest, one page at a time
 - Acquire GPS for your grid, SWL (Listening only) mode
@@ -25,6 +27,17 @@ Early test version. Tested on the Android emulator only, not on a real phone or 
 - Mailbox: messages held for other stations, QUERY MSGS / QUERY MSG
 - Export Options: log and Message Inbox to a folder you choose
 - HB and CQ buttons with repeat timers
+- APRS-IS relay
+- JS8NET spotting
+- Check for Updates
+- Frequency Schedule
+- Split Operation
+- Callsign Filtering
+- Notifications
+- UI fonts
+- Configurations
+- Test CAT and Test PTT
+- JS8Call 3.0.3 decoder stages
 
 ## Building
 
