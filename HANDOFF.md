@@ -1,6 +1,23 @@
 # Easy JS8 — Handoff (2026-10-20, end of the third session)
 
-## Next session starts here (2026-11-03)
+## Next session starts here (2026-11-04): the full audit against JS8Call 3.0.3
+
+**Read this block first.** Rob asked for a new full audit before the phone and radio tests. Nothing in it is started yet.
+
+- **Output:** a new file `AUDIT-3.0.3-B.md`. Leave `AUDIT-3.0.3.md` (2026-10-31, commit `329260bc`) as it is.
+- **Sections:** the old file's 14 sections, in its order: 1 decoding and on-air behaviour, 2 bugs in existing features, 3 wrong defaults, 4 macros, 5 main window and menus, 6 Call Activity and Band Activity, 7 waterfall, 8 rig control, 9 audio, 10 settings window, 11 logging, 12 API and spotting, 13 not gaps, 14 downsides of matching the PC.
+- **Old items:** re-check all 176 [x] items in `AUDIT-3.0.3.md` against today's code (commit `a38c4077` or later). Many were ticked from background checks and never read one by one.
+- **New areas:** the old file's 7 "Not compared" items: bit-level pack_directed / pack_callsign against `Varicode.cpp`; PSK Reporter packet bytes; frame order (heartbeat, compound, directed) against core `varicode.cpp` 1409; Typing Box filter for pasted or hardware-keyboard text; header grid with use_dynamic_grid (`mw` 2765); Set Filter Width menu values against `WideGraph.cpp` 156; Bluetooth serial paths.
+- **Rule:** every item is read in both sources by the main session, with the PC file and line and the app file and line. Agents may list candidates; nothing goes in the file on an agent's word alone.
+- **No timers:** the audit is not a test, so no job table, estimates or limits (Rob, 2026-11-04: "there are only time limits on tests").
+- **JS8Call 3.0.3 source on this PC** (git checkout, tag `v3.0.3`, commit `4c592bd`):
+  `C:\Users\Robert\AppData\Local\Temp\claude\E--new-w3bguru-websites-easy-js8\e0f3f7cc-5c4b-456d-a816-63b6a2c8c4e0\scratchpad\pc303\`
+  Main files: `JS8_UI/mainwindow.cpp`, `JS8_Mainwindow/UI_Constructor.cpp`, `JS8_Mainwindow/processCommandActivity.cpp`, `JS8_Mainwindow/processDecodeEvent.cpp`, `JS8_Mainwindow/processBufferedActivity.cpp`, `JS8_Mainwindow/buildQueryMenu.cpp`, `JS8_Mainwindow/dataSink.cpp`, `JS8_Main/CPlotter.cpp`, `JS8_UI/Configuration.cpp`.
+  **Risk:** this is a temporary folder and can be deleted. If it is gone, check out tag `v3.0.3` of JS8Call-improved again.
+- **App source:** `android/app/src/main/java/com/js8call/example/`. Largest files: `service/JS8EngineService.kt` (6,131 lines), `js8ui/Js8MainFragment.kt` (2,866), `js8ui/Js8SettingsFragment.kt` (1,953), `api/Js8Api.kt` (817), `ui/WaterfallRenderer.kt` (667), `js8ui/Js8SettingsSchema.kt` (595), `network/PskReporterClient.kt` (524).
+- **After the audit:** the phone and radio tests (W53 multicast over Wi-Fi is retried on the phone), then the first GitHub release.
+
+## Earlier state (2026-11-03)
 
 **State at 09:05, 2026-11-04:** W46 (`aprsblk.py`) and M05N1 / M05N3 (`gpsnet.py`, Acquire GPS Wi-Fi / cell through test providers) passed twice. `tlink.py` play-thread exit error fixed (sounddevice stopped the stream at exit; the thread now ends first). W47 (`cumchk.py`, Cumulative against JS8Call): two app fixes in `WaterfallRenderer.kt` to follow JS8Call: the Cumulative divisor (dataSink `m_ihsym`) is no longer reset each cycle (it wraps at a cycle's spectra and restarts with the minute, so the line moves like the PC's), and every spectrum line is reduced by RDP, epsilon 2 PC px (`RDP.cpp`). Then passed twice, read at the same second of the minute; the app sits 1.6-3.3 dB above JS8Call, which Rob says doesn't matter. App grid lines are #444444, JS8Call's #808080 (seen, not changed). W48 / W49 (`hsplit.py`): split Rig and Fake It through the built-in Hamlib model 2 against `rigctld.exe` passed twice (10:22). The four PC steps listed after W46 are done.
 - **Rob, 2026-11-04:** Android 7 is dropped (no Android 7 emulator tests). README status line updated (1,045 checks). Next: a new full audit against JS8Call 3.0.3 in `AUDIT-3.0.3-B.md`.
