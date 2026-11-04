@@ -2,7 +2,7 @@
 PC to app: JS8Call's audio on VBMatrix Out 8 is recorded a slot at a time and mixed into the app's decoder.
 App to PC: the tones of each TX.FRAME are played into VBMatrix In 4, JS8Call's input, in the next slot."""
 import sys as _s
-import json as _j, queue, threading
+import atexit, json as _j, queue, threading
 import numpy as np, sounddevice as sd
 exec(open('ui7.py', encoding='utf8').read().split("row_list = [")[0].replace('"""Upright rows never tested: H, I, J. ui7.py <run> [ID,ID]"""', ''))
 import sig
@@ -77,7 +77,13 @@ class Link:
         self.record()
         time.sleep(2)
         threading.Thread(target=self.tones, daemon=True).start()
-        threading.Thread(target=self.play, daemon=True).start()
+        self.done = False; self.pt = threading.Thread(target=self.play, daemon=True); self.pt.start()
+        # sounddevice stops every stream at exit; end the play thread first, or its next write
+        # prints "Exception in thread (play): Stream is stopped" (registered later = runs first)
+        atexit.register(self.quit)
+
+    def quit(self):
+        self.done = True; self.pt.join(20)
 
     def record(self):
         """Every sample kept with its place in time, so a slot is cut exactly at its start."""
@@ -148,7 +154,7 @@ class Link:
 
     def play(self):
         with sd.OutputStream(device=self.pi, samplerate=self.pr, channels=self.pc, dtype='float32') as o:
-            while True:
+            while not self.done:
                 try:
                     tn = self.q.get(timeout=.05)
                 except queue.Empty:
@@ -157,7 +163,7 @@ class Link:
                 wait = p - time.time() % p + delay - .05
                 if p - wait + delay > .4 and wait < p:
                     pass
-                while wait > .06:
+                while wait > .06 and not self.done:
                     o.write(np.zeros((self.pr // 20, self.pc), 'float32'))
                     wait = (p - time.time() % p + delay - .05) % p
                 o.write(self.wave(tn, self.f0))

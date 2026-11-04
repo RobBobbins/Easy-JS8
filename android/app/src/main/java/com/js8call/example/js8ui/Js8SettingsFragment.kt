@@ -764,6 +764,8 @@ class Js8SettingsFragment : Fragment() {
         }
         for (s in secs) {
             var first = true
+            // Rig Options always starts its own row (Rob, 2026-11-04: "MOVE RIG OPTIONS")
+            if (s.subTab == "Rig Options") endRow()
             // Split Operation before Transmit Audio Source, so it reaches the first row
             val items = s.items.toMutableList()
             val split = items.indexOfFirst { it is RadioItem && it.field.key == "js8cfg_split" }
@@ -775,7 +777,9 @@ class Js8SettingsFragment : Fragment() {
                     endRow()
                     if (first) s.subTab?.let { col.addView(heading(it)) }
                     col.addView(v)
-                } else if (item is Group && item.title in STACK_UNDER_PREVIOUS && row.isNotEmpty()) {
+                } else if ((item is Group && item.title in STACK_UNDER_PREVIOUS ||
+                        // PC: the PTT port sits in the PTT Method box, so Split Operation stays in its row
+                        item is Field && item.key == "js8cfg_ptt_port") && row.isNotEmpty()) {
                     row.last().under.add(v)
                 } else {
                     row.add(Cell(v, if (first) s.subTab else null, s, hasCheck(item)))
@@ -1865,6 +1869,7 @@ class Js8SettingsFragment : Fragment() {
         val col = column()
         if (pills) col.addView(checkBox(Field("js8cfg_pills", "Display callsigns and commands as pills", Kind.CHECK, "true")))
         var lastHeading: String? = null
+        val painters = mutableListOf<() -> Unit>()
         items.forEach { (lab, k) ->
             val heading = if (lab.contains(": ")) lab.substringBefore(": ") else null
             if (heading != null && heading != lastHeading) {
@@ -1881,9 +1886,15 @@ class Js8SettingsFragment : Fragment() {
             }
             fun paint() {
                 val v = draft.values[key] ?: draft.prefs.getString(key, null)
-                if (k.endsWith("_font")) sample.text = "K1ABC ${v ?: "10"}pt"
-                else v?.let { runCatching { sample.setBackgroundColor(Color.parseColor(it)) } }
+                if (k.endsWith("_font")) { sample.text = "K1ABC ${v ?: "10"}pt"; return }
+                // PC Configuration: each sample is "background: <its group's background>; color: <its group's text>"
+                val (bg, fg) = UiColors.SAMPLE_COLORS[k] ?: return
+                fun c(n: String) = runCatching { Color.parseColor(draft.values["js8cfg_ui_$n"] ?: draft.prefs.getString("js8cfg_ui_$n", null) ?: UiColors.UI_DEFAULTS.getValue(n)) }
+                    .getOrDefault(Color.parseColor(UiColors.UI_DEFAULTS.getValue(n)))
+                sample.setBackgroundColor(c(bg))
+                sample.setTextColor(c(fg))
             }
+            painters += ::paint
             paint()
             row.addView(button(lab.substringAfter(": ")) {
                 if (k.endsWith("_font")) {
@@ -1901,7 +1912,7 @@ class Js8SettingsFragment : Fragment() {
                         }.show()
                     }.show()
                 } else {
-                    pickColor(lab, draft.values[key] ?: draft.prefs.getString(key, null)) { draft.values[key] = it; paint() }
+                    pickColor(lab, draft.values[key] ?: draft.prefs.getString(key, null) ?: UiColors.UI_DEFAULTS[k]) { draft.values[key] = it; painters.forEach { p -> p() } }
                 }
             }.apply {
                 // 28 dp, taller when the label wraps (Secondary Highlight Background upright)
@@ -1912,5 +1923,31 @@ class Js8SettingsFragment : Fragment() {
         }
         extra.forEach { (key, lab) -> col.addView(fieldRow(Field(key, lab, Kind.TEXT, "", upper = true))) }
         return col
+    }
+
+    private object UiColors {
+        /** PC Configuration::read_settings defaults. */
+        val UI_DEFAULTS = mapOf(
+            "table_bg" to "#FFFFFF", "table_fg" to "#000000", "selected_bg" to "#3498DB",
+            "primary_bg" to "#F1C40F", "secondary_bg" to "#FFFF66", "directed_bg" to "#FF6666", "cq_bg" to "#66FF66",
+            "rx_bg" to "#FFEAA7", "rx_fg" to "#000000", "tx_fg" to "#FF0000",
+            "compose_bg" to "#FFFFFF", "compose_fg" to "#000000",
+            "pill_recipient_bg" to "#2980B9", "pill_recipient_fg" to "#FFFFFF",
+            "pill_command_bg" to "#E67E22", "pill_command_fg" to "#FFFFFF",
+            "pill_group_bg" to "#16A085", "pill_group_fg" to "#FFFFFF",
+            "pill_sender_bg" to "#7F8C8D", "pill_sender_fg" to "#FFFFFF"
+        )
+
+        /** Each colour button's sample: its background setting and its text setting (PC Configuration.cpp 1833-1878). */
+        val SAMPLE_COLORS = mapOf(
+            "table_bg" to ("table_bg" to "table_fg"), "table_fg" to ("table_bg" to "table_fg"),
+            "selected_bg" to ("selected_bg" to "table_fg"), "primary_bg" to ("primary_bg" to "table_fg"),
+            "secondary_bg" to ("secondary_bg" to "table_fg"), "directed_bg" to ("directed_bg" to "table_fg"),
+            "cq_bg" to ("cq_bg" to "table_fg"),
+            "rx_bg" to ("rx_bg" to "rx_fg"), "rx_fg" to ("rx_bg" to "rx_fg"), "tx_fg" to ("rx_bg" to "tx_fg"),
+            "compose_bg" to ("compose_bg" to "compose_fg"), "compose_fg" to ("compose_bg" to "compose_fg")
+        ) + listOf("recipient", "command", "group", "sender").flatMap { p ->
+            listOf("pill_${p}_bg" to ("pill_${p}_bg" to "pill_${p}_fg"), "pill_${p}_fg" to ("pill_${p}_bg" to "pill_${p}_fg"))
+        }
     }
 }

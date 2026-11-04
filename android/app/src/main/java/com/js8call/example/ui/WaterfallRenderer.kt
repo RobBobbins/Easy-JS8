@@ -9,6 +9,8 @@ import android.graphics.Rect
 import android.os.Handler
 import android.os.Looper
 import android.os.SystemClock
+import kotlin.math.abs
+import kotlin.math.hypot
 import kotlin.math.log10
 import kotlin.math.max
 import kotlin.math.min
@@ -36,6 +38,8 @@ class WaterfallRenderer {
         const val PC_BIN_HZ = 1500f / 2048f
         /** commons.h JS8_NSMAX, and dataSink iz = min(NSMAX, 5000 / df3). */
         private const val NSMAX = 6827
+        /** PC commons.h JS8_NSPS; a spectrum every half of it. */
+        private const val JS8_NSPS = 6192
         private val IZ = min(NSMAX, (5000f / PC_BIN_HZ).toInt())
         private const val TICK_MS = 33L
         /** dataSink nch: Smooth 1..7 -> smoothing width. */
@@ -86,6 +90,8 @@ class WaterfallRenderer {
     private val slin = FloatArray(NSMAX)
     private var lastCycle = -1L
     private var cyclePeriodSec = 15
+    /** dataSink k0: the last spectrum's sample in the minute; Int.MAX_VALUE until the first one. */
+    private var k0 = Int.MAX_VALUE
 
     // WF::Sink state since the last frame
     private var summaryReady = false
@@ -102,6 +108,12 @@ class WaterfallRenderer {
     private val linePaint = Paint().apply { isAntiAlias = false; style = Paint.Style.STROKE }
     private val spectrumPaint = Paint().apply { isAntiAlias = true; style = Paint.Style.STROKE }
     private val spectrumPath = Path()
+    // Spectrum line points before CPlotter's RDP reduction
+    private var ptX = FloatArray(2048)
+    private var ptY = FloatArray(2048)
+    private var ptN = 0
+    private var ptKeep = BooleanArray(0)
+    private var ptStack = IntArray(0)
 
     private val drawHandler = Handler(Looper.getMainLooper())
     private val tick = object : Runnable {
@@ -318,20 +330,37 @@ class WaterfallRenderer {
             } else 0f
         }
 
-        // Cumulative restarts each cycle of the current speed
-        val cycle = System.currentTimeMillis() / 1000 / cyclePeriodSec
+        // dataSink: ssum restarts each cycle of the current speed, but the count it is divided by
+        // (m_ihsym) does not. The count wraps at one cycle's worth of spectra and restarts with the
+        // minute (k < k0) and in its first 2048 samples, so the line moves like the PC's.
+        val now = System.currentTimeMillis()
+        val k = ((now % 60_000L) * 12).toInt()
+        if (k0 == Int.MAX_VALUE) {
+            ihsym = k / JS8_NSPS * 2
+            k0 = k
+        }
+        val cycle = now / 1000 / cyclePeriodSec
         if (cycle != lastCycle) {
             ssum.fill(0f)
-            ihsym = 0
             lastCycle = cycle
         }
-        ihsym++
-        for (i in 0 until IZ) {
-            ssum[i] += sNow[i] / 1000f
-            savg[i] = ssum[i] / ihsym
+        ihsym %= cyclePeriodSec * 12000 / JS8_NSPS * 2
+        if (k >= 2048) {
+            if (k < k0) {
+                ssum.fill(0f)
+                ihsym = 0
+            }
+            ihsym++
+            for (i in 0 until IZ) {
+                ssum[i] += sNow[i] / 1000f
+                savg[i] = ssum[i] / ihsym
+            }
+            if (ihsym % 10 == 0) linearAverage()
+            summaryReady = true
+        } else {
+            ihsym = 0
         }
-        if (ihsym % 10 == 0) linearAverage()
-        summaryReady = true
+        k0 = k
 
         // Avg N (WideGraph::dataSink m_waterfallNow)
         if (sAccumRuns == 0) sNow.copyInto(sAccum) else for (i in 0 until IZ) sAccum[i] += sNow[i]
@@ -503,6 +532,7 @@ class WaterfallRenderer {
         fun y(value: Float) = top + (scaledZero - scaledGain * value) * dp
 
         spectrumPath.reset()
+        ptN = 0
         val cols = columns.size
         when (d.spectrum) {
             SPECTRUM_CURRENT -> {
@@ -520,13 +550,48 @@ class WaterfallRenderer {
                 addPoints(slin, cols, dp) { v -> y(v) }
             }
         }
+        // CPlotter: m_points.erase(m_rdp(m_points)), epsilon 2 PC pixels
+        rdp(2f * dp)
+        for (i in 0 until ptN) {
+            if (!ptKeep[i]) continue
+            if (spectrumPath.isEmpty) spectrumPath.moveTo(ptX[i], ptY[i]) else spectrumPath.lineTo(ptX[i], ptY[i])
+        }
         spectrumPaint.strokeWidth = dp
         c.drawPath(spectrumPath, spectrumPaint)
         c.restore()
     }
 
     private fun addPoint(x: Float, y: Float) {
-        if (spectrumPath.isEmpty) spectrumPath.moveTo(x, y) else spectrumPath.lineTo(x, y)
+        if (ptN == ptX.size) {
+            ptX = ptX.copyOf(ptN * 2); ptY = ptY.copyOf(ptN * 2)
+        }
+        ptX[ptN] = x; ptY[ptN] = y; ptN++
+    }
+
+    /** RDP.cpp (Ramer-Douglas-Peucker): marks in [ptKeep] the points the PC keeps. */
+    private fun rdp(epsilon: Float) {
+        if (ptKeep.size < ptN) { ptKeep = BooleanArray(ptX.size); ptStack = IntArray(ptX.size * 2) }
+        if (ptN < 3) { ptKeep.fill(true, 0, ptN); return }
+        ptKeep.fill(false, 0, ptN)
+        ptKeep[0] = true; ptKeep[ptN - 1] = true
+        var sp = 0
+        ptStack[sp++] = 0; ptStack[sp++] = ptN - 1
+        while (sp > 0) {
+            val i2 = ptStack[--sp]; val i1 = ptStack[--sp]
+            val dx = ptX[i2] - ptX[i1]; val dy = ptY[i2] - ptY[i1]
+            val ll = hypot(dx, dy)
+            var limit = epsilon
+            var index = 0
+            for (i in i1 + 1 until i2) {
+                val pd = abs(dy * (ptX[i] - ptX[i1]) - dx * (ptY[i] - ptY[i1])) / ll
+                if (pd > limit) { limit = pd; index = i }
+            }
+            if (index != 0) {
+                ptKeep[index] = true
+                ptStack[sp++] = i1; ptStack[sp++] = index
+                ptStack[sp++] = index; ptStack[sp++] = i2
+            }
+        }
     }
 
     /** CPlotter addPoints: each PC pixel averages its Bins Per Pixel bins of [data]. */

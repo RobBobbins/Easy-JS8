@@ -332,6 +332,24 @@ These rows and W19-W33 ran through the network rigctl choice, which was removed 
 | W35 | Inbox upright: bold (unread) Date shows in full | Pass | Pass | fixchk.py, judged on the screenshot |
 | W36 | Station > Frequencies: ticking the schedule box keeps the page where it was | Pass | Pass | fixchk.py |
 | W37 | Station > Audio sideways: Remember power settings by band shows in full on opening | Pass | Pass | fixchk.py |
+| W38 | PC sideways: two-finger pinch zooms the window | Pass | Pass | zoomchk.py runs 1 and 2: Send 112 to 204 px |
+| W39 | FT8Call sideways: two-finger pinch zooms the window | Pass | Pass | Run 1 by hand (Rob, 2026-11-03); run 2 zoomchk.py, Send 114 to 208 px |
+| W40 | Phone in dark mode: main screen in Upright, PC, Pages, FT8Call; Settings; Station > Radio and UI; Log QSO all readable | Pass | Pass | darkchk.py, judged on the screenshots; the test pass before ran in light mode |
+| W41 | Station > UI colour samples paint like the PC (background setting + text setting), repaint together after a pick; picker opens at the current colour | Pass | Pass | uicolchk.py; fixed 2026-11-03: Received Foreground Color showed black on black in light mode |
+| W42 | API STATION.SET_GRID / SET_INFO / SET_STATUS kept after an app restart | Pass | Pass | apichk.py |
+| W43 | API answers with the screen off 30 s; the app is on screen after waking | Pass | Pass | apichk.py; first try 23:22 hit an emulator stall (Easy JS8 and Google search ANR the same second), passed after an emulator restart |
+| W44 | Pages layout: TX.SET_TEXT fills the Typing Box, MODE.SET_SPEED changes the speed label | Pass | Pass | apichk.py |
+| W45 | A call on the spot list (`js8cfg_spot_blacklist`) is not sent to PSK Reporter or JS8NET; with the list empty it is sent to both | Pass | Pass | spotblk.py: on the list, heard True, PSK False, JS8NET False; list empty, heard True, PSK True, JS8NET True |
+| W46 | A call on the spot list (`js8cfg_spot_blacklist`) sending `@APRSIS GRID` is not sent to APRS-IS; with the list empty it is | Pass | Pass | aprsblk.py: on the list, sent False; list empty, login True (`APJ8CL`), sent True |
+| W48 | Split Rig through the built-in Hamlib (model 2, NET rigctl) against rigctld.exe: offset 2300 transmits on 10.136500 with split on | Pass | Pass | hsplit.py; log "Hamlib network rig opened (model=2 path=10.0.2.2:4532)" |
+| W49 | Split Fake It through the built-in Hamlib: the dial moves to 10.136500 for the send and back to 10.136000 after | Pass | Pass | hsplit.py |
+| W50 | Back on the main screen, then open again (process kept): RX and TX turned off by hand come back on (RX off / TX off at startup unticked) | Pass | Pass | startbk.py |
+| W51 | Same with RX off / TX off at startup ticked: RX and TX turned on by hand are off again | Pass | Pass | startbk.py |
+| W52 | WSJT-X UDP API to multicast 239.255.0.1:2239, TTL 1, Outgoing interface eth0: received on the PC | Pass | Pass | wmcast.py: unicast control 66 packets; eth0 74 / 66 packets |
+| W53 | Same out of wlan0 | Failed | Failed | wmcast.py: 0 packets both runs, no send error in the app log; the emulator's simulated Wi-Fi may not pass multicast (not proven). Retry on the phone on real Wi-Fi |
+| W54 | Station > Radio sideways, rig picked (Icom IC-7300) and Rig None: Rig Options on its own row | Pass | Pass | radioend.py, pagepic.py, PC and FT8Call. Was: Rig Options squeezed at the right edge of row 1, PTT Method cut off. Fix (2026-11-04): Rig Options always starts its own row; PTT Port: sits under PTT Method (as in the PC's PTT Method box). Row 1 Rig / Port / Parameters; row 2 PTT Method, Mode, Split Operation; row 3 Transmit Audio Source, Advanced |
+| W55 | Station > Audio sideways packed layout fits (PC, FT8Call) | Pass | Pass | pagepic.py pictures, checked by eye |
+| W47 | Cumulative spectrum: the same audio (1000 Hz tone + noise) read at the same second of the minute in the app and in JS8Call on the PC | Pass | Pass | cumchk.py, tone / noise dB at second 28.5: app 49.7 / 19.0, JS8Call 48.1 / 16.4; at 43.5: app 50.4 / 19.7, JS8Call 48.1 / 16.4. App 1.6-2.3 dB higher on the tone, 2.6-3.3 on the noise; Rob: that difference doesn't matter, the function does. Fixed first (2026-11-04): the count Cumulative is divided by now follows JS8Call's dataSink m_ihsym (not reset each cycle), and the line is reduced like CPlotter's RDP (2 px). Before: JS8Call moved 6 dB between runs, the app never did |
 
 ## H. Main window
 
@@ -906,6 +924,8 @@ These rows and W19-W33 ran through the network rigctl choice, which was removed 
 | M05P | Acquire GPS and Set (PC) | Pass | Pass |  |
 | M05G | Acquire GPS and Set (Pages) | Pass | Pass |  |
 | M05F | Acquire GPS and Set (FT8Call) | Pass | Pass |  |
+| M05N1 | Acquire GPS: a Wi-Fi / cell grid shows at once, a GPS fix replaces it and ends the search (Upright) | Pass | Pass | gpsnet.py, test providers for network and GPS: FN25DK70, then FN03HQ27, a later network answer leaves FN03HQ27 |
+| M05N3 | Acquire GPS: with only Wi-Fi / cell answering, its grid is still shown when the 2 minute search ends (Upright) | Pass | Pass | gpsnet.py: FN25DK70 before and after 2 min, not "No position" |
 | M06U | Callsign Groups refuses bad group (Upright) | Pass | Pass |  |
 | M06P | Callsign Groups refuses bad group (PC) | Pass | Pass |  |
 | M06G | Callsign Groups refuses bad group (Pages) | Pass | Pass |  |
