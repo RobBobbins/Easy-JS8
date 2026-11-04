@@ -213,7 +213,7 @@ From 2026-11-01 the test build's engine is compiled at -O3, the same as release.
 | Q04 | UDP RX.DIRECTED | Pass | Pass |  |
 | Q05 | RIG.PTT event | Pass | Pass |  |
 | Q06 | TX.FRAME event | Pass | Pass |  |
-| Q07 | RX.SPOT event | Pass | Pass | b'{"params":{"BITS":3,"DIAL":10130000,"FREQ":10130900,"OFFSET"' |
+| Q07 | RX.SPOT event | Pass | Pass | air13.py real_spot: real frame, spot with antenna and program; air12.py Q07 injects and cannot spot |
 | Q08 | All TCP commands answered (44) | Pass | Pass |  |
 | Q09 | Allow setting station information | Pass | Pass |  |
 | Q10 | TCP Max Connections | Pass | Pass | corrected check |
@@ -326,6 +326,10 @@ From 2026-11-01 the test build's engine is compiled at -O3, the same as release.
 | W31 | rigctld closed: Rig Control Error box | Pass | Pass | wham2.py W31, Rob closed rigctld |
 | W32 | rigctld closed: CAT red under the box | Pass | Pass | wham2.py W31 |
 | W33 | rigctld started again: RETRY reconnects, box gone, CAT green | Pass | Pass | wham2.py W31, Rob started rigctld after a minute |
+| W34 | Station > UI upright: Secondary Highlight Background shows both lines | Pass | Pass | fixchk.py (2026-11-03 fix) |
+| W35 | Inbox upright: bold (unread) Date shows in full | Pass | Pass | fixchk.py, judged on the screenshot |
+| W36 | Station > Frequencies: ticking the schedule box keeps the page where it was | Pass | Pass | fixchk.py |
+| W37 | Station > Audio sideways: Remember power settings by band shows in full on opening | Pass | Pass | fixchk.py |
 
 ## H. Main window
 

@@ -302,11 +302,16 @@ class Js8TableView @JvmOverloads constructor(
 
     private fun measureContents(): Boolean {
         val pad = (12 * dp).toInt()
+        // Bold rows (unread Inbox messages) are drawn in the bold face, which is wider
+        fun width(text: String, bold: Boolean): Float {
+            measure.typeface = if (bold) boldFont else font
+            return measure.measureText(text)
+        }
         val m = columns.associate { c ->
-            val widest = (sequenceOf(c.label) + rows.asSequence().map { it.values[c.key].orEmpty() })
-                .maxOf { measure.measureText(it) }
+            val widest = maxOf(width(c.label, false), rows.maxOfOrNull { width(it.values[c.key].orEmpty(), it.bold) } ?: 0f)
             c.key to widest.toInt() + pad
         }
+        measure.typeface = font
         val changed = m != contentPx
         contentPx = m
         return changed

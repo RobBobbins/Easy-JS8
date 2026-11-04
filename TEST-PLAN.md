@@ -1,6 +1,6 @@
 # Easy JS8 test plan
 
-State at 2026-11-03 18:20 is in `HANDOFF.md`, "Test pass state (2026-11-03)". Steps 1 to 17 are done: all 1,007 rows passed twice or are N/A, 0 Failed. W19 (real Hamlib rigctld) passed at 18:16, with `rigctld.exe` started by Rob. W20 to W33 (real rigctld: dial, mode, PTT, split, Fake It, polling, CAT, Test CAT / PTT, rigctld closed and restarted) passed twice at 19:53; 1,021 rows, 0 Failed.
+State at 2026-11-03 18:20 is in `HANDOFF.md`, "Test pass state (2026-11-03)". Steps 1 to 17 are done: all 1,007 rows passed twice or are N/A, 0 Failed. W19 (real Hamlib rigctld) passed at 18:16, with `rigctld.exe` started by Rob. W20 to W33 (real rigctld: dial, mode, PTT, split, Fake It, polling, CAT, Test CAT / PTT, rigctld closed and restarted) passed twice at 19:53. W34 to W37 (four screen fixes) and the 26 real-audio rows rerun at drift 0 passed twice by 21:40; 1,025 rows, 0 Failed.
 
 **Rule (Rob, 2026-11-03):** EVERYTHING ON THE PC THAT CAN BE DONE, GETS DONE ON THE PC. THE PHONE AND RADIO ARE THE ABSOLUTELY LAST STEPS.
 

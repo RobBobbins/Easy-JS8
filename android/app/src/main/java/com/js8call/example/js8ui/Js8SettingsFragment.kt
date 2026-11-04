@@ -464,12 +464,18 @@ class Js8SettingsFragment : Fragment() {
 
     // ---- Layout -------------------------------------------------------------------------------
 
-    private fun render() {
+    /** keepScroll: a ticked box redrew the page (greying), so the page stays where it was. */
+    private fun render(keepScroll: Boolean = false) {
         if (vm.testPtt && vm.page != "Radio") { vm.testPtt = false; sendTestPtt(false) } // left the Radio page
+        val y = if (keepScroll) scroller(content)?.scrollY ?: 0 else 0
         content.removeAllViews()
         requiredBoxes.clear()
         if (station) renderStationPage() else renderList()
+        if (y > 0) content.post { scroller(content)?.scrollTo(0, y) }
     }
+
+    private fun scroller(v: View): ScrollView? = v as? ScrollView
+        ?: (v as? ViewGroup)?.let { g -> (0 until g.childCount).firstNotNullOfOrNull { scroller(g.getChildAt(it)) } }
 
     /**
      * Station upright: a list of the PC's tab names (General, Radio, ...); tap one to see only
@@ -737,10 +743,8 @@ class Js8SettingsFragment : Fragment() {
                 }
                 cell.addView(c.view)
                 // A stacked column keeps its boxes' own heights
-                c.under.forEach { v ->
-                    cell.addView(v)
-                    (v.layoutParams as? LinearLayout.LayoutParams)?.let { lp -> lp.topMargin += px(14); v.layoutParams = lp }
-                }
+                // Same 14 dp gap as between rows, so Audio fits sideways without scrolling
+                c.under.forEach { v -> cell.addView(v) }
                 if (!stacked) (c.view.layoutParams as? LinearLayout.LayoutParams)?.let { lp ->
                     lp.height = 0; lp.weight = 1f; c.view.layoutParams = lp
                     (c.view as? FrameLayout)?.getChildAt(0)?.let { box ->
@@ -1077,7 +1081,7 @@ class Js8SettingsFragment : Fragment() {
         setOnCheckedChangeListener { _, c ->
             draft.set(f, c.toString())
             if (f.key == Js8SettingsSchema.SWL_KEY) requiredBoxes.forEach { markRequired(it) }
-            if (f.key in Js8SettingsSchema.ACTIVE_TRIGGERS) content.post { render() } // ACK follows AUTO and HB
+            if (f.key in Js8SettingsSchema.ACTIVE_TRIGGERS) content.post { render(keepScroll = true) } // ACK follows AUTO and HB
         }
     }
 
@@ -1223,7 +1227,7 @@ class Js8SettingsFragment : Fragment() {
                 setOnCheckedChangeListener { _, c ->
                     if (!c) return@setOnCheckedChangeListener
                     draft.set(item.field, value)
-                    if (item.field.key in Js8SettingsSchema.ACTIVE_TRIGGERS) content.post { render() }
+                    if (item.field.key in Js8SettingsSchema.ACTIVE_TRIGGERS) content.post { render(keepScroll = true) }
                 }
                 if (value in item.disabled || value in item.greyed(draft)) { isEnabled = false; alpha = 0.5f }
             })
@@ -1899,7 +1903,10 @@ class Js8SettingsFragment : Fragment() {
                 } else {
                     pickColor(lab, draft.values[key] ?: draft.prefs.getString(key, null)) { draft.values[key] = it; paint() }
                 }
-            }, LinearLayout.LayoutParams(0, px(28), 1f))
+            }.apply {
+                // 28 dp, taller when the label wraps (Secondary Highlight Background upright)
+                minimumHeight = px(28); setPadding(px(10), px(3), px(10), px(3))
+            }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
             row.addView(sample, LinearLayout.LayoutParams(px(110), ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginStart = px(8) })
             col.addView(row)
         }
