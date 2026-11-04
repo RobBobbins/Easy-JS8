@@ -6,7 +6,7 @@ Easy JS8 is a fork of JS8Android with added features and a new screen layout.
 
 Early test version. Tested on the Android emulator only, not on a real phone or radio yet.
 
-Emulator test pass (2026-11-01 to 11-03): 1,007 checks, each run twice, 36 hours of test runs; 1,006 passed, 1 not run yet.
+Emulator test pass (2026-11-01 to 11-03): 1,025 checks, each run twice; all passed.
 
 ## Added
 
