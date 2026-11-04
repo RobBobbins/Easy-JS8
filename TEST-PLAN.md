@@ -1,6 +1,6 @@
 # Easy JS8 test plan
 
-State at 2026-11-03 16:51 is in `HANDOFF.md`, "Test pass state (2026-11-03)". Steps 1 to 17 are done: 1,007 rows, 1,006 passed twice or are N/A, 0 Failed. Not run: W19 (real Hamlib rigctld), which needs Rob to start `rigctld.exe`.
+State at 2026-11-03 18:20 is in `HANDOFF.md`, "Test pass state (2026-11-03)". Steps 1 to 17 are done: all 1,007 rows passed twice or are N/A, 0 Failed. W19 (real Hamlib rigctld) passed at 18:16, with `rigctld.exe` started by Rob. W20 to W33 (real rigctld: dial, mode, PTT, split, Fake It, polling, CAT, Test CAT / PTT, rigctld closed and restarted) passed twice at 19:53; 1,021 rows, 0 Failed.
 
 **Rule (Rob, 2026-11-03):** EVERYTHING ON THE PC THAT CAN BE DONE, GETS DONE ON THE PC. THE PHONE AND RADIO ARE THE ABSOLUTELY LAST STEPS.
 
@@ -12,7 +12,7 @@ State at 2026-11-03 16:51 is in `HANDOFF.md`, "Test pass state (2026-11-03)". St
 5. Over the limit: stop, give the 5-line update, wait for Rob.
 6. Background runs: a timer for halfway and one for the limit. No step ends without its update.
 
-**Left:** W19 on the PC once Rob has started `rigctld.exe`, then the phone and radio.
+**Left:** the phone and radio.
 
 ## How the tests change
 

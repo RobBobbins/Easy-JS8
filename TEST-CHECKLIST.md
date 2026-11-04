@@ -311,7 +311,21 @@ From 2026-11-01 the test build's engine is compiled at -O3, the same as release.
 | W16 | Station > Radio sideways with a rig picked (picture) | Pass | Pass | PC |
 | W17 | Station > Audio in PC and FT8Call (picture) | Pass | Pass | PC, FT8Call |
 | W18 | Upright Station page list (picture) | Pass | Pass | Upright |
-| W19 | Real Hamlib rigctld dummy rig (needs Rob to OK a Hamlib download) |  |  | not run: rigctld.exe from the Hamlib zip needs Rob to start it |
+| W19 | Real Hamlib rigctld dummy rig (needs Rob to OK a Hamlib download) | Pass | Pass | Hamlib 4.7.2 rigctld -m 1 on the PC, started by Rob (2026-11-03): read, set and PTT |
+| W20 | Real rigctld: the app reads the dial | Pass | Pass | Hamlib 4.7.2 rigctld -m 1 on the PC (2026-11-03), wham2.py |
+| W21 | Real rigctld: the app sets the dial (RIG.SET_FREQ) | Pass | Pass | wham2.py |
+| W22 | Real rigctld: Mode USB set on a send | Pass | Pass | wham2.py |
+| W23 | Real rigctld: Mode Data (PKTUSB) set on a send | Pass | Pass | wham2.py |
+| W24 | Real rigctld: PTT on for each frame, off after | Pass | Pass | wham2.py |
+| W25 | Real rigctld: Split Rig at offset 2300, split on, TX 10.136500 while keyed | Pass | Pass | wham2.py |
+| W26 | Real rigctld: Split Fake It, dial 10.136500 while keyed, 10.136000 after | Pass | Pass | wham2.py; PTT, dial, PTT read in one packet (script fix 2026-11-03) |
+| W27 | Real rigctld: Poll Interval 1 s picks up a dial change made in rigctld | Pass | Pass | wham2.py |
+| W28 | Real rigctld: CAT button green | Pass | Pass | wham2.py |
+| W29 | Real rigctld: Test CAT turns green | Pass | Pass | wham2.py |
+| W30 | Real rigctld: Test PTT keys and releases | Pass | Pass | wham2.py |
+| W31 | rigctld closed: Rig Control Error box | Pass | Pass | wham2.py W31, Rob closed rigctld |
+| W32 | rigctld closed: CAT red under the box | Pass | Pass | wham2.py W31 |
+| W33 | rigctld started again: RETRY reconnects, box gone, CAT green | Pass | Pass | wham2.py W31, Rob started rigctld after a minute |
 
 ## H. Main window
 

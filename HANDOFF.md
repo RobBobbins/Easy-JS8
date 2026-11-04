@@ -2,9 +2,22 @@
 
 ## Next session starts here (2026-11-03)
 
+**State at 19:00, 2026-11-03 (read this block first):**
+- Pushed to fork/easy-js8 (2026-11-03): 65fbdd5e, b704edfb, 52bcb0f0 (README). Not committed: `TEST-CHECKLIST.md`, `HANDOFF.md` and `TEST-PLAN.md` (W19 passed), `build-env/test/lib/wham2.py`.
+- README Status line out of date: says "1,006 passed, 1 not run yet". Proposed: "...36 hours of test runs; none failed." Waiting on Rob.
+- GitHub default branch stays master until Rob says ready (front page still shows the JS8Android README).
+- **Real-Hamlib checks W20-W33 done (2026-11-03, 19:53):** all 14 passed twice against `rigctld.exe -m 1 -t 4532`, which Rob starts: `C:\Users\Robert\AppData\Local\Temp\claude\E--new-w3bguru-websites-easy-js8\f8df57d0-2324-45f1-b508-d9d9199b79c9\scratchpad\hamlib\hamlib-w64-4.7.2\bin\rigctld.exe`. Checklist now 1,021 rows, all passed twice or N/A, 0 Failed. Result files `wham2.1/2.json` (W20-W30), `wham2.11/12.json` (W26 rerun), `wham2.21/22.json` (W31-W33).
+  - W26 Fake It failure was the script: the app sends PTT off, then the dial back (`JS8EngineService.kt` 3847-3848); the script read PTT, then the dial 0.3 s later. Now PTT, dial, PTT go in one packet (`rcs`), keyed = both PTT reads on.
+  - W33 script tapped `Retry`; the button text is `RETRY` (tapk matches exactly). Fixed.
+  - Rob's close / wait a minute / start takes about 4 minutes; give W31 runs 8 min.
+- The proposed `@Synchronized` fix on `RigCtlClient.sendCommand` was wrong: it has had `@Synchronized` since JS8Android's first rigctld commit (04814bfa), so no reply can be read by the wrong thread. The one W25 split failure (18:42) has no known cause; W25 passed in every run since.
+- Later, needs a radio: the app's built-in Hamlib (USB).
+- Still open on the PC: Log QSO page **Message Window** box (Rob's answer), four small screen faults, About page **Features** list, first GitHub release with `version.txt`.
+- At 19:00 `rigctld.exe` was running and S22-Fresh was fine (restarted 16:24).
+
 1. **First:** read the two rules at the top of `TEST-PLAN.md`: PC first (phone and radio absolutely last), and every test runs with updates and timers.
-2. **Steps 1 to 17 are done** (2026-11-03, 16:51); see "Test pass state (2026-11-03)". Left on the PC: W19, the real Hamlib rigctld dummy rig. Then the phone and radio.
-3. **Waiting on Rob for W19:** the Hamlib zip is downloaded to `C:\Users\Robert\AppData\Local\Temp\claude\E--new-w3bguru-websites-easy-js8\f8df57d0-2324-45f1-b508-d9d9199b79c9\scratchpad\hamlib-dl\hamlib-w64-4.7.2.zip`, not extracted. Running `rigctld.exe` from it was refused on this PC, so Rob starts it (`rigctld.exe -m 1 -t 4532` in its `bin` folder). The script is `build-env/test/lib/wham.py`.
+2. **Steps 1 to 17 are done** (2026-11-03, 16:51; W19 at 18:16); see "Test pass state (2026-11-03)". Left on the PC: the Log page **Message Window** box question, the small faults, the first GitHub release (see "Not done yet" and "Audit work state"). Then the phone and radio.
+3. **W19 (real Hamlib) passed twice (2026-11-03, 18:16):** Hamlib 4.7.2 unzipped to `C:\Users\Robert\AppData\Local\Temp\claude\E--new-w3bguru-websites-easy-js8\f8df57d0-2324-45f1-b508-d9d9199b79c9\scratchpad\hamlib\hamlib-w64-4.7.2\` (zip SHA256 matched Hamlib's SHA256SUM file). This session may not start `rigctld.exe`, so Rob starts it: `rigctld.exe -m 1 -t 4532` in its `bin` folder. The app read the dial, set it, and keyed and released PTT through it. Script `build-env/test/lib/wham.py`.
 4. **Running on the PC:** JS8Call with `--rig-name ELINK` (test profile, MyCall K4PCT, HB and ACK on); `fakes.py`, `fakeaprs.py`, `fakepsk.py`, `fakespot.py`.
 5. **Emulator:** S22-Fresh, restarted 16:24 with `-cores 8 -memory 4096 -gpu host`. Test values are left as the last test set them.
 6. **Committed and pushed to `fork` (2026-11-03, 65fbdd5e and the commit after it):** the clock drift display (point 9), the app fixes in "Test pass state (2026-11-03)", checklist section W, the `TEST-PLAN.md` changes, `tlink2.py`, `wlink.py`, `wui.py`, `wside.py`, `wham.py`, `side.py`, `side16.sh`, `need.py`, `markjson.py` and the test script changes. Not committed: test result files (`.json`, `.out`), logs, `shots`, the screen recording. (The Reset Frame Sizes fix is d113e7ef.)
@@ -677,7 +690,7 @@ Read `TEST-PLAN.md` and `TEST-CHECKLIST.md` for the steps and every result. Phon
 
 ## Test pass state (2026-11-03)
 
-**Checklist count.** 1,007 rows: 1,006 passed twice or are N/A, 0 Failed. W19 (real Hamlib rigctld) not run; it waits for Rob to start `rigctld.exe`. 35 cells are N/A, none of them "Upright only (TEST-PLAN One layout)" any more: step 16 ran every sideways copy twice, one layout at a time, with `side16.sh <run> <P|G|F> <script> <limit s>` (`need.py` picks the rows left, `side.py` patches the upright scripts for the layout).
+**Checklist count.** 1,007 rows: all passed twice or are N/A, 0 Failed. W19 (real Hamlib rigctld) passed at 18:16 with `rigctld.exe` started by Rob. 35 cells are N/A, none of them "Upright only (TEST-PLAN One layout)" any more: step 16 ran every sideways copy twice, one layout at a time, with `side16.sh <run> <P|G|F> <script> <limit s>` (`need.py` picks the rows left, `side.py` patches the upright scripts for the layout).
 
 **W rows.** W01 to W18 passed twice: `wlink.py` (W01 to W05), `tlink2.py` (W07 to W09), `wui.py` (W06, W10 to W18). Their result files name the rows with the layout letter (W06U), so they were copied onto the checklist by hand in step 17.
 
