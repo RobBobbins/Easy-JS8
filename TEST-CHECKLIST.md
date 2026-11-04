@@ -176,6 +176,8 @@ From 2026-11-01 the test build's engine is compiled at -O3, the same as release.
 
 ## O. Rig against the fake rigctld
 
+These rows and W19-W33 ran through the network rigctl choice, which was removed on 2026-11-03 (Rob). The results stand for the rig code the USB radios share: dial, mode, PTT, split, polling.
+
 | ID | Test | Run 1 | Run 2 | Note |
 |---|---|---|---|---|
 | O01 | Frequency read | Pass | Pass |  |
@@ -199,9 +201,9 @@ From 2026-11-01 the test build's engine is compiled at -O3, the same as release.
 
 | ID | Test | Run 1 | Run 2 | Note |
 |---|---|---|---|---|
-| P01 | DX Lab stand-in read, set, PTT | Pass | Pass |  |
-| P02 | Ham Radio Deluxe stand-in read, set, PTT | Pass | Pass |  |
-| P03 | Hamlib model 2 NET | Pass | Pass |  |
+| P01 | DX Lab stand-in read, set, PTT | N/A | N/A | choice removed from the app (Rob, 2026-11-03) |
+| P02 | Ham Radio Deluxe stand-in read, set, PTT | N/A | N/A | choice removed from the app (Rob, 2026-11-03) |
+| P03 | Hamlib model 2 NET | N/A | N/A | choice removed from the app (Rob, 2026-11-03) |
 
 ## Q. API
 

@@ -1025,7 +1025,6 @@ class JS8EngineService : Service() {
         qmxConnected = false
         rtsPttTransport = null
         when (rigType) {
-            "network" -> initializeNetworkRigControl()
             "hamlib_usb" -> { initializeHamlibUsbControl(); openPttPort() }
             "rts_ptt" -> initializeRtsPttControl()
             "trusdx_serial" -> initializeTruSdxControl(generation)
@@ -1307,50 +1306,6 @@ class JS8EngineService : Service() {
             SUBMODE_ULTRA -> RX_BIT_ULTRA
             else -> RX_BIT_NORMAL
         }
-    }
-
-    private fun initializeNetworkRigControl() {
-        val prefs = PreferenceManager.getDefaultSharedPreferences(this)
-        val host = prefs.getString("rigctld_host", "localhost").orEmpty().trim().ifEmpty { "localhost" }
-        val kind = prefs.getString("rig_network_kind", "rigctl") ?: "rigctl"
-        // PC: a blank Network Port is the service's own default
-        val port = prefs.getString("rigctld_port", "")?.trim()?.toIntOrNull() ?: when (kind) {
-            "dxlab" -> 52002
-            "hrd" -> 7809
-            else -> 4532
-        }
-
-        Log.i(TAG, "Initializing network rig control: $kind $host:$port")
-
-        // Connect on background thread to avoid NetworkOnMainThreadException
-        Thread {
-            try {
-                rigCtlClient = when (kind) {
-                    "dxlab" -> DxLabCommanderClient(host, port)
-                    "hrd" -> HrdClient(host, port)
-                    else -> RigCtlClient(host, port)
-                }
-                rigCtlConnected = rigCtlClient?.connect() == true
-                rigCtlErrorShown = false
-
-                mainHandler.post {
-                    if (rigCtlConnected) {
-                        Log.i(TAG, "Connected to rigctld at $host:$port")
-                        rigOnline()
-                    } else {
-                        Log.w(TAG, "Failed to connect to rigctld at $host:$port")
-                        rigFailure("Failed to connect to rigctld at $host:$port")
-                        rigCtlErrorShown = true
-                    }
-                }
-            } catch (e: Exception) {
-                Log.e(TAG, "Error initializing network rig control", e)
-                mainHandler.post {
-                    broadcastError("Error connecting to rigctld: ${e.message}")
-                    rigCtlErrorShown = true
-                }
-            }
-        }.start()
     }
 
     private fun initializeHamlibUsbControl() {

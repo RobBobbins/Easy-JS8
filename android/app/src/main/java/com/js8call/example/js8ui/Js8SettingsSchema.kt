@@ -117,15 +117,14 @@ object Js8SettingsSchema {
     private fun rigChoices(context: Context): List<Pair<String, String>> {
         val base = listOf(
             "None" to "none",
-            "Hamlib NET rigctl / FLRig (network)" to "network",
-            "DX Lab Suite Commander" to "dxlab",
-            "Ham Radio Deluxe" to "hrd",
             "QRP Labs QMX (direct USB)" to "qmx_serial",
             "truSDX (direct USB)" to "trusdx_serial",
             "BTECH UV-Pro (Bluetooth)" to "btech_uvpro",
             "RTS PTT only (USB serial)" to "rts_ptt"
         )
+        // Hamlib's own FLRig and NET rigctl are left out with the network choices (Rob, 2026-11-03)
         val models = try { HamlibRigCatalog.listRigModels() } catch (_: Throwable) { emptyList() }
+            .filter { it.label != "FLRig FLRig" && it.label != "Hamlib NET rigctl" }
         return base + models.map { it.label to "hamlib:${it.id}" }
     }
 
@@ -133,7 +132,7 @@ object Js8SettingsSchema {
         if (!p.getBoolean("rig_control_enabled", false)) return "none"
         return when (val t = p.getString("rig_type", "none") ?: "none") {
             "hamlib_usb" -> "hamlib:${p.getString("rig_hamlib_model", "0")}"
-            "network" -> p.getString("rig_network_kind", "rigctl").takeIf { it == "dxlab" || it == "hrd" } ?: t
+            "network" -> "none" // network rigctl, DX Lab and HRD removed (Rob, 2026-11-03)
             else -> t
         }
     }
@@ -143,12 +142,8 @@ object Js8SettingsSchema {
         if (v.startsWith("hamlib:")) {
             e.putString("rig_type", "hamlib_usb")
             e.putString("rig_hamlib_model", v.removePrefix("hamlib:"))
-        } else if (v == "dxlab" || v == "hrd") {
-            e.putString("rig_type", "network")
-            e.putString("rig_network_kind", v)
         } else {
             e.putString("rig_type", v)
-            e.putString("rig_network_kind", "rigctl")
         }
     }
 
@@ -161,7 +156,7 @@ object Js8SettingsSchema {
     private fun hamlibSerial(d: Draft) = rigIs(d, "hamlib") && hamlibModel(d)?.network != true
 
     /** PC Capabilities::network: Network Server and Network Port instead of the serial Port. */
-    private fun rigNetwork(d: Draft) = rigIs(d, "network", "dxlab", "hrd") || hamlibModel(d)?.network == true
+    private fun rigNetwork(d: Draft) = hamlibModel(d)?.network == true
 
     private fun pttMethod(d: Draft) = d.values["js8cfg_ptt_method"] ?: d.prefs.getString("js8cfg_ptt_method", "vox")
 
@@ -172,12 +167,8 @@ object Js8SettingsSchema {
         else -> true
     }
 
-    /** PC has_CAT_PTT_mic_data: NET rigctl and Ham Radio Deluxe; DX Lab no. */
-    private fun micData(d: Draft) = when {
-        rigIs(d, "network", "hrd") -> true
-        rigIs(d, "hamlib") -> hamlibModel(d)?.micData == true
-        else -> false
-    }
+    /** PC has_CAT_PTT_mic_data. */
+    private fun micData(d: Draft) = rigIs(d, "hamlib") && hamlibModel(d)?.micData == true
 
     /** PC: RTS is the handshake line while the CAT port itself keys with hardware handshake. */
     private fun rtsTaken(d: Draft) = hamlibSerial(d) &&
@@ -436,7 +427,7 @@ object Js8SettingsSchema {
                 Field("rig_hamlib_usb_port", "Port:", Kind.CHOICE, "auto", choices = { c, _ -> portChoices(c) },
                     visible = { d -> hamlibSerial(d) || rigIs(d, "rts_ptt") }),
                 Field("rigctld_host", "Network Server:", Kind.TEXT, "localhost", visible = { d -> rigNetwork(d) }),
-                // PC: blank = the service's default port (rigctl 4532, Commander 52002, HRD 7809)
+                // PC: blank = Hamlib's default port for the rig
                 Field("rigctld_port", "Network Port:", Kind.TEXT, "", visible = { d -> rigNetwork(d) }),
                 Field("qmx_band_profile", "QMX Bands:", Kind.CHOICE, "low",
                     choices = { _, _ -> listOf("80/60/40/30/20m" to "low", "20/17/15/12/11/10m" to "high", "60/40/30/20/17/15m" to "mixed") },
