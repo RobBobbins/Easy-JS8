@@ -303,6 +303,8 @@ class MainActivity : AppCompatActivity() {
     }
 
     companion object {
+        /** PC PriorityNormal for TX.SEND_MESSAGE: the service's PRIORITY_NORMAL, a queued reply's. */
+        const val API_PRIORITY_NORMAL = 100
         private const val REQUEST_RECORD_AUDIO = 1
         private const val REQUEST_BLUETOOTH_CONNECT = 3
         private const val REQUEST_LOCATION = 2
@@ -463,7 +465,9 @@ class MainActivity : AppCompatActivity() {
     /** API commands that use the transmit queue (TX.SEND_MESSAGE, TX.GET_QUEUE_DEPTH, WINDOW.RAISE). */
     private val apiHost = object : Js8Api.Host {
         override fun sendMessage(text: String) {
-            transmitViewModel.queueMessage(text, null, 0, clearComposed = false)
+            // PC enqueueMessage(PriorityNormal, ...): like a queued reply, it waits for an empty Typing Box and goes
+            // out only with AUTO on; otherwise it is put in the Typing Box (N53)
+            transmitViewModel.queueMessage(text, null, API_PRIORITY_NORMAL, clearComposed = false)
             processNextTxIfIdle()
         }
 
@@ -509,7 +513,7 @@ class MainActivity : AppCompatActivity() {
         }
 
         // PC processTxQueue: a queued reply or heartbeat ACK (priority above 0) waits for an empty Typing Box
-        // (mainwindow.cpp 6628-6631). The message sent from the Typing Box, CQ and the API's go as before.
+        // (mainwindow.cpp 6628-6631). The message sent from the Typing Box and CQ go as before.
         val boxFree = js8ActivityViewModel.typingBoxFree()
         val nextMessage = transmitViewModel.getNextMessage { boxFree || it.priority == 0 }
         android.util.Log.d("MainActivity", "processNextTxIfIdle: nextMessage=$nextMessage")

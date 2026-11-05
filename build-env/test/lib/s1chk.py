@@ -223,5 +223,29 @@ if want('W76'):  # N4: group spot buffers follow drift and close at 60 s
             f'{len(s)} lines; drifting {s1} {s1 in j and f"DRIFT{run}" in j}; no last frame {s3} {s3 in j and f"CLOSED{run}" in j}')
         fresh(tx_submode=1, psk_reporter=False)
 
+if want('W129'):  # N53: TX.SEND_MESSAGE is queued at normal priority: AUTO off puts it in the Typing Box (PC mw 6650-6664)
+    with part('W129', 75, ('W129',), t.res, t.mark):
+        fresh(tx_submode=1, autoreply_enabled=False, js8cfg_autoreply_startup=False)
+        base = len(alltxt()); api('TX.SEND_MESSAGE', f'N53 API {run}', wait=1)
+        sent_off = t.tx(base, f'N53 API {run}', 20)
+        box_off = box()
+        shot(f'w129_{run}')
+        api('TX.SET_TEXT', '', wait=1)
+        fresh(tx_submode=1)
+        base = len(alltxt()); api('TX.SEND_MESSAGE', f'N53 AUTO {run}', wait=1)
+        sent_on = t.tx(base, f'N53 AUTO {run}', 40)
+        fix('W129', not sent_off and box_off == f'N53 API {run}' and bool(sent_on),
+            f'AUTO off: sent {sent_off[:1]}, Typing Box {box_off!r}; AUTO on: sent {sent_on[:1]}')
+        time.sleep(8)
+
+if want('W130'):  # N52: a relay to me whose text starts with "@" is ACKed, not dropped or forwarded (PC pCA 420-434)
+    with part('W130', 90, ('W130',), t.res, t.mark):  # quiet() waits for the band to go quiet
+        fresh(tx_submode=1); quiet()
+        a = c(); pl = f'@TESTG N52 {run}'
+        base = len(alltxt()); inj(f'{a}: {M}> {pl} {sum16(pl)}', 1300)
+        ack = t.tx(base, f'{a} ACK', 30)
+        fwd = [j for j in tx_joined(alltxt()[base:]) if re.search('@TESTG ?>', j)]
+        fix('W130', bool(ack) and not fwd, f'ACK {ack[:1]}; forwarded {fwd[:1]}')
+
 json.dump(t.res, open(f's1chk.{run}.json', 'w'))
 print('RESULT', ' '.join(f'{i}={"PASS" if ok else "FAIL"}' for i, ok, _ in t.res), flush=True)

@@ -484,7 +484,10 @@ if want('W89'):  # N15: a band change empties the Typing Box and forgets the las
             f'sent {bool(first)}; box {before!r} then {after!r}; Restore Previous Message enabled {restore}')
 
 if want('W90'):  # N16: the flag only for unread messages to me; the sender row from the message
-    with part('W90', 145, ('W90',), t.res, t.mark):
+    with part('W90', 75, ('W90',), t.res, t.mark):
+        # every run leaves an unread message to me, and its sender stays in Callsigns: past 100 rows the sender's
+        # row is out of sight (runs 12, 43, 45, 46). The emulator's inbox is test data: emptied first.
+        stop(); adb('shell', f"run-as {PKG} sh -c 'rm -f databases/js8_messages.db*'"); fresh(**UP); time.sleep(4)
         quiet()
         senders = {m.get('params', {}).get('FROM') for m in inbox()}
         gq, dq = c(), c(1)

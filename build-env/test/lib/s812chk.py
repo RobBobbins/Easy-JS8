@@ -659,7 +659,7 @@ if want('W108'):  # N28: Rename: Old name, an empty New name box, OK greyed whil
 if want('W113'):  # N30: each transmit line holds the text of its own frame
     with part('W113', 150, 'W113'):
         ev.close()
-        fresh(**{**UP, 'tx_submode': 2}); time.sleep(3)
+        fresh(**{**UP, 'tx_submode': 2, 'autoreply_enabled': True}); time.sleep(3)  # N53: API sends need AUTO on
         ev = Events()
         msg = f'W113 EACH FRAME OWN TEXT {run} ALPHA BRAVO CHARLIE'
         base = len(alltxt())
@@ -738,7 +738,7 @@ def frame_lines(n0, since, secs=30):
 
 if want('W111', 'W112') and tn:
     with part('W111,W112', 200, 'W111', 'W112'):
-        fresh(**AUDIO); time.sleep(8)
+        fresh(**{**AUDIO, 'autoreply_enabled': True}); time.sleep(8)  # N53: the API send in 3 goes only with AUTO on
         # 1: erased just after the frame goes in: after the last decode cycle ended, before the frame's decode (PC clears
         # the date line at every decode cycle's end, so the erase must fall between the two): date line, then the decode
         yes = erase_ready()
@@ -896,7 +896,7 @@ if want('W125'):  # Rename: a name typed and deleted turns OK on, as the PC (Mul
 
 if want('W126'):  # N55: a directed frame's text as the PC's DecodedText, "VE3TST: K4ABC> " (tryUnpackDirected)
     with part('W126', 90, 'W126'):
-        fresh(**UP); time.sleep(3)
+        fresh(**{**UP, 'autoreply_enabled': True}); time.sleep(3)  # N53: API sends need AUTO on
         a, b_ = c(), c(1)
         base = len(alltxt())
         api('TX.SEND_MESSAGE', f'{a}>{b_} W126 {run}', wait=1)

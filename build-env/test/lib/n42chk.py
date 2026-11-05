@@ -73,7 +73,7 @@ def sent(base, pat, wait=40):
     return ''
 
 
-fresh(landscape_layout='pc', tx_submode=1, js8cfg_tx_watchdog='0', autoreply_enabled=False, js8cfg_autoreply_startup=False)
+fresh(landscape_layout='pc', tx_submode=1, js8cfg_tx_watchdog='0', autoreply_enabled=True, js8cfg_autoreply_startup=True)  # N53: an API message sends only with AUTO on, as the PC
 adb('shell', 'cmd', 'window', 'user-rotation', 'lock', '0'); time.sleep(3)
 adb('forward', 'tcp:2442', 'tcp:2442')
 

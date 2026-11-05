@@ -422,6 +422,8 @@ These rows and W19-W33 ran through the network rigctl choice, which was removed 
 | W126 | A directed frame's text as the PC: "VE3TST: K4ABC> " (PC DecodedText.cpp tryUnpackDirected). Audit B N55 | Pass | Pass | s812chk.py |
 | W127 | Test PTT greyed until Test CAT is green (Hamlib IC-7300, DTR: before and after a red Test CAT); live with RTS PTT; greyed with None (PC cpp 2831-2840, 4515-4521). Audit B N22 | Pass | Pass | s812chk.py, runs 2 and 5; green Test CAT needs the radio |
 | W128 | Input channel lists Mono, Left, Right, Both, Both greyed; channels greyed by the device; Phone's current audio output keeps only Mono (PC cpp 4747-4783). Audit B N23 | Pass | Pass | s812chk.py |
+| W129 | TX.SEND_MESSAGE with AUTO off goes into the Typing Box and is not sent; with AUTO on it is sent (PC networkMessage.cpp 744-748, mw 6650-6664). Audit B N53 | Pass | Pass | s1chk.py, runs 31 and 34 |
+| W130 | A relay to me whose text starts with "@" is ACKed, not dropped or forwarded (PC pCA 420-434). Audit B N52 | Pass | Pass | s1chk.py, runs 33 and 34 |
 | W47 | Cumulative spectrum: the same audio (1000 Hz tone + noise) read at the same second of the minute in the app and in JS8Call on the PC | Pass | Pass | cumchk.py, tone / noise dB at second 28.5: app 49.7 / 19.0, JS8Call 48.1 / 16.4; at 43.5: app 50.4 / 19.7, JS8Call 48.1 / 16.4. App 1.6-2.3 dB higher on the tone, 2.6-3.3 on the noise; Rob: that difference doesn't matter, the function does. Fixed first (2026-11-04): the count Cumulative is divided by now follows JS8Call's dataSink m_ihsym (not reset each cycle), and the line is reduced like CPlotter's RDP (2 px). Before: JS8Call moved 6 dB between runs, the app never did |
 
 ## H. Main window

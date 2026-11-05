@@ -6,7 +6,12 @@
 - Rob, 11:00: "there is no desicions for me, we do what js8call does". So N55, Rename (empty name turns OK on) and N22 / N23 / N44 follow the PC; audit B items marked [x] with what was not run.
 - Built 10:55 and installed on S22-Fresh. W125-W128 (`s812chk.py`, end of file) passed twice: outputs `build-env/test/lib/s812chk.n55.{1,2,3,4,5}.out`. W125 runs sideways (the Configurations menu bar); W127 waits up to 20 s for the red Test CAT (the app gives up after 15 s).
 - s27chk measuring run: 27/27 passed; its estimates set at about 1.2 times the END times.
-- Regression pass 1 on the new build: `regress.sh 11` (`regress.11.log`, `<script>.11.out`) started 11:11. Then pass 2 (`regress.sh 12`).
+- N52 and N53 also follow the PC (W129, W130 in `s1chk.py`, passed twice). API-sending test rows now run with AUTO on. Committed before them: 09724615 (pushed to fork). Run 11 was stopped for this build.
+- Regression passes 1 and 2 on the N52/N53 build: `regress.sh 12` and `13` (11:46-14:13). Every row has 2 passes on this build: air2 53/53 twice, air3 29/29 twice, air1 22/28 twice (the 6 old checks: C03 B08 B10 B11 B17 D01; air2 has the corrected ones), n42chk 5/5 and n48chk 6/6 twice, s1chk W67-W74 runs 12-13, W75-W76 runs 13 and 49, W129-W130 run 13 plus 31-34. s27chk: the rows not listed here passed runs 12 and 13; W79, W81, W91 passed runs 43-44, W103 runs 40-42, W90 runs 47-48.
+- Test fixes from these runs: `regress.sh` limits for s1chk (1290 s) and s27chk (2200 s) from the summed row estimates (528 s stopped s1chk in W75). s27chk W90 empties the emulator inbox first (`databases/js8_messages.db*`): each run left an unread message, its sender stays in Callsigns, and past 100 rows the row was out of sight.
+- After about 2.5 hours of runs the emulator slows: rows that read the screen fail (W103 found no Send button, W90 and W91 timed out) and pass after a restart. Restart S22-Fresh before a long run.
+- A Monitor that expires leaves its `tail -F` processes running; stop them (`tail.exe` with `.out` / `.log` in the command line) after the runs.
+- Killing the emulator can leave empty bytes at the end of ALL.TXT; the next transmit line joins them, and a row reading from the line count misses it (W129 run 33).
 - Radio last: N44 on a Bluetooth serial rig; N22 Test PTT turning on after a green Test CAT.
 - `ui9.py` M27 now expects Both in the Input channel list (N23). `wham2.py` uses the network rig, removed 2026-11-03: it can't run.
 

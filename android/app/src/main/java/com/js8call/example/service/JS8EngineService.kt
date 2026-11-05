@@ -5041,11 +5041,7 @@ class JS8EngineService : Service() {
         val combined = stripRelayEom(buffer.parts.joinToString(separator = "").trimEnd())
         if (combined.isBlank()) return
 
-        if (combined.trimStart().startsWith("@")) {
-            Log.i(TAG, "Relay payload starts with group token, ignoring")
-            return
-        }
-
+        // N52: a text starting with "@" is no callsign, so it isn't forwarded: ACKed or its command answered (PC pCA 420-434)
         val (valid, message) = validateRelayChecksum(combined)
         val payload = if (valid) {
             message

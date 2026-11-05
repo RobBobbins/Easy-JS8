@@ -295,7 +295,8 @@ class Js8ApiCommands(private val context: Context) {
                 val text = message.value
                 if (text.isNotEmpty()) {
                     api.host?.sendMessage(text) ?: LocalBroadcastManager.getInstance(context).sendBroadcast(
-                        Intent(JS8EngineService.ACTION_QUEUE_TX).putExtra(JS8EngineService.EXTRA_QUEUE_TX_TEXT, text))
+                        Intent(JS8EngineService.ACTION_QUEUE_TX).putExtra(JS8EngineService.EXTRA_QUEUE_TX_TEXT, text)
+                            .putExtra(JS8EngineService.EXTRA_QUEUE_TX_PRIORITY, com.js8call.example.MainActivity.API_PRIORITY_NORMAL))
                     return
                 }
             }
