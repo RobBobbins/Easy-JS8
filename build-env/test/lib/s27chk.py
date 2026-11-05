@@ -137,7 +137,9 @@ def checked_items():
 def tap_item(text_, wait=1.5):
     """Tap a menu row; a long menu is scrolled down, then up, to reach it."""
     for down in (True, True, True, False, False, False, False):
-        r = rows()
+        r, end = rows(), time.time() + 5
+        while not r and time.time() < end:  # a menu can open late: W99 run 50 found none and gave up at once
+            time.sleep(.5); r = rows()
         for tx, en, b in r:
             if tx.strip() == text_:
                 adb('shell', 'input', 'tap', str((b[0] + b[2]) // 2), str((b[1] + b[3]) // 2)); time.sleep(wait)
@@ -342,6 +344,14 @@ def send_watch(secs=25, typed=None):
     return out
 
 
+def slot_wait():
+    """Wait until 3-5 s into a 10 s slot by the emulator's clock (about 1 s behind the PC's on 2026-11-05)."""
+    t0 = time.time(); e = float(adb('shell', 'echo $EPOCHREALTIME').decode().strip())
+    off = e - (t0 + time.time()) / 2
+    while not 3 <= (time.time() + off) % 10 < 5:
+        time.sleep(.2)
+
+
 def send_ok(w, timed):
     """PC updateTxButtonDisplay: Send greyed while a message waits or goes out; Ready with its time."""
     busy = [s for s in w if (s[0] or '').startswith(('Ready', 'Sending'))]
@@ -403,6 +413,7 @@ if want('W81'):  # Send while a heartbeat waits (N9, Ready countdown), upright
         quiet()
         page_top(); show('js8_btn_send')
         api('TX.SET_TEXT', '', wait=1)
+        slot_wait()  # see W103 (run 53)
         tapk('js8_btn_hb', .1)
         w = send_watch(24, f'W81 {run}')
         fix('W81', send_ok(w, False), f'Send states {w}')
@@ -732,9 +743,14 @@ if want('W99'):  # N7: clone names
 if want('W103'):  # Send while a heartbeat waits, PC layout
     with part('W103', 50, ('W103',), t.res, t.mark):
         quiet()
+        screen(f'w103_before_{run}')  # runs 12 and 13: no Send button in the dump, only in the full run
         api('TX.SET_TEXT', '', wait=1)
+        slot_wait()  # HB tapped late in a 10 s slot left under 1 s to type before the heartbeat went (run 53)
         tapk('js8_btn_hb', .1)
         w = send_watch(24, f'W103 {run}')
+        if not send_ok(w, True):
+            screen(f'w103_{run}')
+            open(f'shots/w103_{run}.xml', 'w', encoding='utf8').write(dump())
         fix('W103', send_ok(w, True), f'Send states {w}')
         api('TX.SET_TEXT', '', wait=1)
 
