@@ -283,14 +283,26 @@ class Js8MainFragment : Fragment() {
         progress = view.findViewById(R.id.js8_status_progress)
         // Upright: Receiving | wpm box | cycle progress bar, which takes what is left and ends at
         // the page's right edge (Rob, 2026-10-19 / 2026-10-22)
+        // Tablets (Rob, 2026-11-05): when Saved is wider than Receiving's 110 dp, Receiving takes
+        // Saved's width and the progress bar Halt's, still ending at the right edge; the wpm box
+        // fills the middle. Phones keep 110 dp | 150 dp | what is left.
         view.findViewById<View?>(R.id.js8_status_scroll)?.let { scroll ->
+            val state = view.findViewById<View>(R.id.js8_status_state)
+            val wpm = view.findViewById<View>(R.id.js8_status_wpm)
+            val saved = view.findViewById<View>(R.id.js8_btn_saved)
+            val halt = view.findViewById<View>(R.id.js8_btn_halt)
+            val stateW0 = state.layoutParams.width
+            val wpmW0 = wpm.layoutParams.width
             scroll.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
-                val state = view.findViewById<View>(R.id.js8_status_state)
-                val wpm = view.findViewById<View>(R.id.js8_status_wpm)
                 val gap = (progress.layoutParams as ViewGroup.MarginLayoutParams).marginStart
                 val wpmGap = (wpm.layoutParams as ViewGroup.MarginLayoutParams).marginStart
-                val w = scroll.width - scroll.paddingLeft - scroll.paddingRight - state.width - gap -
-                    wpm.layoutParams.width - wpmGap
+                val inner = scroll.width - scroll.paddingLeft - scroll.paddingRight
+                val wide = saved.width > stateW0
+                val stateW = if (wide) saved.width else stateW0
+                val wpmW = if (wide) inner - stateW - wpmGap - gap - halt.width else wpmW0
+                val w = if (wide) halt.width else inner - stateW - gap - wpmW - wpmGap
+                if (state.layoutParams.width != stateW) state.layoutParams = state.layoutParams.apply { width = stateW }
+                if (wpmW > 0 && wpm.layoutParams.width != wpmW) wpm.layoutParams = wpm.layoutParams.apply { width = wpmW }
                 if (w > 0 && progress.layoutParams.width != w) {
                     progress.layoutParams = progress.layoutParams.apply { width = w }
                 }
