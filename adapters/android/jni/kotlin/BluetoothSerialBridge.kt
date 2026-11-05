@@ -265,12 +265,14 @@ class BluetoothSerialBridge(private val context: Context) {
         }
     }
 
+    // A BluetoothSocket has no DTR or RTS line to set: report the failure (N44), as a serial port that can't
+    // set them does, in place of a success that changes nothing
     fun setRts(enabled: Boolean): Boolean {
-        return true
+        return false
     }
 
     fun setDtr(enabled: Boolean): Boolean {
-        return true
+        return false
     }
 
     fun purge(): Boolean {

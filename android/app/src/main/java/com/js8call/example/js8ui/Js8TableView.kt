@@ -47,8 +47,13 @@ class Js8TableView @JvmOverloads constructor(
         /** Last visible column stretches to fill the table width. */
         val stretch: Boolean = false,
         val numeric: Boolean = false,
-        val menuLabel: String = label
+        val menuLabel: String = label,
+        /** Shown only while a row has something in it, and not in Show Columns (PC Call Activity icon column). */
+        val onlyWithValues: Boolean = false
     )
+
+    /** PC buildShowColumnsMenu: the columns Show Columns lists, in its order (keys); null = every column. */
+    var menuOrder: List<String>? = null
 
     /** One row: values keyed by column key, plus an optional sort value per key. */
     private var tableBg: Int? = null
@@ -252,9 +257,15 @@ class Js8TableView @JvmOverloads constructor(
     fun setRows(newRows: List<Row>) {
         if (newRows == rows) return
         rows = newRows
-        if (measureContents()) rebuildHeader()
+        val empty = columns.filter { c -> c.onlyWithValues && rows.none { !it.values[c.key].isNullOrEmpty() } }.map { it.key }.toSet()
+        val emptyChanged = empty != emptyKeys
+        emptyKeys = empty
+        if (measureContents() || emptyChanged) rebuildHeader()
         applySort()
     }
+
+    /** [Column.onlyWithValues] columns with nothing in any row: hidden. */
+    private var emptyKeys: Set<String> = emptySet()
 
     /** Redraw every row in place (column widths, selection), without rebuilding the list. */
     private fun rebindAll() {
@@ -286,7 +297,8 @@ class Js8TableView @JvmOverloads constructor(
     private fun prefKey(col: Column) = "js8_table_${tableKey}_col_${col.key}"
 
     private fun isVisible(col: Column): Boolean =
-        PreferenceManager.getDefaultSharedPreferences(context).getBoolean(prefKey(col), col.defaultVisible)
+        if (col.onlyWithValues) col.key !in emptyKeys
+        else PreferenceManager.getDefaultSharedPreferences(context).getBoolean(prefKey(col), col.defaultVisible)
 
     private fun visibleColumns(): List<Column> = columns.filter { isVisible(it) }
 
@@ -414,22 +426,33 @@ class Js8TableView @JvmOverloads constructor(
             }.show()
     }
 
-    /** PC buildShowColumnsMenu: the two label options, then the columns. */
+    /**
+     * PC buildShowColumnsMenu: Show Column Labels, Minimal Column Labels, a line, then the columns in
+     * [menuOrder]. A menu, as on the PC: a tick acts at once and the menu closes.
+     */
     fun showColumnChooser() {
         val p = PreferenceManager.getDefaultSharedPreferences(context)
-        val labels = (listOf("Show Column Labels", "Minimal Column Labels") + columns.map { it.menuLabel }).toTypedArray()
-        val checked = (listOf(showLabels(), minimalLabels()) + columns.map { isVisible(it) }).toBooleanArray()
-        AlertDialog.Builder(context)
-            .setTitle("Show Columns")
-            .setMultiChoiceItems(labels, checked) { _, which, isChecked -> checked[which] = isChecked }
-            .setPositiveButton(android.R.string.ok) { _, _ ->
-                val editor = p.edit().putBoolean(labelsKey(), checked[0]).putBoolean(MINIMAL_KEY, checked[1])
-                columns.forEachIndexed { i, c -> editor.putBoolean(prefKey(c), checked[i + 2]) }
-                editor.apply()
-                rebuildHeader()
+        val menu = android.widget.PopupMenu(android.view.ContextThemeWrapper(context, R.style.ThemeOverlay_Js8PopupMenu),
+            if (header.isShown) header else list)
+        val m = menu.menu
+        androidx.core.view.MenuCompat.setGroupDividerEnabled(m, true)
+        m.add(0, 0, 0, "Show Column Labels").apply { isCheckable = true; isChecked = showLabels() }
+        m.add(0, 1, 1, "Minimal Column Labels").apply { isCheckable = true; isChecked = minimalLabels() }
+        val listed = menuOrder?.mapNotNull { k -> columns.firstOrNull { it.key == k } } ?: columns.filter { !it.onlyWithValues }
+        listed.forEachIndexed { i, c -> m.add(1, 2 + i, 2 + i, c.menuLabel).apply { isCheckable = true; isChecked = isVisible(c) } }
+        menu.setOnMenuItemClickListener { item ->
+            val on = !item.isChecked
+            val e = p.edit()
+            when (item.itemId) {
+                0 -> e.putBoolean(labelsKey(), on)
+                1 -> e.putBoolean(MINIMAL_KEY, on)
+                else -> e.putBoolean(prefKey(listed[item.itemId - 2]), on)
             }
-            .setNegativeButton(android.R.string.cancel, null)
-            .show()
+            e.apply()
+            rebuildHeader()
+            true
+        }
+        menu.show()
     }
 
     private inner class RowHolder(val rowView: LinearLayout) : RecyclerView.ViewHolder(rowView)

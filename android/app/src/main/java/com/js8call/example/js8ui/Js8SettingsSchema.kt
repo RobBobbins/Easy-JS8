@@ -68,6 +68,8 @@ object Js8SettingsSchema {
         val visible: (Draft) -> Boolean = { true },
         /** Reads the stored value as a string. Default: the key's own stored value. */
         val load: (SharedPreferences) -> String = { p -> readAny(p, key, default) },
+        /** Choices shown greyed in the list for the unsaved values (PC: a disabled combo box item). */
+        val greyedChoices: (Context, Draft) -> Set<String> = { _, _ -> emptySet() },
         /** Writes the value. Default: string or boolean under the key. */
         val save: (SharedPreferences.Editor, String, Context) -> Unit = { e, v, _ ->
             if (kind == Kind.CHECK) e.putBoolean(key, v == "true") else e.putString(key, v)
@@ -175,11 +177,21 @@ object Js8SettingsSchema {
         (d.values["js8cfg_ptt_port"] ?: d.prefs.getString("js8cfg_ptt_port", "cat")) == "cat" &&
         (d.values["js8cfg_handshake"] ?: d.prefs.getString("js8cfg_handshake", "default")) == "hardware"
 
-    /** PC set_rig_invariants: Test CAT needs a rig, Test PTT also a PTT Method other than VOX. */
-    fun rigTestEnabled(d: Draft, action: String): Boolean {
+    /**
+     * PC set_rig_invariants: Test CAT needs a rig. Test PTT stays greyed until Test CAT is green, then keys by
+     * CAT (a rig that has CAT PTT), DTR or RTS (handle_transceiver_update 4515-4521); RTS PTT is the PC's Rig None
+     * with PTT on RTS, Test PTT without CAT (2831-2833).
+     */
+    fun rigTestEnabled(d: Draft, action: String, catOk: Boolean?): Boolean {
         if (rigIs(d, "none")) return false
-        if (action == "test_cat" || rigIs(d, "trusdx_serial", "qmx_serial", "btech_uvpro", "rts_ptt")) return true
-        return (d.values["js8cfg_ptt_method"] ?: d.prefs.getString("js8cfg_ptt_method", "vox")) != "vox"
+        if (action == "test_cat" || rigIs(d, "rts_ptt")) return true
+        if (catOk != true) return false
+        if (rigIs(d, "trusdx_serial", "qmx_serial", "btech_uvpro")) return true
+        return when (pttMethod(d)) {
+            "cat" -> catPtt(d)
+            "dtr", "rts" -> true
+            else -> false
+        }
     }
 
     private fun rigIs(d: Draft, vararg types: String): Boolean {
@@ -386,8 +398,8 @@ object Js8SettingsSchema {
                 text("js8cfg_mfi", "Missing Frame Character Indicator:", "……")
             )),
             Group("Heartbeat (HB)", listOf(
-                // JS8Android default kept at Disabled (0) so a new install never transmits on its own
-                spin("heartbeat_interval", "Heartbeat interval:", 0, 0.0, 1440.0, step = 5.0, prefix = "every ", suffix = " minutes", special = "Disabled")
+                // PC every 30 minutes (Configuration.cpp 2409)
+                spin("heartbeat_interval", "Heartbeat interval:", 30, 0.0, 1440.0, step = 5.0, prefix = "every ", suffix = " minutes", special = "Disabled")
             ))
         )),
         Section("General", "Networking & Autoreply", listOf(
@@ -475,10 +487,14 @@ object Js8SettingsSchema {
         Section("Audio", null, listOf(
             Group("Modulation Soundcard", listOf(
                 Field("last_audio_device_id", "Input:", Kind.AUDIO_INPUT, "-1"),
-                choice("js8cfg_input_channel", "Input channel:", "Mono", same("Mono", "Left", "Right")),
+                Field("js8cfg_input_channel", "Input channel:", Kind.CHOICE, "Mono", choices = { _, _ -> same("Mono", "Left", "Right", "Both") },
+                    greyedChoices = { c, d -> com.js8call.example.ui.AudioDevices.greyedChannels(c,
+                        d.values["last_audio_device_id"] ?: com.js8call.example.ui.AudioDevices.selected(c).id.toString(), true) }),
                 Field("js8cfg_output_device", "Output:", Kind.CHOICE, "default",
                     choices = { c, _ -> listOf("Phone's current audio output" to "default") + com.js8call.example.ui.AudioDevices.outputs(c).map { it.name to it.id.toString() } }),
-                choice("js8cfg_output_channel", "Output channel:", "Mono", same("Mono", "Left", "Right", "Both"))
+                Field("js8cfg_output_channel", "Output channel:", Kind.CHOICE, "Mono", choices = { _, _ -> same("Mono", "Left", "Right", "Both") },
+                    greyedChoices = { c, d -> com.js8call.example.ui.AudioDevices.greyedChannels(c,
+                        d.values["js8cfg_output_device"] ?: d.prefs.getString("js8cfg_output_device", "default"), false) })
             )),
             Group("Notification Soundcard", listOf(
                 Field("js8cfg_notification_output", "Output:", Kind.CHOICE, "default",
@@ -512,7 +528,7 @@ object Js8SettingsSchema {
                 check(Js8Api.KEY_DYNAMIC_INFO, "Allow setting station information (Grid, Info, Status, etc) from the APIs", false),
                 text(Js8Api.KEY_UDP_SERVER, "UDP Server Hostname:", "127.0.0.1"),
                 check(Js8Api.KEY_UDP_ENABLED, "Enable UDP Server API", false),
-                spin(Js8Api.KEY_UDP_PORT, "UDP Server Port:", 2242, 0.0, 65534.0),
+                spin(Js8Api.KEY_UDP_PORT, "UDP Server Port:", 2242, 0.0, 65535.0), // PC raises the ui's 65534 (cpp 1517-1519)
                 check(Js8Api.KEY_UDP_ACCEPT, "Accept UDP Requests", false),
                 text(Js8Api.KEY_TCP_SERVER, "TCP Server Hostname:", "127.0.0.1"),
                 check(Js8Api.KEY_TCP_ENABLED, "Enable TCP Server API", false),

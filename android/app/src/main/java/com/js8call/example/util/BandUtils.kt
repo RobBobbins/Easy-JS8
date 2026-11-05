@@ -14,6 +14,19 @@ object BandUtils {
         fallbackStyle: FallbackStyle = FallbackStyle.FLOOR_MHZ
     ): String {
         val mhz = frequencyHz.toDouble() / 1_000_000.0
+        return bandOrNull(frequencyHz) ?: when (fallbackStyle) {
+            FallbackStyle.FLOOR_MHZ -> String.format(Locale.US, "%dmhz", floor(mhz).toInt())
+            FallbackStyle.ONE_DECIMAL_MHZ -> String.format(Locale.US, "%.1fMHz", mhz)
+        }
+    }
+
+    /** PC Radio::pretty_frequency_MHz_string: "7.078 000" with a no-break space before the last 3 digits. */
+    fun prettyMhz(frequencyHz: Long): String =
+        String.format(Locale.US, "%.6f", frequencyHz / 1_000_000.0).let { it.dropLast(3) + "\u00A0" + it.takeLast(3) }
+
+    /** PC Bands::find: the band name, or null outside the 30 bands. */
+    fun bandOrNull(frequencyHz: Long): String? {
+        val mhz = frequencyHz.toDouble() / 1_000_000.0
         return when {
             // PC Bands.cpp
             mhz in 0.136..0.137 -> "2190m"
@@ -46,10 +59,7 @@ object BandUtils {
             mhz in 119980.0..120020.0 -> "2.5mm"
             mhz in 142000.0..149000.0 -> "2mm"
             mhz in 241000.0..250000.0 -> "1mm"
-            else -> when (fallbackStyle) {
-                FallbackStyle.FLOOR_MHZ -> String.format(Locale.US, "%dmhz", floor(mhz).toInt())
-                FallbackStyle.ONE_DECIMAL_MHZ -> String.format(Locale.US, "%.1fMHz", mhz)
-            }
+            else -> null
         }
     }
 }

@@ -186,9 +186,9 @@ class TransmitViewModel(application: Application) : AndroidViewModel(application
     }
 
     /**
-     * Get next message to transmit.
+     * Get next message to transmit: the first one [ready] allows.
      */
-    fun getNextMessage(): TransmitMessage? {
-        return txQueue.firstOrNull()
+    fun getNextMessage(ready: (TransmitMessage) -> Boolean = { true }): TransmitMessage? {
+        return txQueue.firstOrNull(ready)
     }
 }

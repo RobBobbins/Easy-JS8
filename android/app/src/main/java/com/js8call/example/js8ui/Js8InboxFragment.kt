@@ -24,7 +24,8 @@ import kotlinx.coroutines.launch
 class Js8InboxFragment : Fragment() {
 
     companion object {
-        /** PC MessagePanel::setCall: only that call's messages, title "Messages: CALL". */
+        /** PC MessagePanel::setCall: only that call's messages. The title stays "Message Inbox", the PC dock's
+         *  (mw 115); the panel's "Messages: CALL" is not shown inside the dock (MessagePanel.cpp 75). */
         const val ARG_CALL = "call"
     }
 
@@ -41,7 +42,6 @@ class Js8InboxFragment : Fragment() {
         val replyText = view.findViewById<EditText>(R.id.js8_inbox_reply_text)
         Js8Inbox.setColumns(table)
         val call = arguments?.getString(ARG_CALL)
-        if (call != null) view.findViewById<TextView>(R.id.js8_inbox_title).text = "Messages: $call"
         view.findViewById<View>(R.id.js8_inbox_back).setOnClickListener { findNavController().popBackStack() }
         repository.getAllMessages().observe(viewLifecycleOwner) { all ->
             messages = Js8Inbox.incoming(all).filter { call == null || Js8Inbox.isFor(it, call) }

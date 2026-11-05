@@ -42,6 +42,15 @@ class JS8Engine private constructor(
         }
 
         /**
+         * PC TransmitTextEdit normalizeText (JS8_ALLOW_EXTENDED), run on every Typing Box change: upper
+         * case, then newline, 0x10, 0x1A and characters 32-127 only (the JSC one-character entries are all
+         * in that set). Every PC message passes the Typing Box; the frame builder never finishes on a
+         * character it can't pack.
+         */
+        fun normalizeText(text: String): String =
+            text.uppercase(java.util.Locale.US).filter { it == '\n' || it == '\u0010' || it == '\u001A' || it.code in 32..127 }
+
+        /**
          * Text of each part (frame) the message would be sent as, as a receiver would show it
          * (PC BuildMessageFramesThread). No engine needed: the Status Bar wpm box uses it while typing.
          */
@@ -52,7 +61,7 @@ class JS8Engine private constructor(
             selectedCall: String,
             submode: Int,
             forceIdentify: Boolean
-        ): List<String> = nativeBuildFrameTexts(text, myCall, myGrid, selectedCall, submode, forceIdentify).toList()
+        ): List<String> = nativeBuildFrameTexts(normalizeText(text), myCall, myGrid, selectedCall, submode, forceIdentify).toList()
 
         /** PC JSCChecker::checkRange: false = the word would be underlined. */
         fun jscCorrect(word: String): Boolean = nativeJscCorrect(word)
@@ -186,7 +195,7 @@ class JS8Engine private constructor(
      */
     /** PC typeahead: the parts not yet started become [text]. False when a new part started first. */
     fun replaceUnsentText(text: String, myCall: String, myGrid: String, selectedCall: String, submode: Int, framesStarted: Int): Boolean =
-        withNativeHandleOr(false) { nativeReplaceUnsentText(it, text, myCall, myGrid, selectedCall, submode, framesStarted) }
+        withNativeHandleOr(false) { nativeReplaceUnsentText(it, normalizeText(text), myCall, myGrid, selectedCall, submode, framesStarted) }
 
     fun transmitMessage(
         text: String,
@@ -202,7 +211,7 @@ class JS8Engine private constructor(
         return withNativeHandle { handle ->
             nativeTransmitMessage(
                 handle,
-                text,
+                normalizeText(text),
                 myCall,
                 myGrid,
                 selectedCall,
@@ -485,6 +494,12 @@ class JS8Engine private constructor(
             mode: Int,
             driftMs: Int
         )
+
+        /**
+         * The decode's 12-character on-air frame, just before its [onDecoded] on the same thread
+         * (PC DecodedText frame_, the ALL.TXT frame column).
+         */
+        fun onDecodedFrame(frame: String) {}
 
         /**
          * Called with spectrum/waterfall data.

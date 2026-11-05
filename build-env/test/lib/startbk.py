@@ -6,11 +6,13 @@ exec(open('ui7.py', encoding='utf8').read().split("row_list = [")[0].replace('""
 
 
 def status():
+    """RX on: Decoding or Receiving. RX off: the label is empty (PC guiUpdate, not monitoring)."""
     reach('js8_status_state'); w = html.unescape(x())
-    for s in ('Decoding', 'Receiving', 'Idle'):
+    for s in ('Decoding', 'Receiving'):
         if f'text="{s}"' in w:
-            return 'on' if s != 'Idle' else 'off'
-    return '?'
+            return 'on'
+    m = re.search(r'<node [^>]*text="([^"]*)"[^>]*resource-id="[^"]*js8_status_state"', w)
+    return 'off' if m and m.group(1) == '' else '?'
 
 
 def txpref():

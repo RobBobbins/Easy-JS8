@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- PC CAT button state "warning" while the rig opens (mainwindow.ui: Qt orange) -->
+<shape xmlns:android="http://schemas.android.com/apk/res/android" android:shape="rectangle">
+    <solid android:color="#FFA500" />
+    <corners android:radius="4dp" />
+</shape>

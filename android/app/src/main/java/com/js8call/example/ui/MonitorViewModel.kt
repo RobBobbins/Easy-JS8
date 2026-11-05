@@ -75,9 +75,14 @@ class MonitorViewModel(application: Application) : AndroidViewModel(application)
     /**
      * Update whether rig control has a live link to the radio.
      */
-    fun updateRigConnected(connected: Boolean) {
+    fun updateRigConnected(connected: Boolean, opening: Boolean = false) {
+        rigOpening = opening
         _rigConnected.value = connected
     }
+
+    /** The rig is being opened (PC rigOpen); read with [rigConnected]. */
+    var rigOpening = false
+        private set
 
     /**
      * Update spectrum data from engine.

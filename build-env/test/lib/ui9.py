@@ -134,7 +134,7 @@ def m27():
     tap_n(after('Input channel:', 'clickable="true"'))
     w = html.unescape(x())
     t_ = re.findall(r' text="([^"]+)"', w)
-    return 'Mono' in t_ and 'Left' in t_ and 'Right' in t_ and 'Both' not in t_, t_[:6]
+    return 'Mono' in t_ and 'Left' in t_ and 'Right' in t_ and 'Both' in t_, t_[:6]  # N23: the PC lists Both, greyed
 
 
 def freq_rows():

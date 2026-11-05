@@ -31,8 +31,9 @@
 
     <color name="js8_ruler_bg">#FFFFFF</color>
     <color name="js8_ruler_text">#000000</color>
-    <color name="js8_ruler_band_yellow">#F2C300</color>
-    <color name="js8_ruler_band_green">#2ECC40</color>
+    <!-- PC CPlotter BAND_WARN / BAND_GOOD -->
+    <color name="js8_ruler_band_yellow">#F1C40F</color>
+    <color name="js8_ruler_band_green">#2ECC71</color>
 
     <!-- Window frame: follows phone dark mode (values-night overrides) -->
     <color name="js8_frame_bg">#F0F0F0</color>

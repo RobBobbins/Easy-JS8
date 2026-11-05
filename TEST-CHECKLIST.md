@@ -164,7 +164,7 @@ From 2026-11-01 the test build's engine is compiled at -O3, the same as release.
 |---|---|---|---|---|
 | G01 | ALL.TXT received lines | Pass | Pass |  |
 | G02 | ALL.TXT transmitted lines | Pass | Pass |  |
-| G03 | ALL.TXT frequency-change line | Pass | Pass |  |
+| G03 | ALL.TXT frequency-change line | Pass | Pass | Retired 2026-11-05: the PC writes no line at a frequency change (audit B N31); W112 checks the date line |
 | G04 | ALL.TXT start-of-day header | Pass | Pass |  |
 | G05 | DIRECTED.TXT line after whole message | Pass | Pass |  |
 | G06 | Write log files unticked: nothing written | Pass | Pass |  |
@@ -349,6 +349,79 @@ These rows and W19-W33 ran through the network rigctl choice, which was removed 
 | W53 | Same out of wlan0 | Failed | Failed | wmcast.py: 0 packets both runs, no send error in the app log; the emulator's simulated Wi-Fi may not pass multicast (not proven). Retry on the phone on real Wi-Fi |
 | W54 | Station > Radio sideways, rig picked (Icom IC-7300) and Rig None: Rig Options on its own row | Pass | Pass | radioend.py, pagepic.py, PC and FT8Call. Was: Rig Options squeezed at the right edge of row 1, PTT Method cut off. Fix (2026-11-04): Rig Options always starts its own row; PTT Port: sits under PTT Method (as in the PC's PTT Method box). Row 1 Rig / Port / Parameters; row 2 PTT Method, Mode, Split Operation; row 3 Transmit Audio Source, Advanced |
 | W55 | Station > Audio sideways packed layout fits (PC, FT8Call) | Pass | Pass | pagepic.py pictures, checked by eye |
+| W56 | Paste into the Typing Box (Windows clipboard, KEYCODE_PASTE): upper case, only newline, 0x10, 0x1A and 32-127 kept (PC TransmitTextEdit normalizeText). Audit B N42 | Pass | Pass | n42chk.py: "hello 20°C café", tab, "ok 😀 line" shows "HELLO 20C CAFOK  LINE" |
+| W57 | TX.SET_TEXT into the Typing Box: same rule, newline kept as on the PC | Pass | Pass | n42chk.py |
+| W58 | Lower-case key events (hardware keyboard) show in capitals | Pass | Pass | n42chk.py |
+| W59 | Send with ° in the box: goes out without it, the next message goes out too, no busy CPU | Pass | Pass | n42chk.py: app CPU 1.0-1.8 s per 5 s, as with an empty box. Before the fix the frame builder never finished |
+| W60 | API TX.SEND_MESSAGE with ° and é: sent without them, the next message goes out too | Pass | Pass | n42chk.py |
+| W61 | Send "K1ABC: N45" goes out as text, "K1ABC N45B" as a directed message to K1ABC (PC directed pattern: no colon, no space before). Audit B N45 | Pass | Pass | n48chk.py: the engine's build_message_frames log lines, DAT for the colon line, DIR to K1ABC for the other |
+| W62 | Send "`K1ABC/P SNR? N46": compound frame for "`K1ABC/P SNR?", then " N46" as text (PC matches the start of the line). Audit B N46 | Pass | Pass | n48chk.py: CMP, then DAT. Before the fix the whole line went out as text, backtick included |
+| W63 | Call selected, Typing Box "FN42 N47": goes out as "K4xxx FN42 N47", directed to the selected call (PC callsign search skips grids). Audit B N47 | Pass | Pass | n48chk.py: DIR to the selected call, "FN42 N47" as text. Before the fix it went to "FN42" |
+| W64 | Free text to a call over two frames ("K4xxx: K1ABC", then "N48 FREE TEXT"): one DIRECTED.TXT line and one RX.DIRECTED at the last frame, "K1ABC  N48 FREE TEXT ♢ " with two spaces, CMD " ", as the PC. Audit B N48 | Pass | Pass | n48chk.py, injected decodes, RX.DIRECTED over a TCP API connection. Before the fix nothing was written |
+| W65 | ACK and SNR -05 with a frame after them: nothing at the first frame; at the last, "K1ABC ACK N48 ACK TEXT ♢ " and "K1ABC SNR -05 N48 SNR TEXT ♢ " (PC waits for the last frame for every command but "?"). Audit B N48 | Pass | Pass | n48chk.py. Before the fix they went out at the first frame without the text |
+| W66 | Unchanged: a one-frame ACK and a CQ with frames after it go out at once; a data frame is never free text to a call | Pass | Pass | n48chk.py |
+| W67 | Screen off (power key): SNR? is answered, and a call heard with the screen off is in the Callsigns list after waking (PC answers with its monitor off). Audit B N51 | Pass | Pass | s1chk.py |
+| W68 | HEARING? lists the Callsigns list; after long-press **Remove This Station** the removed call is no longer in the reply (PC m_callActivity). Audit B line 37 | Pass | Pass | s1chk.py; the reply after the removal leaves out the removed call. 2026-11-05 regression: W68 and W69 failed twice, the menu (taller with the N5 lines) ran past the screen; s1chk.py now scrolls it, both passed twice |
+| W69 | QUERY CALL for the removed call: no reply; for a kept call: YES. Audit B line 37 | Pass | Pass | s1chk.py |
+| W70 | Relay to my group (`@TESTG>`): ACKed, not forwarded (PC pCA 424). Audit B line 55 | Pass | Pass | s1chk.py; air2.py D10 changed to expect the ACK |
+| W71 | AUTO off: SNR? reply goes into the Typing Box, not sent; **Send** sends it; a heartbeat gets no HB ACK. Audit B N1 | Pass | Pass | s1chk.py |
+| W72 | A queued reply waits while the Typing Box has text, and goes out once the box is empty. Audit B N2 | Pass | Pass | s1chk.py |
+| W73 | Timed heartbeat waits while the Typing Box has text (100 s), and goes out once the box is empty. Audit B line 67 | Pass | Pass | s1chk.py, Heartbeat interval 1 min |
+| W74 | MSG over three frames drifting 1500 / 1508 / 1516 Hz: one ACK and one full DIRECTED.TXT line. Audit B N3 | Pass | Pass | s1chk.py |
+| W75 | Relay over three drifting frames is forwarded; a relay with no last frame is forwarded 60 s after its last frame, not before 50 s. Audit B N4 | Pass | Pass | s1chk.py; the open relay went out 68 s and 69 s after its first frame |
+| W76 | `@JS8NET` MSG drifting, and one with no last frame: both reach JS8NET. Audit B N4 | Pass | Pass | s1chk.py, fakespot.py on the PC |
+| W77 | Directed menu on @ALLCALL: SNR? INFO? GRID? STATUS? HEARING? `>` MSG and MSG TO: greyed; QUERY CALL, QUERY MSGS, QUERY MSG, AGN?, QSL?, HW CPY? live (PC BQ 115-245). Lines after the first item, GRID and QUERY MSG [ID]. Audit B section 2, N5 | Pass | Pass | s27chk.py; the lines checked by eye (w77, w77b screenshots) |
+| W78 | **Log...** greyed on @ALLCALL, live on @TESTG (PC UC 1284-1285). Audit B section 2 | Pass | Pass | s27chk.py |
+| W79 | Double-tap a Call Activity row: the call goes in the Typing Box with no space after it (PC mw 5101-5104). Audit B N6 | Pass | Pass | s27chk.py |
+| W80 | Saved message with `<MYHB>` is shown as "HB" and the 4-character grid; two spaces kept (PC mainwindow.h 793-798). Audit B section 4, N8 | Pass | Pass | s27chk.py |
+| W81 | Upright: **Send** greyed while a heartbeat waits and goes out with text in the Typing Box; live again after (PC mw 5863-5890). Audit B N9 | Pass | Pass | s27chk.py; upright shows "Ready" with no time, cut to fit |
+| W82 | **Heartbeat interval:** every 30 minutes with the setting removed: API STATION.GET_CONFIG and the HB button's menu (**Repeat every 30 minutes** ticked). PC cpp 2409. Audit B section 3 | Pass | Pass | s27chk.py |
+| W83 | Frequency menu: **Set a Custom Frequency...** first, rows like "20m:    14.078 000 MHz" (PC mw 4283-4302). Audit B N10 | Pass | Pass | s27chk.py, PC layout |
+| W84 | CAT orange while the rig opens (PC rigOpen, mainwindow.ui 1485); **Rig Control Error** box asks only "Do you want to reconfigure the radio interface?", the reason under **Show Details...** / **Hide Details...** (PC UC 97-98). Audit B section 5, N11 | Pass | Pass | s27chk.py; Hamlib model 2 at an address that does not answer |
+| W85 | RX off: status label empty, no colour; RX on: Receiving (PC mw 2761-2763). Audit B section 5 | Pass | Pass | s27chk.py |
+| W86 | **Show Message Inbox...** from a Call Activity row: title "Message Inbox" (PC mw 115), that call's message listed. Audit B section 5 | Pass | Pass | s27chk.py |
+| W87 | Press and hold below the rows: the whole Call Activity and Band Activity menus, items needing a call greyed, **Saved Messages...** live (PC UC 1018-1022, 1290-1296). Audit B section 5 | Pass | Pass | s27chk.py |
+| W88 | Header callsign: the call alone with **Allow setting station information (Grid, Info, Status, etc) from the APIs** off; "CALL - GRID" with it on; an API grid shown (PC mw 2766-2771). Audit B N43 | Pass | Pass | s27chk.py |
+| W89 | A band change empties the Typing Box and greys **Restore Previous Message** (PC mw 1279-1285, 2970-3014). Audit B N15 | Pass | Pass | s27chk.py |
+| W90 | ⚑ only for unread messages to my call, not to a group; after a restart the sender's row is added from the message with its SNR (PC mw 6279-6314). Audit B N16 | Pass | Pass | s27chk.py; SNR read with RX.GET_CALL_ACTIVITY, the upright SNR cell is off screen. Failed once (pass 2): the script reused call names and a swipe opened a menu; script fixed, then passed 4 more times |
+| W91 | **Callsigns (N)** counts the calls inside **Callsign aging** only (PC mw 3042-3054). Audit B N17 | Pass | Pass | s27chk.py |
+| W92 | ★ column shown only while a row has an icon (PC displayCallActivity 257-258). Audit B N18 | Pass | Pass | s27chk.py |
+| W93 | **Show Call Activity Columns...** and **Show Band Activity Columns...**: the PC list and order, a tick acts at once (PC mw 4669-4694). Audit B N19 | Pass | Pass | s27chk.py; the SNR tick read from its setting, the upright SNR column is off screen |
+| W94 | Blocked station: its later frames at the exact offset stay hidden until its last frame, also when its first frame is a directed message; a frame 3 Hz away and the next station are shown (PC mw 3106-3131). Audit B section 6 | Pass | Pass | s27chk.py; found an app bug in the shakedown, fixed |
+| W95 | Colours: scale #F1C40F and #2ECC71, spectrum top #000080, grid dots #808080 (PC CP 65-66, 431, 438). Audit B N20 | Pass | Pass | s27chk.py, pixel counts |
+| W96 | **Control** menu in PC order; **Send Heartbeat...** is a menu (nothing sent on opening); **Set Focus...** > **Message Reply Area** focuses the Typing Box; **Set Offset...** box titled "Set Frequency Offset". Audit B N13 | Pass | Pass | s27chk.py, PC layout |
+| W97 | **Control** > **Clear Activity...** > **Clear All Activity** clears at once, no question (PC mw 829-831). Audit B N12 | Pass | Pass | s27chk.py, PC layout |
+| W98 | **View** menu in PC order; **Show Band Heartbeats and ACKs** in it and toggles. Audit B N14 | Pass | Pass | s27chk.py, PC layout |
+| W99 | Clone names "Default - Copy", then "Default - Copy(2)" (PC MultiSettings.cpp 594-603). Audit B N7 | Pass | Pass | s27chk.py, PC layout |
+| W100 | Power slider moves when TUNE changes the power with **Remember power settings by band** (PC mw 4252, 5180, 5204). Audit B section 5 | Pass | Pass | s27chk.py, PC layout |
+| W101 | Signal meter scale 0-100, labels 90 70 50 30 10 (PC SignalMeter.cpp 25, 146-154). Audit B section 5 | Pass | Pass | s27chk.py, checked by eye; red on the loudest sample read only, not run |
+| W102 | Names: **Sort Call Activity By...**, **Edit Saved Messages**. Audit B section 5 names | Pass | Pass | s27chk.py |
+| W103 | PC layout: **Send** greyed, "Ready (Ns)" counting down while a heartbeat waits (PC mw 5875-5878). Audit B section 5, N9 | Pass | Pass | s27chk.py |
+| W104 | Idle timeout: label "Idle timeout" black with white text while the **Idle Timeout** box is open; Receiving after **OK** (PC mw 6912-6960, styles.h 109-110). Audit B section 5 | Pass | Pass | s27chk.py, Idle timeout 5 min |
+| W105 | **QSY** moves every Call Activity offset by the dial change, as Band Activity (PC mw 5357-5361). Audit B N21 | Pass | Pass | s812chk.py, PC layout |
+| W106 | **UDP Server Port:** takes 65535 (PC cpp 1517-1519). Audit B N26 | Pass | Pass | s812chk.py |
+| W107 | Frequencies table: one **Frequency** column "7.078 000 MHz (40m)", "OOB" outside the 30 bands, no Frequency (MHz) column; Schedule "7.078 000 MHz" (PC cpp 1639-1640, FrequencyList.cpp 356-359, StationList.cpp 279-281). Audit B N27 | Pass | Pass | s812chk.py |
+| W108 | **Rename ...**: "New Configuration Name", "Old name:" with the name, an empty "New name:" box, OK greyed at the start and for a name in use, / and \ blocked (PC MultiSettings.cpp 66-110). Audit B N28 | Pass | Pass | s812chk.py, PC layout |
+| W109 | Control characters refused in Reply, CQ, Status, Info and Callsign Groups; the whitelist box keeps a pasted tab (PC cpp 207, 1491-1504). Audit B section 10 | Pass | Pass | s812chk.py, a tab pasted from the PC clipboard |
+| W110 | Idle timeout 2 minutes: used until the next start (box after about 2 minutes), raised to 5 at the start (PC cpp 2410-2412, 3351). Audit B N25 | Pass | Pass | s812chk.py |
+| W111 | ALL.TXT decode line: period time, SNR right after it, the 12-character frame, 4 spaces before the text (PC DecodedText.cpp 326, 340). Audit B N29 | Pass | Pass | s812chk.py, real audio |
+| W112 | ALL.TXT date line before the first decode after **Erase ALL.TXT**, not before a later decode or a transmit line (PC mw 2104-2105, 2188, 4227, 7032-7038). Audit B N31 | Pass | Pass | s812chk.py, real audio |
+| W113 | ALL.TXT: each transmit line holds the text of its own frame (PC mw 2667-2670, 6994-7009). Audit B N30 | Pass | Pass | s812chk.py |
+| W114 | Relay in DIRECTED.TXT and RX.DIRECTED: "K4YYY> K4ZZZ HELLO" (PC pCA 131, Varicode.cpp 50-118). Audit B N49 | Pass | Pass | s812chk.py |
+| W115 | Unfinished message: written 60 s after its latest frame when a text frame came, with no new decode; one frame only, not written (PC processBufferedActivity.cpp 18-40). Audit B N50 | Pass | Pass | s812chk.py |
+| W116 | DIRECTED.TXT time from the drifted clock (PC mw 7062). Audit B N32 | Pass | Pass | s812chk.py, drift +90 s |
+| W117 | TDRIFT: the clock drift on Normal and Slow with auto sync on, in RX.ACTIVITY and RX.DIRECTED; the decode's offset on Fast or with auto sync off (PC WG 369-376, pDE 312-314). Audit B N33 | Pass | Pass | s812chk.py, injected decodes |
+| W118 | STATION.SET_GROUPS checks the names as sent: "@w118x", "@ALLCALL/X", "@aprsis" "Invalid group name", "@APRSIS" "Group not allowed" (PC networkMessage.cpp 466-482). Audit B N34 | Pass | Pass | s812chk.py |
+| W119 | Spot after a dial change waits 4/5 of a period, with the dial at decode, on the API (RX.SPOT) and to PSK Reporter (PC mw 6529-6575). Audit B N35 | Pass | Pass | s812chk.py, real audio, fakepsk.py |
+| W120 | PSK Reporter: sequence 1, 2 per packet; drifted export time; sends with an empty grid; turning spotting off sends what waits (PC PSKReporter.cpp 448, 572-573; mw 1044-1047). Audit B N38, N41 | Pass | Pass | s812chk.py, fakepsk.py, empty grid with SWL on |
+| W121 | PSK Reporter with no spots: nothing at 2, 4 and 6 minutes; the 4th report time (about 8 minutes) sends the station record (PC PSKReporter.cpp 50-52, 425-427, 505-556). Audit B N37 | Pass | Pass | s812chk.py, fakepsk.py, 9 minutes |
+| W122 | Station OK checks: End of Transmission first; a stray comma and ABCDEF refused as groups, @ABCDEF taken, each group in turn; "K1ABC K2DEF" refused, "K1ABC,K2DEF" taken; a greyed PTT Method refused (PC cpp 2915-3043). Audit B N24 | Pass | Pass | s812chk.py |
+| W123 | INFO? and STATUS? answered when the text is a macro that fills in empty ("<CALL>", no call selected) (PC pCA 340-356). Audit B N54 | Pass | Pass | s812chk.py |
+| W124 | PSK Reporter unit tests: sequence from 1, descriptors in the first 3 packets, every 4th time flushes, eclipse ±6 h, the 30 bands for the 1-hour limit. Audit B N37-N40 | Pass | Pass | PskReporterClientTest.kt in Docker; eclipse dates can't be reached on the phone |
+| W125 | Rename: a name typed and deleted turns OK on (PC MultiSettings.cpp 92-96). Audit B N28 | Pass | Pass | s812chk.py, runs 3 and 4 |
+| W126 | A directed frame's text as the PC: "VE3TST: K4ABC> " (PC DecodedText.cpp tryUnpackDirected). Audit B N55 | Pass | Pass | s812chk.py |
+| W127 | Test PTT greyed until Test CAT is green (Hamlib IC-7300, DTR: before and after a red Test CAT); live with RTS PTT; greyed with None (PC cpp 2831-2840, 4515-4521). Audit B N22 | Pass | Pass | s812chk.py, runs 2 and 5; green Test CAT needs the radio |
+| W128 | Input channel lists Mono, Left, Right, Both, Both greyed; channels greyed by the device; Phone's current audio output keeps only Mono (PC cpp 4747-4783). Audit B N23 | Pass | Pass | s812chk.py |
 | W47 | Cumulative spectrum: the same audio (1000 Hz tone + noise) read at the same second of the minute in the app and in JS8Call on the PC | Pass | Pass | cumchk.py, tone / noise dB at second 28.5: app 49.7 / 19.0, JS8Call 48.1 / 16.4; at 43.5: app 50.4 / 19.7, JS8Call 48.1 / 16.4. App 1.6-2.3 dB higher on the tone, 2.6-3.3 on the noise; Rob: that difference doesn't matter, the function does. Fixed first (2026-11-04): the count Cumulative is divided by now follows JS8Call's dataSink m_ihsym (not reset each cycle), and the line is reduced like CPlotter's RDP (2 px). Before: JS8Call moved 6 dB between runs, the app never did |
 
 ## H. Main window

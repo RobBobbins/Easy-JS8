@@ -59,10 +59,14 @@ class Js8ActivityViewModel(app: Application) : AndroidViewModel(app) {
     private val bandCache = mutableMapOf<String, BandState>()
     private var lastBand = ""
 
-    /** PC cacheActivity / restoreActivity: each band keeps its own lists, Message Window and heard data. */
-    fun bandChanged(band: String) {
-        if (band == lastBand) return
-        if (lastBand.isNotEmpty()) {
+    /**
+     * PC cacheActivity / restoreActivity: each band keeps its own lists, Message Window and heard data.
+     * True when the lists were cleared for a new band (PC updateCurrentBand -> clearActivity).
+     */
+    fun bandChanged(band: String): Boolean {
+        if (band == lastBand) return false
+        val cleared = lastBand.isNotEmpty()
+        if (cleared) {
             bandCache[lastBand] = BandState(activity.toJson().toString(), activity.hearing.toMap(), activity.heardBy.toMap())
             activity.clearBand(); activity.clearCalls(); activity.clearRx()
             bandCache[band]?.let { saved ->
@@ -73,10 +77,17 @@ class Js8ActivityViewModel(app: Application) : AndroidViewModel(app) {
             changed()
         }
         lastBand = band
+        return cleared
     }
 
     /** The Typing Box has nothing in it (kept by Js8MainFragment): only then is an automatic message shown there. */
     var typingBoxEmpty = true
+
+    /**
+     * PC processTxQueue "our message box needs to be empty": nothing typed is in the Typing Box. An automatic
+     * message shown there while it is sent, or text about to be cleared, does not count.
+     */
+    fun typingBoxFree() = typingBoxEmpty || typedClearPending || _typed.value?.auto == true
 
     private val _typed = MutableLiveData<TypedTx?>(null)
     /** Typing Box message waiting or being sent; null = the box is free. */
@@ -90,6 +101,9 @@ class Js8ActivityViewModel(app: Application) : AndroidViewModel(app) {
     /** PC m_txFrameQueue.count(): parts still to go after this one; -1 = nothing on the air. */
     var txFramesLeft = -1
         private set
+    /** PC m_txFrameCount: parts of the message handed to the engine; 0 = none. */
+    var txFrameCount = 0
+        private set
     /** PC last_tx_label: the last frame that finished going out (stopTx). */
     var lastTx = ""
         private set
@@ -101,6 +115,12 @@ class Js8ActivityViewModel(app: Application) : AndroidViewModel(app) {
     fun onTypedQueued(text: String) {
         lastMessage = text
         _typed.value = TypedTx(text)
+    }
+
+    /** The engine built [count] parts and waits for its period (also between parts). */
+    fun onTxQueued(count: Int) {
+        if (count > 0) txFrameCount = count
+        changed()
     }
 
     /** The queue handed [text] to the engine; if it is the typed message, its parts now count. */
@@ -137,6 +157,7 @@ class Js8ActivityViewModel(app: Application) : AndroidViewModel(app) {
         frameOnAir?.let { lastTx = it }
         frameOnAir = null
         txFramesLeft = -1
+        txFrameCount = 0
         if (_typed.value?.onAir == true) clearTyped()
         changed()
     }

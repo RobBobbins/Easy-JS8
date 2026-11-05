@@ -34,7 +34,7 @@ a = c(); t.silent('C02', [f'{a}: {M} MSG HI THERE ZZZ'])
 a = c(); d = c(1); pl = f'{d} HI YOU'
 t.expect('C03', [f'{a}: {M} MSG TO:{pl} {sum16(pl)}'], f'{a} ACK')
 t.expect('B08', [f'{d}: {M} QUERY MSGS'], f'{d} YES MSG ID')
-ids = [re.search(r'MSG ID (\d+)', l).group(1) for l in alltxt() if re.search(f'{d} YES MSG ID', l)]
+ids = next((m for j in tx_joined(alltxt())[1::-1] for m in [re.findall(rf'{d} YES MSG ID (\d+)', j)] if m), [])  # N30: frames joined
 q = f'MSG {ids[-1]}' if ids else 'MSG 0'
 t.silent('C05', [f'{d}: {M} QUERY {q} ZZZ'])
 t.expect('B10', [f'{d}: {M} QUERY {q} {sum16(q)}'], f'{d} MSG')
@@ -55,8 +55,8 @@ fix('D05i', any('RELAY TEXT' in str(m) for m in inbox()), 'Inbox via API')
 a = c(); o = c(1); d = c(2); p = f'MSG TO:{d} VIA YOU *DE* {o}'; t.expect('D06', [f'{a}: {M}> {p} {sum16(p)}'], 'ACK', 16)
 a = c(); o = c(1); p = f'QUERY MSGS *DE* {o}'; t.expect('D07', [f'{a}: {M}> {p} {sum16(p)}'], 'NO', 16)
 a = c(); o = c(1); b = c(2); p = f'QUERY CALL {b} *DE* {o}'; t.expect('D08', [f'{b}: @ALLCALL CQ CQ', f'{a}: {M}> {p} {sum16(p)}'], 'YES', 16)
-a = c(); o = c(1); pl = f'HI PATH *DE* {o}'; t.expect('D09', [f'{a}: {M} MSG {pl} {sum16(pl)}'], f'{a}>{o} ACK|{o}>{a} ACK', 16)
-a = c(); dest = c(1); pl = 'GROUP RELAY'; t.expect('D10', [f'{a}: @TESTG> {dest} {pl} {sum16(dest + " " + pl)}'], dest, 16)
+a = c(); o = c(1); pl = f'HI PATH *DE* {o}'; t.expect('D09', [f'{a}: {M} MSG {pl} {sum16(pl)}'], f'{a} ?> ?{o} ACK|{o} ?> ?{a} ACK', 16)  # N30 frame text: PC "{a}> ", app "{a} >" (audit B N55)
+a = c(); dest = c(1); pl = 'GROUP RELAY'; t.expect('D10', [f'{a}: @TESTG> {dest} {pl} {sum16(dest + " " + pl)}'], f'{a} ACK', 16)  # PC: ACKed, not forwarded
 # buffers
 a = c(); pl = 'A LONG'; b2 = 'MESSAGE HERE'
 t.silent('C08a', [(f'{a}: {M} MSG {pl}', 1500, 1)], a, 7)

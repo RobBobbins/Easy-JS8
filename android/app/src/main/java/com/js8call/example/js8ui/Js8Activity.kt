@@ -283,13 +283,14 @@ class Js8Activity {
     class Config(prefs: SharedPreferences) {
         val myCall = prefs.getString("callsign", "").orEmpty().trim().uppercase()
         val myBase = baseCall(myCall)
-        val groups = prefs.getString("my_groups", "").orEmpty().split(',', ' ')
+        // PC splitGroups and splitWords: commas only (Configuration.cpp 2915-2943)
+        val groups = prefs.getString("my_groups", "").orEmpty().split(',')
             .map { it.trim().uppercase() }.filter { it.startsWith("@") }.toSet()
         // stored as a boolean by Settings OK; read without assuming the type
         val avoidAllcall = prefs.all["js8cfg_avoid_allcall"]?.toString()?.toBoolean() ?: false
         val eot = prefs.getString("js8cfg_eot", "♢").orEmpty().ifEmpty { "♢" }
         val mfi = prefs.getString("js8cfg_mfi", "……").orEmpty()
-        val blocklist = prefs.getString("js8cfg_rx_blocklist", "").orEmpty().split(',', ' ')
+        val blocklist = prefs.getString("js8cfg_rx_blocklist", "").orEmpty().split(',')
             .map { it.trim().uppercase() }.filter { it.isNotEmpty() }.toSet()
 
         fun isToMe(to: String) = myCall.isNotEmpty() && (to == myCall || to == myBase)
@@ -381,9 +382,17 @@ class Js8Activity {
             val isAllCall = directed.to == "@ALLCALL" || directed.to == "@HB"
             val isGroup = directed.to in cfg.groups
             if (toMe || isGroup) bufferedToMe[offset] = now
-            if (blocked(directed.from, cfg)) return true
             // Command display: to me, my groups, or a plain @ALLCALL message (processCommandActivity.cpp)
             val showAllCall = isAllCall && !cfg.avoidAllcall && directed.cmd.isBlank() && !isHeartbeat && !isCq
+            if (blocked(directed.from, cfg)) {
+                // PC displayTextForFreq (mw 3112-3120): a frame it is given from a blocked sender is dropped and its
+                // offset kept, so the message's later frames there stay hidden too. It is given the command display
+                // and the frames near my offset (processCommandActivity 241, processRxActivity 127).
+                if (toMe || isGroup || showAllCall || (!isHeartbeat && !text.contains("<....>") && abs(offset - myOffset) <= range)) {
+                    blockedOffsets += offset
+                }
+                return true
+            }
             if (toMe || isGroup || showAllCall) {
                 writeRx(text, offset, now, isTx = false, newLine = true, isLast = isLast, cfg = cfg)
                 return true
@@ -406,10 +415,11 @@ class Js8Activity {
             blockedOffsets += offset
             return true
         }
-        // PC displayTextForFreq: continuation frames of a blocked station stay hidden too
-        blockedOffsets.firstOrNull { abs(it - offset) <= range }?.let { blockedAt ->
+        // PC displayTextForFreq: continuation frames of a blocked station stay hidden too, at that exact offset
+        // (m_rxBlockedOffsets.contains(freq), mw 3123)
+        if (offset in blockedOffsets) {
             if (!isLast && !isFirst) return true
-            blockedOffsets -= blockedAt
+            blockedOffsets -= offset
             if (!isFirst) return true
         }
         writeRx(text, offset, now, isTx = false, newLine = isFirst, isLast = isLast, cfg = cfg, isData = m.isDataFrame())
@@ -450,13 +460,14 @@ class Js8Activity {
         }
     }
 
-    /** PC qsy: the rows move by the same amount as the dial. */
+    /** PC qsy: the rows move by the same amount as the dial, Band Activity and Call Activity (mw 5340-5361). */
     fun shiftBand(hzDelta: Int) {
         val moved = bandActivity.entries.filter { it.value.isNotEmpty() }.associate { (off, list) ->
             off - hzDelta to list.apply { this[lastIndex] = last().copy(offset = off - hzDelta) }
         }
         bandActivity.clear()
         bandActivity.putAll(moved)
+        callActivity.values.forEach { it.offset -= hzDelta }
     }
 
     private fun blocked(call: String, cfg: Config) =

@@ -85,6 +85,7 @@ class MainActivity : AppCompatActivity() {
                             processNextTxIfIdle()
                         }
                         JS8EngineService.TX_STATE_QUEUED -> {
+                            js8ActivityViewModel.onTxQueued(intent.getIntExtra(JS8EngineService.EXTRA_TX_FRAME_COUNT, 0))
                             transmitViewModel.setQueued()
                         }
                         JS8EngineService.TX_STATE_STARTED -> {
@@ -184,7 +185,7 @@ class MainActivity : AppCompatActivity() {
                     monitorViewModel.updateAutoDrift(intent.getBooleanExtra(JS8EngineService.EXTRA_AUTO_DRIFT_ON, false))
                 JS8EngineService.ACTION_RIG_STATUS -> {
                     val connected = intent.getBooleanExtra(JS8EngineService.EXTRA_RIG_CONNECTED, false)
-                    monitorViewModel.updateRigConnected(connected)
+                    monitorViewModel.updateRigConnected(connected, intent.getBooleanExtra(JS8EngineService.EXTRA_RIG_OPENING, false))
                 }
             }
         }
@@ -243,7 +244,7 @@ class MainActivity : AppCompatActivity() {
     private val idleReceiver = object : BroadcastReceiver() {
         override fun onReceive(context: Context, intent: Intent) {
             transmitViewModel.clearQueue() // PC resetMessageTransmitQueue
-            showIdleTimeout()
+            if (lifecycle.currentState.isAtLeast(androidx.lifecycle.Lifecycle.State.STARTED)) showIdleTimeout() // else onStart shows it
         }
     }
 
@@ -359,30 +360,10 @@ class MainActivity : AppCompatActivity() {
         Js8Api.activity = js8ActivityViewModel.activity
         Js8Api.host = apiHost
         JS8EngineService.callHeardMs = { call -> js8ActivityViewModel.activity.callActivity[call]?.utcMs }
+        JS8EngineService.callActivityList = { js8ActivityViewModel.activity.callActivity.values.map { it.copy() } }
 
-        // Observe unread count for badge on Messages tab
-        messagesViewModel.totalUnreadCount.observe(this) { count ->
-            val badge = bottomNav.getOrCreateBadge(R.id.navigation_messages)
-            if (count > 0) {
-                badge.isVisible = true
-                badge.number = count
-            } else {
-                badge.isVisible = false
-            }
-        }
-
-        // Check permissions
-        checkPermissions()
-
-        val prefs = PreferenceManager.getDefaultSharedPreferences(this)
-        applyKeepScreenOn(prefs.getBoolean(PREF_KEEP_SCREEN_ON, false))
-    }
-
-    override fun onStart() {
-        super.onStart()
-        val prefs = PreferenceManager.getDefaultSharedPreferences(this)
-        prefs.registerOnSharedPreferenceChangeListener(prefsListener)
-        applyKeepScreenOn(prefs.getBoolean(PREF_KEEP_SCREEN_ON, false))
+        // N51: decodes, replies, the TX queue and the rig keep going with the screen off, as the PC does with its monitor
+        // off. Registered until onDestroy, not onStop.
         val filter = IntentFilter().apply {
             addAction(JS8EngineService.ACTION_DECODE)
             addAction(JS8EngineService.ACTION_QUEUE_TX)
@@ -409,11 +390,37 @@ class MainActivity : AppCompatActivity() {
         LocalBroadcastManager.getInstance(this)
             .registerReceiver(monitorReceiver, monitorFilter)
         LocalBroadcastManager.getInstance(this)
+            .registerReceiver(idleReceiver, IntentFilter(JS8EngineService.ACTION_IDLE_TIMEOUT))
+        txQueueUi.postDelayed(txQueueTicker, 1000)
+
+        // Observe unread count for badge on Messages tab
+        messagesViewModel.totalUnreadCount.observe(this) { count ->
+            val badge = bottomNav.getOrCreateBadge(R.id.navigation_messages)
+            if (count > 0) {
+                badge.isVisible = true
+                badge.number = count
+            } else {
+                badge.isVisible = false
+            }
+        }
+
+        // Check permissions
+        checkPermissions()
+
+        val prefs = PreferenceManager.getDefaultSharedPreferences(this)
+        applyKeepScreenOn(prefs.getBoolean(PREF_KEEP_SCREEN_ON, false))
+    }
+
+    override fun onStart() {
+        super.onStart()
+        val prefs = PreferenceManager.getDefaultSharedPreferences(this)
+        prefs.registerOnSharedPreferenceChangeListener(prefsListener)
+        applyKeepScreenOn(prefs.getBoolean(PREF_KEEP_SCREEN_ON, false))
+        // These two only show a box; onStart shows the one waiting
+        LocalBroadcastManager.getInstance(this)
             .registerReceiver(hopReceiver, IntentFilter(JS8EngineService.ACTION_SCHEDULE_HOP))
         LocalBroadcastManager.getInstance(this)
             .registerReceiver(confirmReceiver, IntentFilter(JS8EngineService.ACTION_AUTOREPLY_CONFIRM))
-        LocalBroadcastManager.getInstance(this)
-            .registerReceiver(idleReceiver, IntentFilter(JS8EngineService.ACTION_IDLE_TIMEOUT))
         showScheduledHop()
         showAutoReplyConfirm()
         showIdleTimeout()
@@ -423,15 +430,9 @@ class MainActivity : AppCompatActivity() {
         PreferenceManager.getDefaultSharedPreferences(this)
             .unregisterOnSharedPreferenceChangeListener(prefsListener)
         LocalBroadcastManager.getInstance(this)
-            .unregisterReceiver(decodeReceiver)
-        LocalBroadcastManager.getInstance(this)
-            .unregisterReceiver(monitorReceiver)
-        LocalBroadcastManager.getInstance(this)
             .unregisterReceiver(hopReceiver)
         LocalBroadcastManager.getInstance(this)
             .unregisterReceiver(confirmReceiver)
-        LocalBroadcastManager.getInstance(this)
-            .unregisterReceiver(idleReceiver)
         closeHopDialog()
         closeConfirmDialog()
         idleDialog?.dismiss()
@@ -446,8 +447,16 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        txQueueUi.removeCallbacks(txQueueTicker)
+        LocalBroadcastManager.getInstance(this)
+            .unregisterReceiver(decodeReceiver)
+        LocalBroadcastManager.getInstance(this)
+            .unregisterReceiver(monitorReceiver)
+        LocalBroadcastManager.getInstance(this)
+            .unregisterReceiver(idleReceiver)
         if (Js8Api.host === apiHost) Js8Api.host = null
         JS8EngineService.callHeardMs = null
+        JS8EngineService.callActivityList = null
         super.onDestroy()
     }
 
@@ -463,6 +472,15 @@ class MainActivity : AppCompatActivity() {
         override fun raise() {
             startActivity(Intent(this@MainActivity, MainActivity::class.java)
                 .addFlags(Intent.FLAG_ACTIVITY_REORDER_TO_FRONT or Intent.FLAG_ACTIVITY_NEW_TASK))
+        }
+    }
+
+    // PC processTxQueue runs once a second (mainwindow.cpp 2800): a reply waiting for the Typing Box goes when it empties
+    private val txQueueUi = android.os.Handler(android.os.Looper.getMainLooper())
+    private val txQueueTicker = object : Runnable {
+        override fun run() {
+            if (!transmitViewModel.queue.value.isNullOrEmpty()) processNextTxIfIdle()
+            txQueueUi.postDelayed(this, 1000)
         }
     }
 
@@ -490,13 +508,31 @@ class MainActivity : AppCompatActivity() {
             return
         }
 
-        val nextMessage = transmitViewModel.getNextMessage()
+        // PC processTxQueue: a queued reply or heartbeat ACK (priority above 0) waits for an empty Typing Box
+        // (mainwindow.cpp 6628-6631). The message sent from the Typing Box, CQ and the API's go as before.
+        val boxFree = js8ActivityViewModel.typingBoxFree()
+        val nextMessage = transmitViewModel.getNextMessage { boxFree || it.priority == 0 }
         android.util.Log.d("MainActivity", "processNextTxIfIdle: nextMessage=$nextMessage")
         if (nextMessage == null) {
             android.util.Log.d("MainActivity", "processNextTxIfIdle: no message in queue")
             return
         }
-        
+
+        // PC: it goes out with AUTO on, or when it is high priority, a heartbeat or an ACK; otherwise it is put
+        // in the Typing Box for you to send (mainwindow.cpp 6650-6664, N1)
+        val prefs = androidx.preference.PreferenceManager.getDefaultSharedPreferences(this)
+        val text = nextMessage.text
+        val sendsNow = nextMessage.priority >= 1000 || text.contains(" HEARTBEAT ") || text.contains(" HB ") ||
+            text.contains(" ACK ") || prefs.getBoolean("autoreply_enabled", false)
+        if (nextMessage.priority > 0 && !sendsNow) {
+            val controller = Js8Api.controller
+            if (controller == null || js8ActivityViewModel.typed.value != null) return // no main screen yet: it waits
+            transmitViewModel.removeFromQueue(nextMessage)
+            val my = prefs.getString("callsign", "").orEmpty().trim().uppercase()
+            controller.setTypingText(if (my.isNotEmpty() && text.startsWith("$my: ")) text.removePrefix("$my: ") else text)
+            return
+        }
+
         // Easy JS8: the Message Window shows each part as it goes out (ACTION_TX_FRAME), not here
         js8ActivityViewModel.onSentToEngine(nextMessage.text)
         transmitViewModel.markSent(nextMessage)

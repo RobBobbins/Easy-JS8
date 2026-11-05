@@ -73,6 +73,13 @@ internal fun findClosestMsgBufferKey(
         ?.first
 }
 
+/** PC hasExistingMessageBuffer(drift = true): the buffer at [key] moves to the offset of its newest frame. */
+internal fun <T> MutableMap<Int, T>.followDrift(key: Int, frequency: Float): Int {
+    val offset = Math.round(frequency)
+    if (offset != key) remove(key)?.let { this[offset] = it }
+    return offset
+}
+
 /**
  * Foreground service for running the JS8 engine in the background.
  *
@@ -192,11 +199,8 @@ class JS8EngineService : Service() {
     private val heartbeatRegex = Regex("^\\s*([^:]+):\\s+@HB\\s+HEARTBEAT\\b", RegexOption.IGNORE_CASE)
     private val cqRegex = Regex("^\\s*[^:]+:\\s+(@ALLCALL\\s+)?CQ\\b", RegexOption.IGNORE_CASE)
     private val notifiedCallsigns = mutableSetOf<String>() // PC m_callActivity: new entries notify once
-    private data class HeardStation(val time: Long, val snr: Int)
-    private val heardCallsigns = mutableMapOf<String, HeardStation>()
     private val allCallReplies = mutableMapOf<String, Long>()
     private val recentOffsets = mutableMapOf<Int, Long>()
-    private val heardLock = Any()
     private val relayBuffers = mutableMapOf<Int, RelayBuffer>()
     private val relayLock = Any()
     private val relayTargetRegex = Regex("^\\s*([A-Z0-9/]+)([> ])", RegexOption.IGNORE_CASE)
@@ -258,7 +262,7 @@ class JS8EngineService : Service() {
 
             if (audioActive && !txMonitorWasAudioActive) {
                 txMonitorWasAudioActive = true
-                logTxStarted()
+                logTxStarted(activeEngine)
                 broadcastTxState(TX_STATE_STARTED)
                 broadcastTxFrame(activeEngine)
                 apiTransmitting(true, activeEngine)
@@ -295,6 +299,14 @@ class JS8EngineService : Service() {
     private var spotClient: SpotClient? = null
     private var pskReporterEnabled = false
     private var currentDialHz: Long = 0
+        set(value) {
+            if (value != field) secBandChanged = driftedNowMs() / 1000 // PC m_secBandChanged (mw 5446-5449)
+            field = value
+        }
+    /** PC m_secBandChanged: when the dial last changed, seconds. Spots wait 4/5 of a period after it. */
+    private var secBandChanged = 0L
+    /** PC m_rxCallQueue: heard calls waiting to be spotted to PSK Reporter, JS8NET and RX.SPOT (processSpots). */
+    private val pendingSpots = ArrayDeque<() -> Unit>()
     private var splitXitHz = 0 // PC m_XIT for the transmission in progress
     @Volatile private var catReadPending = false // CAT button: the next FA answer sets the dial
     private var pwrBandSetOk = true // PC m_PwrBandSetOK
@@ -304,6 +316,8 @@ class JS8EngineService : Service() {
     private var bandHoppedHz = 0L // PC m_bandHoppedFreq
     private var bandScheduleSeen = ""
     @Volatile private var rigFailed = false
+    /** PC rigOpen: the CAT button is orange from opening the rig until it answers or fails. */
+    @Volatile private var rigOpening = false
     private var rigFirstError = true // PC m_first_error
     @Volatile private var splitHeld = "none" // split mode applied at key-on, until key-off
     private var currentCallsign: String = ""
@@ -346,6 +360,10 @@ class JS8EngineService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        if (!settingsLoaded) {
+            settingsLoaded = true
+            raiseIdleTimeout()
+        }
         createNotificationChannel()
         createRigTransports()
         txHandlerThread.start()
@@ -811,9 +829,15 @@ class JS8EngineService : Service() {
                     }
                 }
 
+                override fun onDecodedFrame(frame: String) {
+                    lastDecodedFrame = frame
+                }
+
                 override fun onDecodeStarted(submodes: Int) {
                     Log.d(TAG, "Decode started: submodes=$submodes")
                     decodeDialHz = currentDialHz
+                    decodePeriodUtc = periodUtc(submodes)
+                    messageLogger?.decodeStarted(decodePeriodUtc)
                     mainHandler.post {
                         Js8Api.State.decoding = true
                         Js8Api.statusUpdate() // PC decodeBusy(true)
@@ -829,6 +853,7 @@ class JS8EngineService : Service() {
 
                 override fun onDecodeFinished(count: Int) {
                     Log.d(TAG, "Decode finished: count=$count")
+                    messageLogger?.decodeDone()
                     mainHandler.post {
                         Js8Api.State.decoding = false
                         Js8Api.statusUpdate() // PC decodeBusy(false)
@@ -962,6 +987,7 @@ class JS8EngineService : Service() {
 
     private fun failEngineStart(generation: Int, message: String) {
         if (!isCurrentEngineStart(generation)) return
+        rigOpening = false
         if (rigControlMode == "trusdx_serial" && trusdxSerialSession?.isConnected() == true) {
             trusdxStartupWorkerActive = true
             Thread {
@@ -1020,6 +1046,8 @@ class JS8EngineService : Service() {
         }
 
         rigControlMode = rigType ?: "none"
+        rigOpening = true
+        broadcastRigStatus(false)
         rtsPttConnected = false
         trusdxConnected = false
         qmxConnected = false
@@ -2067,12 +2095,15 @@ class JS8EngineService : Service() {
 
     private fun stopRigStatusPolling() {
         rigStatusHandler.removeCallbacks(rigStatusRunnable)
+        rigOpening = false
         broadcastRigStatus(false)
     }
 
     private fun broadcastRigStatus(connected: Boolean) {
+        if (connected) rigOpening = false
         val intent = Intent(ACTION_RIG_STATUS).apply {
             putExtra(EXTRA_RIG_CONNECTED, connected)
+            putExtra(EXTRA_RIG_OPENING, rigOpening)
         }
         LocalBroadcastManager.getInstance(this).sendBroadcast(intent)
     }
@@ -2084,20 +2115,38 @@ class JS8EngineService : Service() {
     /**
      * API events for one frame (PC processDecodeEvent / processRxActivity / processCommandActivity):
      * WSJT-X Decode, RX.ACTIVITY, and RX.DIRECTED for a directed command heard (for anyone).
+     * WSJT-X gets the decode's own [dt] (pDE 265), RX.ACTIVITY the Time Delta [tdrift].
      */
-    private fun apiDecode(utc: Int, snr: Int, dt: Float, freq: Float, text: String, type: Int, quality: Float, mode: Int) {
+    private fun apiDecode(utc: Int, snr: Int, dt: Float, tdrift: Float, freq: Float, text: String, type: Int, quality: Float, mode: Int) {
         val now = driftedNowMs()
         val offset = freq.toInt()
         // DecodedText::isLowConfidence: quality below 0.17 (the PC marks those with '?')
         Js8Api.wsjtxDecode(utc, snr, dt, offset, text, quality < 0.17f)
         if (!Js8Api.canSend()) return
-        Js8Api.rxActivity(text, offset, snr, mode, dt, now, type, decodeDial())
+        Js8Api.rxActivity(text, offset, snr, mode, tdrift, now, type, decodeDial())
     }
 
     private class DirectedBuffer(
         val d: com.js8call.example.js8ui.Js8Activity.Directed, val parts: MutableList<String>, val offset: Int, val snr: Int, val mode: Int,
         val dt: Float, val startMs: Long
-    )
+    ) {
+        /** Time of its newest frame (PC processBufferedActivity takes the latest of cmd and msgs). */
+        var lastUpdated = startMs
+    }
+
+    /**
+     * PC processBufferedActivity (18-40): closed 60 s after its newest frame if a text frame came (parts[0] is
+     * the command frame's own text), dropped at 90 s. Checked every second, not only when a frame arrives.
+     */
+    private fun cleanupDirectedBuffers(now: Long) {
+        directedBuffers.entries.toList().forEach { (key, b) ->
+            val age = now - b.lastUpdated
+            when {
+                age > BUFFER_CLOSE_MS && b.parts.size > 1 -> { directedBuffers.remove(key); finishDirected(b) }
+                age > BUFFER_DROP_MS -> directedBuffers.remove(key)
+            }
+        }
+    }
 
     private val directedBuffers = mutableMapOf<Int, DirectedBuffer>()
 
@@ -2108,26 +2157,34 @@ class JS8EngineService : Service() {
     private fun directedActivity(snr: Int, dt: Float, freq: Float, text: String, type: Int, mode: Int) {
         val now = System.currentTimeMillis()
         val last = (type and 0x2) != 0
-        directedBuffers.entries.toList().forEach { (key, b) ->
-            if (now - b.startMs > 60_000L) { directedBuffers.remove(key); finishDirected(b) } // PC: unfinished after 1 minute
-        }
-        val open = findClosestMsgBufferKey(directedBuffers.keys, freq)
+        cleanupDirectedBuffers(now)
+        val open = findClosestMsgBufferKey(directedBuffers.keys, freq, rxThresholdHz(mode))
         if (open != null && (type and FRAME_FIRST) == 0) {
-            val b = directedBuffers.getValue(open)
+            val key = directedBuffers.followDrift(open, freq)
+            val b = directedBuffers.getValue(key)
             b.parts.add(text)
-            if (last) { directedBuffers.remove(open); finishDirected(b) }
+            b.lastUpdated = now
+            if (last) { directedBuffers.remove(key); finishDirected(b) }
             return
         }
         val d = apiDirectedParser.parseDirected(text) ?: return
         if (d.from == "<....>" || d.to == "<....>") return
-        // Commands only (Varicode::isCommandAllowed, CQ and heartbeats included), not free text
+        // Varicode::isCommandAllowed, CQ and heartbeats included; free text to a call (PC command " ") from a directed frame
         val commands = com.js8call.example.util.Js8Commands
-        if (!commands.COMMANDS.containsKey(d.cmd.uppercase())) return
+        val freeText = d.cmd.isEmpty() && !DecodedMessage.isDataFrame(type)
+        if (!freeText && !commands.COMMANDS.containsKey(d.cmd.uppercase())) return
         val cmdIndex = text.indexOf(" ${d.cmd} ", ignoreCase = true)
+        val first = if (cmdIndex >= 0) text.substring(cmdIndex + d.cmd.length + 2) else d.extra
         if (commands.isBuffered(d.cmd)) {
-            val first = if (cmdIndex >= 0) text.substring(cmdIndex + d.cmd.length + 2) else d.extra
             val b = DirectedBuffer(d, mutableListOf(first), freq.toInt(), snr, mode, dt, now)
             if (last) finishDirected(b) else directedBuffers[Math.round(freq)] = b
+            return
+        }
+        // PC isCommandBuffered: every other command with a space in its name waits for the last frame too, all but "?".
+        // CQ and heartbeat frames go at once (processDecodeEvent.cpp 371-420). The number after SNR stays its own word.
+        if (!last && d.cmd != "?" && commands.COMMANDS[d.cmd.uppercase()] != -1) {
+            directedBuffers[Math.round(freq)] =
+                DirectedBuffer(d, mutableListOf(if (first.isEmpty()) "" else "$first "), freq.toInt(), snr, mode, dt, now)
             return
         }
         emitDirected(d, text.trim().substringAfter(':').trim(), text, last, freq.toInt(), snr, mode, dt, now)
@@ -2142,7 +2199,14 @@ class JS8EngineService : Service() {
             if (!valid) return
             message = body
         }
-        val base = listOf(b.d.to, b.d.cmd.uppercase(), message.trim()).filter { it.isNotEmpty() }.joinToString(" ")
+        // PC "%1%2".arg(to).arg(cmd), the command names with their leading space: two spaces after the call for
+        // free text, none before ">" and "?" ("K1ABC> HELLO", processCommandActivity.cpp 131-141, Varicode.cpp 50-118)
+        val head = when (b.d.cmd) {
+            "" -> "${b.d.to} "
+            ">", "?" -> "${b.d.to}${b.d.cmd}"
+            else -> "${b.d.to} ${b.d.cmd.uppercase()}"
+        }
+        val base = listOf(head, message.trim()).filter { it.isNotEmpty() }.joinToString(" ")
         emitDirected(b.d, base, "$base ${b.d.extra}", true, b.offset, b.snr, b.mode, b.dt, driftedNowMs())
     }
 
@@ -2152,7 +2216,7 @@ class JS8EngineService : Service() {
         val eot = PreferenceManager.getDefaultSharedPreferences(this).getString("js8cfg_eot", "♢").orEmpty().ifEmpty { "♢" }
         val base = if (last) "${text.trimEnd()} $eot " else text
         val snrText = com.js8call.example.js8ui.Js8Activity.formatSnr(snr)
-        messageLogger?.logDirected(currentDialHz, offset, snrText, "${d.from}: $base")
+        messageLogger?.logDirected(driftedNowMs(), currentDialHz, offset, snrText, "${d.from}: $base")
         if (!Js8Api.canSend()) return
         val grid = (d.extra + " " + gridText).split(Regex("\\s+")).lastOrNull { com.js8call.example.js8ui.Js8Activity.isGrid(it) && it.length >= 4 }.orEmpty()
         val cmd = if (d.cmd == ">" || d.cmd == "?") d.cmd else " ${d.cmd.uppercase()}" // the PC's names carry a leading space
@@ -2175,14 +2239,16 @@ class JS8EngineService : Service() {
         utc: Int, snr: Int, dt: Float, freq: Float,
         text: String, type: Int, quality: Float, mode: Int, driftMs: Int
     ) {
-        updateHeardCallsign(text, snr)
         stopCqForMessage(text)
         synchronized(recentOffsets) { recentOffsets[Math.round(freq)] = System.currentTimeMillis() }
         notifyDecode(text)
-        broadcastDecode(utc, snr, dt, freq, text, type, quality, mode, driftMs)
-        apiDecode(utc, snr, dt, freq, text, type, quality, mode)
+        // PC processDecodeEvent: the Time Delta column, RX.ACTIVITY and RX.DIRECTED take the clock drift in place
+        // of the decode's offset while auto sync runs on Normal or Slow (pDE 312-314, 370-372, 462-464; WG 369-376)
+        val tdrift = if (autoDriftOn && (mode == SUBMODE_NORMAL || mode == SUBMODE_SLOW)) (engine?.timeDriftMs() ?: 0L) / 1000f else dt
+        broadcastDecode(utc, snr, tdrift, freq, text, type, quality, mode, driftMs)
+        apiDecode(utc, snr, dt, tdrift, freq, text, type, quality, mode)
         spotDecode(snr, freq, text, type, mode)
-        directedActivity(snr, dt, freq, text, type, mode)
+        directedActivity(snr, tdrift, freq, text, type, mode)
         handleRelayFrame(text, snr, mode, freq, type)
         maybeHandleIncomingMessage(text, snr, freq, type, mode)
         // PC processDecodeEvent: a command is answered when its last frame is in
@@ -2201,8 +2267,8 @@ class JS8EngineService : Service() {
                 pendingAutoReplies[Math.round(freq)] = text to now
                 return null
             }
-            if (!isLastFrame(type)) return null
             val key = findClosestMsgBufferKey(pendingAutoReplies.keys, freq, rxThresholdHz(mode)) ?: return null
+            if (!isLastFrame(type)) { pendingAutoReplies.followDrift(key, freq); return null }
             return pendingAutoReplies.remove(key)?.first
         }
     }
@@ -3107,7 +3173,7 @@ class JS8EngineService : Service() {
 
     private fun scheduleHeartbeat(first: Boolean) {
         val prefs = PreferenceManager.getDefaultSharedPreferences(this)
-        val intervalStr = prefs.getString(PREF_HEARTBEAT_INTERVAL, "0") ?: "0"
+        val intervalStr = prefs.getString(PREF_HEARTBEAT_INTERVAL, "30") ?: "30"
         // Settings > HB (PC SubModeHB, default off) and the HB button's timer (PC m_hb_loop):
         // no timed heartbeats unless both are on
         val intervalMinutes = if (prefs.getBoolean(PREF_HB, false) && HeartbeatTimer.on) intervalStr.toIntOrNull() ?: 0 else 0
@@ -3240,8 +3306,9 @@ class JS8EngineService : Service() {
     private fun sendHeartbeat() {
         val prefs = PreferenceManager.getDefaultSharedPreferences(this)
         // PC enqueueMessage: waits for what is on the air, and for TX off
-        // A heartbeat waits behind queued messages (PC priority 11, replies 100)
-        if (isTransmitActive() || messageQueued || !prefs.getBoolean("js8cfg_tx_enabled", true)) {
+        // A heartbeat waits behind queued messages (PC priority 11, replies 100), and for an empty Typing Box
+        // (PC processTxQueue, mainwindow.cpp 6628-6631)
+        if (isTransmitActive() || messageQueued || !typingBoxEmpty || !prefs.getBoolean("js8cfg_tx_enabled", true)) {
             Log.i(TAG, "Heartbeat waiting for the transmitter")
             mainHandler.postDelayed({ sendHeartbeat() }, 1000L)
             return
@@ -3492,6 +3559,8 @@ class JS8EngineService : Service() {
     private fun broadcastTxState(state: String) {
         val intent = Intent(ACTION_TX_STATE).apply {
             putExtra(EXTRA_TX_STATE, state)
+            // PC m_txFrameCount for the Send button's "Ready (30s)"
+            if (state == TX_STATE_QUEUED) putExtra(EXTRA_TX_FRAME_COUNT, engine?.txFrameTexts()?.size ?: 0)
         }
         LocalBroadcastManager.getInstance(this).sendBroadcast(intent)
     }
@@ -3601,13 +3670,37 @@ class JS8EngineService : Service() {
     /** PC processActivity runs processBufferedActivity on the clock, not only when a frame arrives. */
     private val msgBufferRunnable = object : Runnable {
         override fun run() {
-            getConfiguredCallsign()?.let { cleanupMsgBuffers(System.currentTimeMillis(), it) }
+            val now = System.currentTimeMillis()
+            getConfiguredCallsign()?.let { cleanupMsgBuffers(now, it) }
+            cleanupRelayBuffers(now)
+            cleanupSpotCmdBuffers(now)
+            cleanupDirectedBuffers(now)
+            processSpots()
             heartbeatHandler.postDelayed(this, 1_000L)
         }
     }
 
+    /**
+     * PC read_settings: an Idle timeout of 1 to 4 minutes is raised to 5 when the settings load at start
+     * (cpp 2410-2412); a value typed after that is used as it is until the next start (cpp 3351).
+     */
+    private fun raiseIdleTimeout() {
+        val key = "js8cfg_tx_watchdog"
+        val p = PreferenceManager.getDefaultSharedPreferences(this)
+        val v = p.all[key] ?: return
+        if (v.toString().toDoubleOrNull()?.toLong() !in 1L..4L) return
+        p.edit().apply {
+            when (v) {
+                is Int -> putInt(key, 5)
+                is Long -> putLong(key, 5L)
+                is Float -> putFloat(key, 5f)
+                else -> putString(key, "5")
+            }
+        }.apply()
+    }
+
     private fun checkIdleTimeout() {
-        val minutes = numberPref("js8cfg_tx_watchdog", 60.0).toLong().let { if (it in 1..4) 5L else it } // PC raises these to 5
+        val minutes = numberPref("js8cfg_tx_watchdog", 60.0).toLong()
         if (minutes <= 0 || idleTimedOutMinutes != 0L) return
         if (System.currentTimeMillis() - lastUserMs < minutes * 60_000L) return
         Log.i(TAG, "Idle timeout after $minutes minutes")
@@ -3640,8 +3733,9 @@ class JS8EngineService : Service() {
 
     /** PC confirmThenEnqueueMessage: with "Ask for confirmation ..." ticked, Yes / No first; no answer in 90 s = No. */
     private fun queueAutoReply(text: String, directed: String?, priority: Int = 0, onAccepted: (() -> Unit)? = null) {
-        // PC processCommandActivity: no reply with text in the Typing Box or a message to me still arriving
-        if (!typingBoxEmpty || hasOpenBufferToMe()) return
+        // PC processCommandActivity: no reply with text in the Typing Box or a message to me still arriving,
+        // and none during an idle timeout (processCommandActivity.cpp 313-318). SWL never transmits.
+        if (!typingBoxEmpty || hasOpenBufferToMe() || idleTimedOutMinutes != 0L || isListenOnly()) return
         val prefs = PreferenceManager.getDefaultSharedPreferences(this)
         if (!prefs.getBoolean("js8cfg_autoreply_confirmation", true)) {
             broadcastQueueTx(text, directed, priority)
@@ -3995,11 +4089,9 @@ class JS8EngineService : Service() {
                 Log.i(TAG, "MSG received (single frame): from=$path to=${directed.to} text='$cleanPayload' conversationId=$conversationId")
                 persistIncomingMessage(path, cleanPayload, snr, freq, null, conversationId)
                 
-                // Queue auto-ACK now that full message is received (if autoreply enabled)
-                if (isAutoreplyEnabled()) {
-                    Log.i(TAG, "Auto ACK for MSG from=${directed.from}")
-                    queueAutoReply("$callsign: $path ACK", null, priority = PRIORITY_NORMAL)
-                }
+                // Queue the ACK now that the full message is in; with AUTO off it goes to the Typing Box (PC, N1)
+                Log.i(TAG, "Auto ACK for MSG from=${directed.from}")
+                queueAutoReply("$callsign: $path ACK", null, priority = PRIORITY_NORMAL)
                 return
             }
             
@@ -4034,7 +4126,7 @@ class JS8EngineService : Service() {
         }
         
         val result = synchronized(msgLock) {
-            val key = findMatchingMsgBufferKey(freq, submode) ?: return@synchronized null
+            val key = msgBuffers.followDrift(findMatchingMsgBufferKey(freq, submode) ?: return@synchronized null, freq)
             val buffer = msgBuffers[key] ?: return@synchronized null
             buffer.parts.add(text)
             buffer.lastUpdated = now
@@ -4129,11 +4221,9 @@ class JS8EngineService : Service() {
         Log.i(TAG, "MSG received (multi-frame): from=$path to=${buffer.to} text='$cleanText' conversationId=$conversationId")
         persistIncomingMessage(path, cleanText, buffer.snr, buffer.frequency, null, conversationId)
         
-        // Queue auto-ACK now that full message is received (if autoreply enabled)
-        if (isAutoreplyEnabled()) {
-            Log.i(TAG, "Auto ACK for MSG from=${buffer.from}")
-            queueAutoReply("$myCallsign: $path ACK", null, priority = PRIORITY_NORMAL)
-        }
+        // Queue the ACK now that the full message is in; with AUTO off it goes to the Typing Box (PC, N1)
+        Log.i(TAG, "Auto ACK for MSG from=${buffer.from}")
+        queueAutoReply("$myCallsign: $path ACK", null, priority = PRIORITY_NORMAL)
     }
     
     
@@ -4236,6 +4326,7 @@ class JS8EngineService : Service() {
         // PC: relayed, the requestor is the end of the path and the reply goes back along it
         val relayed = replyPath.contains(">")
         val who = if (relayed) replyPath.substringAfterLast(">") else from
+        val calls = if (command == Js8Commands.CMD_QUERY_CALL) callActivityNow() else emptyList() // read here, on the main thread
         messageScope.launch {
             var reply: String? = null
             var afterSend: (() -> Unit)? = null
@@ -4283,8 +4374,8 @@ class JS8EngineService : Service() {
                 }
                 Js8Commands.CMD_QUERY_CALL -> {
                     val who = Regex("[A-Z0-9/]*[0-9][A-Z0-9/]*").find(text.uppercase())?.value ?: return@launch
-                    val heard = heardStation(who) ?: return@launch
-                    reply = "$replyPath YES ${formatSNR(heard.snr)} (${sinceText(heard.time)})"
+                    val heard = heardStation(who, calls) ?: return@launch
+                    reply = "$replyPath YES ${formatSNR(heard.snr)} (${sinceText(heard.utcMs)})"
                 }
                 Js8Commands.CMD_QUERY -> {
                     if (isAllCall) return@launch
@@ -4318,7 +4409,9 @@ class JS8EngineService : Service() {
                 }
             }
             val r = reply ?: return@launch
-            if (!isAutoreplyEnabled()) return@launch
+            // PC: QUERY MSGS, QUERY CALL and replies to @ALLCALL need AUTO (processCommandActivity.cpp 984, 1054, 1122)
+            val needsAuto = isAllCall || command == Js8Commands.CMD_QUERY_MSGS || command == "QUERY MSGS?" || command == Js8Commands.CMD_QUERY_CALL
+            if (needsAuto && !isAutoreplyEnabled()) return@launch
             Log.i(TAG, "Mailbox reply to $from: '$r'")
             if (isAllCall) markAllCallReplied(from)
             mainHandler.post {
@@ -4335,8 +4428,8 @@ class JS8EngineService : Service() {
         return groups.contains(target.uppercase())
     }
 
+    /** PC processCommandActivity: replies are made with AUTO off too; the queue puts them in the Typing Box (N1). */
     private fun maybeHandleAutoReply(text: String, snr: Int, mode: Int) {
-        if (!isAutoreplyEnabled()) return
         val prefs = PreferenceManager.getDefaultSharedPreferences(this)
         val callsign = getConfiguredCallsign()
         if (callsign == null) {
@@ -4346,8 +4439,8 @@ class JS8EngineService : Service() {
 
         val heartbeat = parseHeartbeat(text)
         if (heartbeat != null) {
-            // PC presentlyWantHBReplies: AUTO (checked above) + HB + ACK, both off by default
-            if (!prefs.getBoolean(PREF_HB, false) || !prefs.getBoolean(PREF_HB_ACK, false)) return
+            // PC presentlyWantHBReplies: AUTO + HB + ACK, HB and ACK off by default
+            if (!isAutoreplyEnabled() || !prefs.getBoolean(PREF_HB, false) || !prefs.getBoolean(PREF_HB_ACK, false)) return
             if (isSelfCallsign(callsign, heartbeat.from)) return
             // PC canCurrentModeSendHeartbeat, then no ACK with a buffer open or, when paused, a callsign selected
             if (getPreferredTxSubmode() !in setOf(SUBMODE_NORMAL, SUBMODE_FAST, SUBMODE_SLOW)) return
@@ -4394,18 +4487,22 @@ class JS8EngineService : Service() {
                 queueAutoReply("$callsign: ${directed.from} SNR $snrText", null, priority = PRIORITY_NORMAL)
             }
             cmdUpper == "INFO?" -> {
-                val info = com.js8call.example.js8ui.Js8Macros.expand(com.js8call.example.api.Js8Api.myInfo(prefs), prefs)
-                if (info.isBlank()) return
+                // PC: skipped only when the stored text, trimmed, is empty; macros filled in after (pCA 340-356)
+                val infoRaw = com.js8call.example.api.Js8Api.myInfo(prefs).trim()
+                if (infoRaw.isEmpty()) return
+                val info = com.js8call.example.js8ui.Js8Macros.expand(infoRaw, prefs)
                 Log.i(TAG, "Auto INFO reply: from=${directed.from}")
                 queueAutoReply("$callsign: ${directed.from} INFO $info", null, priority = PRIORITY_NORMAL)
             }
             cmdUpper == "STATUS?" -> {
-                val status = com.js8call.example.js8ui.Js8Macros.expand(com.js8call.example.api.Js8Api.myStatus(prefs), prefs)
-                if (status.isBlank()) return
+                // PC: skipped only when the stored text, trimmed, is empty; macros filled in after (pCA 340-356)
+                val statusRaw = com.js8call.example.api.Js8Api.myStatus(prefs).trim()
+                if (statusRaw.isEmpty()) return
+                val status = com.js8call.example.js8ui.Js8Macros.expand(statusRaw, prefs)
                 Log.i(TAG, "Auto STATUS reply: from=${directed.from}")
                 queueAutoReply("$callsign: ${directed.from} STATUS $status", null, priority = PRIORITY_NORMAL)
             }
-            cmdUpper == "HEARING?" -> {
+            cmdUpper == "HEARING?" -> mainHandler.post { // after the decodes already sent to Call Activity (PC: decodes first, then commands)
                 val heard = getRecentHeardCallsigns(setOf(directed.from.trim().uppercase(), callsign), HEARD_LIMIT)
                 Log.i(TAG, "Auto HEARING reply: from=${directed.from}, count=${heard.size}")
                 queueAutoReply("$callsign: ${listOf("${directed.from} HEARING").plus(heard).joinToString(" ")}", null, priority = PRIORITY_NORMAL)
@@ -4439,7 +4536,7 @@ class JS8EngineService : Service() {
             val target = directed.to.trim().uppercase()
             if (!isSelfCallsign(callsign, target) && !isSubscribedGroup(target)) return
 
-            val key = findMatchingRelayBufferKey(freq) ?: Math.round(freq)
+            val key = findMatchingRelayBufferKey(freq, mode) ?: Math.round(freq)
             val buffer = RelayBuffer(
                 from = directed.from.trim().uppercase(),
                 to = target,
@@ -4474,7 +4571,7 @@ class JS8EngineService : Service() {
         if (!DecodedMessage.isDataFrame(type)) return
 
         val result = synchronized(relayLock) {
-            val key = findMatchingRelayBufferKey(freq) ?: return@synchronized null
+            val key = relayBuffers.followDrift(findMatchingRelayBufferKey(freq, mode) ?: return@synchronized null, freq)
             val buffer = relayBuffers[key] ?: return@synchronized null
             buffer.parts.add(text)
             buffer.lastUpdated = now
@@ -4572,7 +4669,7 @@ class JS8EngineService : Service() {
     }
 
     private fun callList(key: String): Set<String> =
-        PreferenceManager.getDefaultSharedPreferences(this).getString(key, "").orEmpty().split(',', ' ')
+        PreferenceManager.getDefaultSharedPreferences(this).getString(key, "").orEmpty().split(',') // PC splitWords: commas only
             .map { it.trim().uppercase() }.filter { it.isNotEmpty() }.toSet()
 
     /** The call or its base call is on a Station callsign list (PC list.contains(call) || contains(base_callsign)). */
@@ -4642,7 +4739,7 @@ class JS8EngineService : Service() {
         } else {
             PskReporterClient.HOST
         }
-        pskReporterClient = PskReporterClient(programInfo, pskHost).apply {
+        pskReporterClient = PskReporterClient(programInfo, pskHost, nowMs = { driftedNowMs() }).apply {
             // PC: 5 s on the status bar
             onUnavailable = { mainHandler.post { android.widget.Toast.makeText(this@JS8EngineService, "Spotting to PSK Reporter unavailable", android.widget.Toast.LENGTH_SHORT).show() } }
         }
@@ -4658,8 +4755,10 @@ class JS8EngineService : Service() {
         Log.d(TAG, "PSKReporter state: enabled=$enabled callsign='$callsign' grid='$grid'")
         currentCallsign = callsign
         currentGrid = grid
-        if (!enabled || callsign.isBlank() || grid.isBlank()) {
-            pskReporterClient?.stop(flush = false, discardPending = true)
+        // PC prepareSpotting: on with spotting alone, whatever the callsign and grid (mw 1111-1128). Turned off,
+        // the waiting spots go first (pskReporterSendReport(true), mw 1044-1047).
+        if (!enabled) {
+            pskReporterClient?.stop(flush = true)
             pskReporterEnabled = false
             spotClient?.stop()
             return
@@ -4683,6 +4782,17 @@ class JS8EngineService : Service() {
 
     private val spotCmdBuffers = mutableMapOf<Int, SpotCmdBuffer>()
 
+    /** PC processBufferedActivity: closed 60 s after its newest frame if a data frame came, dropped at 90 s. Main thread. */
+    private fun cleanupSpotCmdBuffers(now: Long) {
+        spotCmdBuffers.entries.toList().forEach { (key, b) ->
+            val age = now - b.lastUpdated
+            when {
+                age > BUFFER_CLOSE_MS && b.parts.size > 1 -> { spotCmdBuffers.remove(key); finishSpotCmd(b) } // parts[0] is the command's own text
+                age > BUFFER_DROP_MS -> spotCmdBuffers.remove(key)
+            }
+        }
+    }
+
     /** PC processSpots / spotReport and spotCmd: heard stations and group commands go to JS8NET. */
     private fun spotDecode(snr: Int, freq: Float, text: String, type: Int, mode: Int) {
         val spot = spotClient
@@ -4694,19 +4804,19 @@ class JS8EngineService : Service() {
         if (dial <= 0) return
         val offset = freq.toInt()
         val now = System.currentTimeMillis()
-        // PC processBufferedActivity: a buffer quiet for 60 s counts as finished
-        spotCmdBuffers.entries.filter { now - it.value.lastUpdated > 60_000L }.forEach {
-            spotCmdBuffers.remove(it.key)
-            finishSpotCmd(it.value)
-        }
+        cleanupSpotCmdBuffers(now)
         val trimmed = text.trim()
         val call = if (trimmed.substringBefore(' ').endsWith(":")) extractHeardCallsign(trimmed) else null
         if (call != null && !isSelfCallsign(currentCallsign, call) && !isOnCallList("js8cfg_spot_blacklist", call)) {
-            spot.enqueueSpot(call, extractGrid(trimmed).orEmpty(), mode, dial, offset, snr)
+            // PC processSpots spotReport: held after a dial change, then sent with the dial it was heard on
+            val heardDial = decodeDial()
+            val grid = extractGrid(trimmed).orEmpty()
+            pendingSpots.addLast { spotClient?.enqueueSpot(call, grid, mode, heardDial, offset, snr) }
         }
         val d = if ((type and 0x4) == 0) apiDirectedParser.parseDirected(text) else null
         if (d == null) {
-            val key = spotCmdBuffers.keys.firstOrNull { kotlin.math.abs(it - offset) <= 10 } ?: return
+            // PC hasExistingMessageBuffer: the speed's match range, and the buffer follows a drifting signal
+            val key = spotCmdBuffers.followDrift(findClosestMsgBufferKey(spotCmdBuffers.keys, freq, rxThresholdHz(mode)) ?: return, freq)
             val buffer = spotCmdBuffers.getValue(key)
             buffer.parts.add(text)
             buffer.lastUpdated = now
@@ -4750,10 +4860,26 @@ class JS8EngineService : Service() {
         currentDialHz = dial.toLongOrNull() ?: currentDialHz
     }
 
+    /**
+     * PC processSpots (mw 6529-6575): the heard calls wait until 4/5 of a period has passed since the dial
+     * last changed, then go with the dial they were heard on. Main thread, every second.
+     */
+    private fun processSpots() {
+        if (!pskReporterEnabled) {
+            pendingSpots.clear()
+            return
+        }
+        if (pendingSpots.isEmpty()) return
+        val period = com.js8call.example.js8ui.Js8Activity.periodSec(getPreferredTxSubmode())
+        if (driftedNowMs() / 1000 - secBandChanged <= (4 * period) / 5) return
+        while (pendingSpots.isNotEmpty()) pendingSpots.removeFirst().invoke()
+    }
+
     private fun maybeReportToPskReporter(utc: Int, snr: Int, freq: Float, text: String) {
         if (!pskReporterEnabled) return
-        if (currentDialHz <= 0) {
-            Log.d(TAG, "PSKReporter skip: dialHz=$currentDialHz")
+        val dialHz = decodeDial() // PC d.dial: the dial when the decode started
+        if (dialHz <= 0) {
+            Log.d(TAG, "PSKReporter skip: dialHz=$dialHz")
             return
         }
         val call = extractHeardCallsign(text)
@@ -4767,15 +4893,17 @@ class JS8EngineService : Service() {
         }
         val grid = extractGrid(text).orEmpty() // PC: every logged call, grid or not
         if (isOnCallList("js8cfg_spot_blacklist", call)) return // PC spot_blacklist
-        val rfHz = currentDialHz + freq.toInt()
+        val rfHz = dialHz + freq.toInt()
         if (rfHz <= 0) {
-            Log.d(TAG, "PSKReporter skip: rfHz=$rfHz dialHz=$currentDialHz freq=$freq")
+            Log.d(TAG, "PSKReporter skip: rfHz=$rfHz dialHz=$dialHz freq=$freq")
             return
         }
         val timestamp = decodeUtcToEpochSeconds(utc)
-        Log.d(TAG, "PSKReporter spot: call=$call grid=$grid snr=$snr rfHz=$rfHz ts=$timestamp")
-        pskReporterClient?.addSpot(call, grid, snr, rfHz, "JS8", timestamp)
-        Js8Api.rxSpot(currentDialHz, freq.toInt(), call, snr, grid) // PC processSpots: RX.SPOT
+        pendingSpots.addLast {
+            Log.d(TAG, "PSKReporter spot: call=$call grid=$grid snr=$snr rfHz=$rfHz ts=$timestamp")
+            pskReporterClient?.addSpot(call, grid, snr, rfHz, "JS8", timestamp)
+            Js8Api.rxSpot(dialHz, freq.toInt(), call, snr, grid) // PC processSpots: RX.SPOT
+        }
     }
 
     private fun extractGrid(text: String): String? {
@@ -4833,16 +4961,19 @@ class JS8EngineService : Service() {
         return String.format("%s%0${width}d", sign, snr)
     }
 
+    /** PC processBufferedActivity, the same rule as message buffers: closed 60 s after its newest frame, dropped at 90 s. */
     private fun cleanupRelayBuffers(now: Long) {
+        val closed = mutableListOf<RelayBuffer>()
         synchronized(relayLock) {
-            val iterator = relayBuffers.iterator()
-            while (iterator.hasNext()) {
-                val entry = iterator.next()
-                if (now - entry.value.lastUpdated > RELAY_BUFFER_TIMEOUT_MS) {
-                    iterator.remove()
+            relayBuffers.entries.removeIf { (_, buffer) ->
+                val age = now - buffer.lastUpdated
+                when {
+                    age > BUFFER_CLOSE_MS && buffer.parts.isNotEmpty() -> { closed += buffer; true }
+                    else -> age > BUFFER_DROP_MS
                 }
             }
         }
+        closed.forEach { processRelayBuffer(it) }
     }
 
     private fun updateMessageLogging() {
@@ -4851,9 +4982,38 @@ class JS8EngineService : Service() {
         messageLogger?.setEnabled(enabled)
     }
 
+    /** The engine thread's last decoded frame (onDecodedFrame), for the decode that follows it. */
+    @Volatile private var lastDecodedFrame = ""
+    /** PC dec_data.params.nutc of the decode run: its period time, hhmmss. */
+    @Volatile private var decodePeriodUtc = 0
+
+    /**
+     * PC decodeStart (mw 2090-2101): the period time of the run's lowest speed number, taken 2 s after
+     * that period's end and rounded down to it. The engine's bits are SubmodeId A, B, C, E, I: Normal,
+     * Fast, JS8 40, Slow, JS8 60, the same order as the PC's speed numbers.
+     */
+    private fun periodUtc(submodes: Int): Int {
+        val js8 = com.js8call.example.js8ui.Js8Activity
+        val speed = when (Integer.numberOfTrailingZeros(submodes)) {
+            1 -> js8.SUBMODE_FAST
+            2 -> js8.SUBMODE_TURBO
+            3 -> js8.SUBMODE_SLOW
+            4 -> js8.SUBMODE_ULTRA
+            else -> js8.SUBMODE_NORMAL
+        }
+        val period = js8.periodSec(speed)
+        val t = java.util.Calendar.getInstance(java.util.TimeZone.getTimeZone("UTC")).apply {
+            timeInMillis = driftedNowMs() + (2 - period) * 1000L
+        }
+        val sec = t.get(java.util.Calendar.SECOND)
+        return t.get(java.util.Calendar.HOUR_OF_DAY) * 10000 + t.get(java.util.Calendar.MINUTE) * 100 + (sec - sec % period)
+    }
+
+    /** PC processDecodeEvent: valid frames to ALL.TXT; the date line uses the dial now (m_freqNominal). */
     private fun logRxDecode(text: String, snr: Int, dt: Float, freq: Float, mode: Int, type: Int) {
         val logger = messageLogger ?: return
-        logger.logRx(driftedNowMs(), decodeDial(), text, snr, dt, freq.toInt(), com.js8call.example.js8ui.Js8Activity.allTxtLetter(mode), type)
+        logger.logRx(driftedNowMs(), decodePeriodUtc, currentDialHz, lastDecodedFrame, text, snr, dt, freq.toInt(),
+            com.js8call.example.js8ui.Js8Activity.allTxtLetter(mode), type)
     }
 
     /** PC DriftingDateTime::currentDateTimeUtc. */
@@ -4862,22 +5022,18 @@ class JS8EngineService : Service() {
     /** PC m_decoderBusyFreq: the dial when the decode started, not after a QSY during it. */
     private fun decodeDial() = decodeDialHz.takeIf { it > 0 } ?: currentDialHz
 
-    private fun logTxStarted() {
+    /** PC write_transmit_entry at each key-up: the text of the frame going out (mw 2667-2670, 6994-7009). */
+    private fun logTxStarted(activeEngine: JS8Engine) {
         val logger = messageLogger ?: return
-        val message = lastTxMessage.trim()
-        if (message.isBlank()) return
-        logger.logTx(driftedNowMs(), currentDialHz, com.js8call.example.js8ui.Js8Activity.periodSec(lastTxSubmode), message)
+        val frame = activeEngine.txFrameTexts().getOrNull(activeEngine.txFramesStarted() - 1) ?: return
+        logger.logTx(driftedNowMs(), currentDialHz, com.js8call.example.js8ui.Js8Activity.periodSec(lastTxSubmode), frame)
     }
 
-    private fun findMatchingRelayBufferKey(freq: Float): Int? {
+    /** PC hasExistingMessageBuffer: the speed's match range (JS8::Submode::rxThreshold). */
+    private fun findMatchingRelayBufferKey(freq: Float, submode: Int): Int? {
         synchronized(relayLock) {
-            for ((key, _) in relayBuffers) {
-                if (kotlin.math.abs(freq - key) <= RELAY_FREQUENCY_TOLERANCE_HZ) {
-                    return key
-                }
-            }
+            return findClosestMsgBufferKey(relayBuffers.keys, freq, rxThresholdHz(submode))
         }
-        return null
     }
 
     private fun processRelayBuffer(buffer: RelayBuffer) {
@@ -4900,7 +5056,8 @@ class JS8EngineService : Service() {
 
         if (payload.isBlank()) return
 
-        val forwardPayload = buildRelayForwardPayload(payload)
+        // PC: a relay to a group is never forwarded; it is ACKed or its command answered (processCommandActivity.cpp 424)
+        val forwardPayload = if (buffer.to.startsWith("@")) null else buildRelayForwardPayload(payload)
         if (forwardPayload != null) {
             val forwardText = if (buffer.from.isNotBlank()) {
                 "$forwardPayload *DE* ${buffer.from}"
@@ -4946,7 +5103,7 @@ class JS8EngineService : Service() {
                 val body = words.drop(1).joinToString(" ")
                 if (body.isEmpty()) return false
                 persistIncomingMessage(relayPath, body, buffer.snr, buffer.frequency, null, relayPath)
-                if (isAutoreplyEnabled()) getConfiguredCallsign()?.let {
+                getConfiguredCallsign()?.let {
                     queueAutoReply("$it: $relayPath ACK", null, priority = PRIORITY_NORMAL)
                 }
                 true
@@ -4999,7 +5156,6 @@ class JS8EngineService : Service() {
         snr: Int,
         submode: Int
     ): Boolean {
-        if (!isAutoreplyEnabled()) return false
         val prefs = PreferenceManager.getDefaultSharedPreferences(this)
 
         val tokens = payload.trimStart().split(Regex("\\s+"), limit = 3)
@@ -5013,13 +5169,17 @@ class JS8EngineService : Service() {
                 sendRelayMessage("$relayPath SNR $snrText")
             }
             "INFO?" -> {
-                val info = com.js8call.example.js8ui.Js8Macros.expand(com.js8call.example.api.Js8Api.myInfo(prefs), prefs)
-                if (info.isBlank()) return false
+                // PC: skipped only when the stored text, trimmed, is empty; macros filled in after (pCA 340-356)
+                val infoRaw = com.js8call.example.api.Js8Api.myInfo(prefs).trim()
+                if (infoRaw.isEmpty()) return false
+                val info = com.js8call.example.js8ui.Js8Macros.expand(infoRaw, prefs)
                 sendRelayMessage("$relayPath INFO $info")
             }
             "STATUS?" -> {
-                val status = com.js8call.example.js8ui.Js8Macros.expand(com.js8call.example.api.Js8Api.myStatus(prefs), prefs)
-                if (status.isBlank()) return false
+                // PC: skipped only when the stored text, trimmed, is empty; macros filled in after (pCA 340-356)
+                val statusRaw = com.js8call.example.api.Js8Api.myStatus(prefs).trim()
+                if (statusRaw.isEmpty()) return false
+                val status = com.js8call.example.js8ui.Js8Macros.expand(statusRaw, prefs)
                 sendRelayMessage("$relayPath STATUS $status")
             }
             "HEARING?" -> {
@@ -5098,7 +5258,7 @@ class JS8EngineService : Service() {
 
     /** PC processCommandActivity: a relay is a queued reply, sent after what is on the air. */
     private fun sendRelayMessage(text: String): Boolean {
-        if (isListenOnly() || !isAutoreplyEnabled()) return false
+        if (isListenOnly()) return false
         val callsign = getConfiguredCallsign() ?: return false
         val payload = text.trim()
         if (payload.isEmpty()) return false
@@ -5152,40 +5312,23 @@ class JS8EngineService : Service() {
         }
     }
 
-    private fun updateHeardCallsign(text: String, snr: Int) {
-        val callsign = extractHeardCallsign(text) ?: return
-        synchronized(heardLock) {
-            heardCallsigns[callsign] = HeardStation(System.currentTimeMillis(), snr)
-        }
-    }
+    /** PC m_callActivity: a copy of the Call Activity list, so Clear and Remove This Station take a call out. Main thread only. */
+    private fun callActivityNow(): List<com.js8call.example.js8ui.Js8Activity.CallDetail> = callActivityList?.invoke().orEmpty()
 
     /** PC call activity age: Remove callsigns from call activity after:, 0 = never. */
-    private fun heardCurrent(entry: HeardStation): Boolean {
-        val aging = PreferenceManager.getDefaultSharedPreferences(this)
-            .getString("js8cfg_callsign_aging", "0")?.toIntOrNull() ?: 0
-        return aging == 0 || (System.currentTimeMillis() - entry.time) / 60_000 < aging
+    private fun heardCurrent(utcMs: Long): Boolean {
+        val aging = numberPref("js8cfg_callsign_aging", 0.0).toInt()
+        return aging == 0 || (System.currentTimeMillis() - utcMs) / 60_000 < aging
     }
 
-    private fun getRecentHeardCallsigns(exclude: Set<String>, limit: Int): List<String> {
-        synchronized(heardLock) {
-            return heardCallsigns.entries
-                .asSequence()
-                .filter { !exclude.contains(it.key) && heardCurrent(it.value) }
-                .sortedByDescending { it.value.time }
-                .take(limit)
-                .map { it.key }
-                .toList()
-        }
-    }
+    /** PC HEARING?: the newest calls in Call Activity. Main thread only. */
+    private fun getRecentHeardCallsigns(exclude: Set<String>, limit: Int): List<String> =
+        callActivityNow().filter { it.call !in exclude && heardCurrent(it.utcMs) }
+            .sortedByDescending { it.utcMs }.take(limit).map { it.call }
 
-    /** PC QUERY CALL: the call or its base call in call activity. */
-    private fun heardStation(call: String): HeardStation? {
-        synchronized(heardLock) {
-            return heardCallsigns.entries.firstOrNull { (key, value) ->
-                heardCurrent(value) && (key == call || key.split('/').maxByOrNull { it.length } == call)
-            }?.value
-        }
-    }
+    /** PC QUERY CALL: the call or its base call in Call Activity. */
+    private fun heardStation(call: String, calls: List<com.js8call.example.js8ui.Js8Activity.CallDetail>) =
+        calls.firstOrNull { heardCurrent(it.utcMs) && (it.call == call || com.js8call.example.js8ui.Js8Activity.baseCall(it.call) == call) }
 
     /** PC processRxActivity / processCommandActivity: a message to me or my group ends the CQ timer. */
     private fun stopCqForMessage(text: String) {
@@ -5255,7 +5398,7 @@ class JS8EngineService : Service() {
         submode: Int,
         frequencyHz: Double
     ) {
-        val built = buildTxMessage(text, directedCall)
+        val built = buildTxMessage(JS8Engine.normalizeText(text), directedCall) // the text as sent
         if (built.isNotBlank()) {
             lastTxMessage = built
             lastTxDirected = directedCall.trim().uppercase()
@@ -5572,6 +5715,7 @@ class JS8EngineService : Service() {
     /** PC rigFailure: stop sending, one automatic retry, then the Rig Control Error box. */
     private fun rigFailure(reason: String) {
         rigFailed = true
+        rigOpening = false
         startService(Intent(this, JS8EngineService::class.java).setAction(ACTION_HALT_TX))
         if (rigFirstError) {
             rigFirstError = false
@@ -5843,6 +5987,9 @@ class JS8EngineService : Service() {
         // while a UV-Pro worker may still hold the radio's sockets.
         private val uvproWorkersActive = AtomicInteger(0)
 
+        /** PC read_settings runs once at start: the first service start in this process. */
+        @Volatile private var settingsLoaded = false
+
         private const val TAG = "JS8EngineService"
         private const val PREF_AUTOREPLY_ENABLED = "autoreply_enabled"
         private const val PREF_RELAY_ENABLED = "relay_enabled"
@@ -5863,8 +6010,6 @@ class JS8EngineService : Service() {
         private const val PREF_TRUSDX_DIAGNOSTICS_ENABLED = "trusdx_diagnostics_enabled"
         private const val HEARD_LIMIT = 4
         private val HEARD_EXCLUDE_TOKENS = setOf("CQ", "HB", "HEARTBEAT", "ALLCALL", "@ALLCALL")
-        private const val RELAY_BUFFER_TIMEOUT_MS = 90_000L
-        private const val RELAY_FREQUENCY_TOLERANCE_HZ = 10.0f
         private const val RELAY_EOM_MARKER = "\u2662"
         private const val SUBMODE_NORMAL = 0
         private const val SUBMODE_FAST = 1
@@ -5935,6 +6080,8 @@ class JS8EngineService : Service() {
         const val ACTION_APRS_NOTICE = "com.js8call.example.ACTION_APRS_NOTICE"
         /** Set by MainActivity: last heard time of a call in Call Activity, read on the main thread. */
         @Volatile var callHeardMs: ((String) -> Long?)? = null
+        /** Set by MainActivity: a copy of Call Activity, read on the main thread. */
+        @Volatile var callActivityList: (() -> List<com.js8call.example.js8ui.Js8Activity.CallDetail>)? = null
         const val ACTION_TIME_SYNC_ONCE = "com.js8call.example.ACTION_TIME_SYNC_ONCE"
         const val ACTION_SET_TIME_DRIFT = "com.js8call.example.ACTION_SET_TIME_DRIFT"
         const val ACTION_TIME_DRIFT = "com.js8call.example.ACTION_TIME_DRIFT"
@@ -6042,6 +6189,7 @@ class JS8EngineService : Service() {
         // Extras
         const val EXTRA_STATE = "state"
         const val EXTRA_RIG_CONNECTED = "rig_connected"
+        const val EXTRA_RIG_OPENING = "rig_opening"
         const val EXTRA_UTC = "utc"
         const val EXTRA_SNR = "snr"
         const val EXTRA_DT = "dt"

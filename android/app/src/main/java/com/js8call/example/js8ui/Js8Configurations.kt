@@ -110,32 +110,59 @@ object Js8Configurations {
         restart(f)
     }
 
-    private fun askName(f: Fragment, title: String, start: String, onName: (String) -> Unit) {
+    /**
+     * PC MultiSettings NameDialog (74-98): "Old name:" with [old], an empty "New name:" box, / and \ refused,
+     * OK greyed at the start and while the name is in use. A name typed and deleted turns OK on, as the PC.
+     */
+    private fun askName(f: Fragment, title: String, old: String, onName: (String) -> Unit) {
         val c = f.requireContext()
-        val box = EditText(c).apply { setText(start); setSingleLine() }
-        val dialog = AlertDialog.Builder(c).setTitle(title).setView(box)
-            .setPositiveButton(android.R.string.ok, null).setNegativeButton(android.R.string.cancel, null).create()
+        val dp = c.resources.displayMetrics.density
+        val taken = names(c)
+        fun row(label: String, value: android.view.View) = android.widget.LinearLayout(c).apply {
+            orientation = android.widget.LinearLayout.HORIZONTAL
+            gravity = android.view.Gravity.CENTER_VERTICAL
+            addView(android.widget.TextView(c).apply { text = label; minWidth = (90 * dp).toInt() })
+            addView(value, android.widget.LinearLayout.LayoutParams(0, android.view.ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        }
+        val box = EditText(c).apply {
+            setSingleLine()
+            filters = arrayOf(android.text.InputFilter { s, start, end, _, _, _ ->
+                val t = s.subSequence(start, end).toString()
+                if (t.contains('/') || t.contains('\\')) t.replace("/", "").replace("\\", "") else null
+            })
+        }
+        val form = android.widget.LinearLayout(c).apply {
+            orientation = android.widget.LinearLayout.VERTICAL
+            setPadding((24 * dp).toInt(), (12 * dp).toInt(), (24 * dp).toInt(), 0)
+            addView(row("Old name:", android.widget.TextView(c).apply { text = old }))
+            addView(row("New name:", box))
+        }
+        val dialog = AlertDialog.Builder(c).setTitle(title).setView(form)
+            .setPositiveButton(android.R.string.ok) { _, _ -> onName(box.text.toString().trim()) }
+            .setNegativeButton(android.R.string.cancel, null).create()
         dialog.setOnShowListener {
-            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
-                val name = box.text.toString().trim()
-                when {
-                    name.isEmpty() -> box.error = "Name"
-                    name in names(c) -> box.error = "Already in use"
-                    else -> { onName(name); dialog.dismiss() }
+            val ok = dialog.getButton(AlertDialog.BUTTON_POSITIVE)
+            ok.isEnabled = false
+            box.addTextChangedListener(object : android.text.TextWatcher {
+                override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, d: Int) {}
+                override fun onTextChanged(s: CharSequence?, a: Int, b: Int, d: Int) {}
+                override fun afterTextChanged(s: android.text.Editable?) {
+                    val name = s.toString().trim()
+                    ok.isEnabled = name !in taken
                 }
-            }
+            })
         }
         dialog.show()
     }
 
-    /** PC MultiSettings clone_configuration: "<name> - Copy", no question. */
+    /** PC MultiSettings clone_configuration: "<name> - Copy", then "<name> - Copy(2)" (594-603), no question. */
     private fun clone(f: Fragment, name: String) {
         val c = f.requireContext()
         if (name == current(c)) saveCurrent(c)
         val source = file(c, name)
         var new = "$name - Copy"
         var n = 1
-        while (new in names(c)) new = "$name - Copy (${n++})"
+        while (new in names(c)) new = "$name - Copy(${++n})"
         file(c, new).writeText(if (source.exists()) source.readText() else "{}")
     }
 
@@ -160,7 +187,7 @@ object Js8Configurations {
             }.show()
     }
 
-    private fun rename(f: Fragment, name: String) = askName(f, "New Configuration Name", name) { new ->
+    private fun rename(f: Fragment, name: String) = askName(f, "New Configuration Name", old = name) { new ->
         val c = f.requireContext()
         if (name == current(c)) {
             saveCurrent(c)

@@ -21,7 +21,7 @@ a = c(); t.expect('B09', [f'{a}: {M} QUERY MSGS'], f'{a} NO')
 a = c(); d = c(1); pl = f'TO:{d} HI YOU'
 t.expect('C03', [f'{a}: {M} MSG {pl} {sum16(pl)}'], f'{a} ACK')
 t.expect('B08', [f'{d}: {M} QUERY MSGS'], f'{d} YES MSG ID')
-ids = [re.search(r'MSG ID (\d+)', l).group(1) for l in alltxt() if re.search(f'{d} YES MSG ID', l)]
+ids = next((m for j in tx_joined(alltxt())[1::-1] for m in [re.findall(rf'{d} YES MSG ID (\d+)', j)] if m), [])  # N30: frames joined
 q = f'MSG {ids[-1]}' if ids else 'MSG 0'
 t.silent('C05', [f'{d}: {M} QUERY {q} ZZZ'])
 t.expect('B10', [f'{d}: {M} QUERY {q} {sum16(q)}'], f'{d} MSG HI YOU')

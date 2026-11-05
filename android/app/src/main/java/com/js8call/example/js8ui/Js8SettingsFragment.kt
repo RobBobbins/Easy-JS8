@@ -390,25 +390,35 @@ class Js8SettingsFragment : Fragment() {
         val callsign = (draft.values["callsign"] ?: prefs.getString("callsign", "")).orEmpty().trim().uppercase(Locale.US)
         val grid = (draft.values["grid"] ?: prefs.getString("grid", "")).orEmpty().trim()
         val swl = swlChecked()
+        fun value(key: String, default: String = "") = (draft.values[key] ?: prefs.getString(key, default)).orEmpty().trim().uppercase(Locale.US)
         val problem = when {
             !station -> null
+            // PC validate order: the End of Transmission character first (cpp 2947)
+            value("js8cfg_eot", "♢").isEmpty() -> "Please enter an end of transmission character"
             (callsign.isNotEmpty() || !swl) && (!Js8Callsign.isValid(callsign) || callsign.startsWith("@")) ->
                 "The callsign format you provided is not supported"
             (grid.isNotEmpty() || !swl) && !Js8Grid.isValid(grid) -> "The grid you provided is not valid"
             else -> {
-                fun value(key: String, default: String = "") = (draft.values[key] ?: prefs.getString(key, default)).orEmpty().trim().uppercase(Locale.US)
-                val groups = value("my_groups").split(",").map { it.trim() }.filter { it.isNotEmpty() }
-                val badGroup = groups.firstOrNull { it == "@APRSIS" || it == "@JS8NET" }
-                val notGroup = groups.firstOrNull { !Js8Callsign.isCompound(it) }
+                // PC splitGroups and splitWords: commas only; an empty entry from a stray comma is kept (cpp 2915-2943)
+                fun split(key: String) = value(key).let { if (it.isEmpty()) emptyList() else it.split(",").map { w -> w.trim() } }
+                // PC: each group in turn, a group that cannot be joined, then not a valid group (cpp 2967-2981)
+                val badGroup = split("my_groups").firstNotNullOfOrNull { g ->
+                    when {
+                        g == "@APRSIS" || g == "@JS8NET" -> "$g is a group that cannot be joined"
+                        !Js8Callsign.isCompound(g) -> "$g is not a valid group"
+                        else -> null
+                    }
+                }
                 val cq = value("js8cfg_cq_message", "CQ CQ CQ <MYGRID4>")
-                val badCall = value("js8cfg_auto_whitelist").split(Regex("[,\\s]+")).firstOrNull { it.isNotEmpty() && !Js8Callsign.isValid(it) }
+                val badCall = split("js8cfg_auto_whitelist").firstOrNull { !Js8Callsign.isValid(it) }
+                // PC: the chosen PTT Method is greyed (cpp 3040-3043)
+                val ptt = sections.flatMap { it.items }.filterIsInstance<RadioItem>().firstOrNull { it.field.key == "js8cfg_ptt_method" }
                 when {
-                    value("js8cfg_eot", "♢").isEmpty() -> "Please enter an end of transmission character"
-                    badGroup != null -> "$badGroup is a group that cannot be joined"
-                    notGroup != null -> "$notGroup is not a valid group"
+                    badGroup != null -> badGroup
                     badCall != null -> "$badCall is not a valid callsign to whitelist"
                     cq.isNotEmpty() && !(cq.startsWith("CQ") || cq.contains(callsign)) ->
                         "The CQ message format is invalid. It must either start with \"CQ\" or contain your callsign."
+                    ptt != null && draft.get(ptt.field) in ptt.greyed(draft) -> "Invalid PTT method"
                     else -> null
                 }
             }
@@ -1043,6 +1053,14 @@ class Js8SettingsFragment : Fragment() {
         isSingleLine = true
     }
 
+    /** PC message_alphabet "[^\x00-\x1F]*" (cpp 207): typed or pasted text with a control character is refused. */
+    private val messageAlphabet = InputFilter { s, start, end, _, _, _ ->
+        if ((start until end).any { s[it] < ' ' }) "" else null
+    }
+
+    /** The boxes the PC gives message_alphabet (cpp 1491-1504); its HB Message box is hidden. */
+    private val messageBoxes = setOf("my_groups", "js8cfg_cq_message", "js8cfg_reply_message", "my_info", "my_status")
+
     private fun textBox(f: Field) = styledField(EditText(requireContext())).apply {
         setText(draft.get(f))
         hint = f.hint
@@ -1051,6 +1069,7 @@ class Js8SettingsFragment : Fragment() {
         // Android 8.0+ only (the app runs on 7.0 since 2026-10-22)
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_NO
         if (f.maxLength > 0) filters = arrayOf(InputFilter.LengthFilter(f.maxLength))
+        if (f.key in messageBoxes) filters = filters + messageAlphabet
         if (f.key == "grid") gridBox = this as EditText
         if (f.required) { requiredBoxes += this; markRequired(this) }
         addTextChangedListener(object : TextWatcher {
@@ -1154,9 +1173,21 @@ class Js8SettingsFragment : Fragment() {
                 val list = choices(f)
                 val idx = list.indexOfFirst { it.second == (draft.values[f.key] ?: current) }
                 if (f.key == Js8SettingsSchema.RIG_KEY) { searchableChoice(f, list, idx); return@setOnClickListener }
+                val greyed = f.greyedChoices(requireContext(), draft)
+                // PC: a greyed item shows in the list and can't be picked
+                val adapter = object : android.widget.ArrayAdapter<String>(requireContext(),
+                    android.R.layout.simple_list_item_single_choice, list.map { it.first.ifEmpty { " " } }) {
+                    override fun areAllItemsEnabled() = greyed.isEmpty()
+                    override fun isEnabled(position: Int) = list[position].second !in greyed
+                    override fun getView(position: Int, convertView: View?, parent: ViewGroup): View =
+                        super.getView(position, convertView, parent).also { v ->
+                            val on = list[position].second !in greyed
+                            v.isEnabled = on; v.alpha = if (on) 1f else 0.5f
+                        }
+                }
                 AlertDialog.Builder(requireContext())
                     .setTitle(f.label.trimEnd(':'))
-                    .setSingleChoiceItems(list.map { it.first.ifEmpty { " " } }.toTypedArray(), idx) { d, which ->
+                    .setSingleChoiceItems(adapter, idx) { d, which ->
                         d.dismiss()
                         draft.set(f, list[which].second)
                         render() // some choices show / hide other settings (Rig)
@@ -1247,7 +1278,7 @@ class Js8SettingsFragment : Fragment() {
                 Js8Configurations.showMenu(this, android.widget.PopupMenu(android.view.ContextThemeWrapper(requireContext(), R.style.ThemeOverlay_Js8PopupMenu), it))
             }
             if (action == "test_cat" || action == "test_ptt") {
-                b.isEnabled = Js8SettingsSchema.rigTestEnabled(draft, action)
+                b.isEnabled = Js8SettingsSchema.rigTestEnabled(draft, action, vm.testCat)
                 val tint = if (action == "test_cat") vm.testCat?.let { if (it) Color.rgb(0, 128, 0) else Color.RED }
                     else if (vm.testPtt) Color.RED else null
                 if (tint != null) { b.backgroundTintList = ColorStateList.valueOf(tint); b.setTextColor(Color.WHITE) }
@@ -1442,17 +1473,19 @@ class Js8SettingsFragment : Fragment() {
     private fun frequencyTable(): View {
         val key = Js8SettingsSchema.FREQUENCIES_KEY
         fun current() = Js8SettingsSchema.frequencyItems(requireContext(), draft.values[key] ?: draft.prefs.getString(key, null))
+        // PC FrequencyList frequency_column: "7.078 000 MHz (40m)", OOB outside the 30 bands; the
+        // Frequency (MHz) column is hidden (cpp 1639-1640, FrequencyList.cpp 356-359)
         fun rows(items: List<Js8SettingsSchema.FrequencyItem>) = items.mapIndexed { i, f ->
+            val band = com.js8call.example.util.BandUtils.bandOrNull(f.hz) ?: "OOB"
             Js8TableView.Row("$i", mapOf(
                 "region" to f.region, "mode" to f.mode,
-                "freq" to com.js8call.example.util.BandUtils.bandLabelForFrequencyHz(f.hz),
-                "mhz" to String.format(Locale.US, "%.6f", f.hz / 1_000_000.0),
+                "freq" to "${com.js8call.example.util.BandUtils.prettyMhz(f.hz)} MHz ($band)",
                 "desc" to f.description
-            ))
+            ), sortValues = mapOf("freq" to f.hz))
         }
         val list = table("cfg_freq", listOf(
             Js8TableView.Column("region", "IARU Region", 90), Js8TableView.Column("mode", "Mode", 60),
-            Js8TableView.Column("freq", "Frequency", 90), Js8TableView.Column("mhz", "Frequency (MHz)", 120),
+            Js8TableView.Column("freq", "Frequency", 150, numeric = true),
             Js8TableView.Column("desc", "Description", 120, stretch = true)
         ), rows(current()), 160)
         list.onRowClick = { list.selectedRowId = it.id }
@@ -1613,12 +1646,13 @@ class Js8SettingsFragment : Fragment() {
             val hz = p[0].toLongOrNull() ?: 0L
             Js8TableView.Row("$i", mapOf(
                 "band" to com.js8call.example.util.BandUtils.bandLabelForFrequencyHz(hz),
-                "mhz" to String.format(Locale.US, "%.6f", hz / 1_000_000.0),
+                // PC StationList frequency_column: "7.078 000 MHz" (StationList.cpp 279-281)
+                "mhz" to "${com.js8call.example.util.BandUtils.prettyMhz(hz)} MHz",
                 "at" to p.getOrElse(1) { "" }, "until" to p.getOrElse(2) { "" }, "desc" to p.getOrElse(3) { "" }
-            ))
+            ), sortValues = mapOf("mhz" to hz))
         }
         val list = table("cfg_sched", listOf(
-            Js8TableView.Column("band", "Band", 60), Js8TableView.Column("mhz", "Freq. (MHz)", 90),
+            Js8TableView.Column("band", "Band", 60), Js8TableView.Column("mhz", "Freq. (MHz)", 110, numeric = true),
             Js8TableView.Column("at", "Switch at (UTC)", 110), Js8TableView.Column("until", "Until (UTC)", 90),
             Js8TableView.Column("desc", "Description", 120, stretch = true)
         ), rows(current()), 110)
@@ -1710,6 +1744,7 @@ class Js8SettingsFragment : Fragment() {
         val addRow = LinearLayout(requireContext()).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
         val input = styledField(EditText(requireContext())).apply {
             inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
+            filters = arrayOf(messageAlphabet) // PC add_macro_line_edit (cpp 1491)
         }
         val list = table("cfg_saved", listOf(Js8TableView.Column("msg", "Message", 200, stretch = true)),
             current().mapIndexed { i, m -> Js8TableView.Row("$i", mapOf("msg" to m)) }, 200)

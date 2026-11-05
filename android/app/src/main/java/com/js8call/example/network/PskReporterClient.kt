@@ -12,7 +12,9 @@ import kotlin.random.Random
 
 class PskReporterClient(
     private val programId: String,
-    private val host: String = HOST
+    private val host: String = HOST,
+    /** PC DriftingDateTime: the export time uses the drifted clock (PSKReporter.cpp 572-573). */
+    private val nowMs: () -> Long = System::currentTimeMillis
 ) {
     /** PC pskReporter sendError: the status bar message. */
     var onUnavailable: (() -> Unit)? = null
@@ -43,6 +45,15 @@ class PskReporterClient(
     private var sequenceNumber: Int = 0
     private var sendDescriptors: Int = 0
     private var flushCounter: Int = 0
+    /** PC report_timer_: one interval, 120 to 125 s, chosen when it starts. */
+    private var reportIntervalSec = MIN_SEND_INTERVAL_SECONDS
+
+    // PC payload_, tx_data_ and tx_residue_: the packet being filled. It stays between report times until it
+    // goes; spots that did not fit wait in the residue for the next packet.
+    private val payload = PacketWriter()
+    private var payloadHeader: MessageHeader? = null
+    private val txData = PacketWriter()
+    private var txResidue = ByteArray(0)
 
     private val reportRunnable = object : Runnable {
         override fun run() {
@@ -64,6 +75,7 @@ class PskReporterClient(
         handlerThread = HandlerThread("PskReporter").apply { start() }
         handler = Handler(handlerThread!!.looper)
         handler?.post { ensureSocket() }
+        reportIntervalSec = MIN_SEND_INTERVAL_SECONDS + Random.nextInt(JITTER_MAX_SECONDS + 1)
         scheduleReport()
         scheduleDescriptorRefresh()
     }
@@ -109,7 +121,8 @@ class PskReporterClient(
         if (normalizedCall.isBlank()) return
         val normalizedGrid = grid.trim().uppercase(Locale.US)
         val normalizedMode = mode.trim().uppercase(Locale.US)
-        val band = bandKeyForFrequency(frequencyHz)
+        // PC bands()->find: one of the 30 bands, empty outside them (PSKReporter.cpp 693-694)
+        val band = bandKey(frequencyHz)
         val cacheKey = "${normalizedCall}_$band"
         val now = System.currentTimeMillis() / 1000
         val expiration = now - CACHE_TIMEOUT_SECONDS
@@ -117,13 +130,14 @@ class PskReporterClient(
         synchronized(lock) {
             val previous = callsCache[cacheKey]
             val expired = previous == null || previous < expiration
-            if (expired) {
+            // PC eclipse_active: within 6 hours of an eclipse every spot goes, past the 1-hour limit
+            if (expired || eclipseActive(timestampSeconds)) {
                 spots.add(Spot(normalizedCall, normalizedGrid, snr, frequencyHz, normalizedMode, timestampSeconds))
                 callsCache[cacheKey] = now
             } else {
                 for (i in spots.indices.reversed()) {
                     val existing = spots[i]
-                    if (existing.call == normalizedCall && bandKeyForFrequency(existing.frequencyHz) == band) {
+                    if (existing.call == normalizedCall && bandKey(existing.frequencyHz) == band) {
                         spots[i] = Spot(normalizedCall, normalizedGrid, snr, frequencyHz, normalizedMode, timestampSeconds)
                         callsCache[cacheKey] = now
                         break
@@ -142,8 +156,7 @@ class PskReporterClient(
     }
 
     private fun scheduleReport() {
-        val intervalSec = MIN_SEND_INTERVAL_SECONDS + Random.nextInt(JITTER_MAX_SECONDS + 1)
-        handler?.postDelayed(reportRunnable, intervalSec * 1000L)
+        handler?.postDelayed(reportRunnable, reportIntervalSec * 1000L)
     }
 
     private fun scheduleDescriptorRefresh() {
@@ -173,119 +186,88 @@ class PskReporterClient(
         socket = null
     }
 
-    private fun sendReport(flush: Boolean) {
+    /** PC build_preamble: the header with the next sequence number, the descriptors while due, the receiver record. */
+    private fun buildPreamble() {
+        payload.writeShort(IPFIX_VERSION)
+        val lengthOffset = payload.position
+        payload.writeShort(0)
+        val exportTimeOffset = payload.position
+        payload.writeInt(0)
+        payload.writeInt(++sequenceNumber) // PC ++sequence_number_: 1 per packet, from 1 (448)
+        payload.writeInt(observationId)
+        if (sendDescriptors > 0) {
+            sendDescriptors -= 1
+            payload.writeBytes(buildSenderInfoDescriptor())
+            payload.writeBytes(buildReceiverInfoDescriptor())
+        }
+        payload.writeBytes(buildReceiverRecord())
+        payloadHeader = MessageHeader(lengthOffset, exportTimeOffset)
+    }
+
+    /** PC flushing(): every 4th report time sends whatever is waiting, even no spots. */
+    private fun flushing() = ++flushCounter % FLUSH_INTERVAL == 0
+
+    /**
+     * PC send_report (PSKReporter.cpp 492-594): the spots go into the packet. It is sent when it would pass
+     * 10000 bytes (the last spot waits for the next packet), when the spots run out above 508 bytes, or when
+     * flushing: every 4th report time and at the end, then with only the station record if there are no spots.
+     * Otherwise it waits for the next report time.
+     */
+    private fun sendReport(sendResidue: Boolean) {
         ensureSocket()
         val udpSocket = socket ?: return
-        if (rxCall.isBlank() || rxGrid.isBlank()) return
-        if (!flush && synchronized(lock) { spots.isEmpty() }) return
-
-        while (true) {
-            val header = createBaseMessage()
-            val baseMessage = header.writer
-            val txData = PacketWriter()
-            val txHeaderSize = 4
-            txData.writeShort(TEMPLATE_ID_SENDER)
-            val txLengthOffset = txData.position
-            txData.writeShort(0)
-
-            val addedSpots = mutableListOf<Spot>()
-            while (true) {
-                val spot = synchronized(lock) { spots.firstOrNull() } ?: break
-                val before = txData.position
-                writeSpot(txData, spot)
-                val len = estimatedMessageLength(baseMessage.size, txData.size)
-                if (len > MAX_PAYLOAD_LENGTH) {
-                    txData.position = before
+        fun spotsLeft() = synchronized(lock) { spots.isNotEmpty() }
+        if (payload.size == 0) buildPreamble()
+        var flush = flushing() || sendResidue
+        while (spotsLeft() || flush) {
+            if (payload.size == 0) buildPreamble()
+            if (txData.size == 0 && (spotsLeft() || txResidue.isNotEmpty())) {
+                txData.writeShort(TEMPLATE_ID_SENDER)
+                txData.writeShort(0)
+            }
+            if (txResidue.isNotEmpty()) {
+                txData.writeBytes(txResidue)
+                txResidue = ByteArray(0)
+            }
+            while (spotsLeft() || flush) {
+                var txDataSize = txData.size
+                synchronized(lock) { spots.removeFirstOrNull() }?.let { writeSpot(txData, it) }
+                val len = estimatedMessageLength(payload.size, txData.size)
+                val drained = !spotsLeft()
+                if (len > MAX_PAYLOAD_LENGTH || (drained && len > MIN_PAYLOAD_LENGTH) || (flush && drained)) {
+                    if (txData.size > 0) {
+                        if (len <= MAX_PAYLOAD_LENGTH) txDataSize = txData.size
+                        val tx = PacketWriter()
+                        tx.writeBytes(txData.toByteArray().copyOf(txDataSize))
+                        tx.padTo4()
+                        tx.setShort(2, tx.size)
+                        payload.writeBytes(tx.toByteArray())
+                    }
+                    val header = payloadHeader ?: return
+                    payload.padTo4()
+                    payload.setShort(header.lengthOffset, payload.size)
+                    payload.setInt(header.exportTimeOffset, (nowMs() / 1000).toInt())
+                    send(udpSocket, payload.toByteArray())
+                    flush = false
+                    payload.clear()
+                    val all = txData.toByteArray()
+                    txResidue = all.copyOfRange(txDataSize, all.size)
+                    txData.clear()
                     break
                 }
-                synchronized(lock) { if (spots.isNotEmpty()) spots.removeAt(0) }
-                addedSpots.add(spot)
             }
-
-            if (addedSpots.isEmpty()) {
-                if (!flush) return
-                if (txData.size <= txHeaderSize) {
-                    finalizeAndSend(baseMessage, header, udpSocket, 0)
-                    return
-                }
-            }
-
-            val messageLength = estimatedMessageLength(baseMessage.size, txData.size)
-            val shouldSend = flush || messageLength > MIN_PAYLOAD_LENGTH || synchronized(lock) { spots.isEmpty() }
-            if (!shouldSend && addedSpots.isNotEmpty()) {
-                synchronized(lock) {
-                    for (i in addedSpots.indices.reversed()) {
-                        spots.add(0, addedSpots[i])
-                    }
-                }
-                return
-            }
-
-            if (txData.size > txHeaderSize) {
-                txData.padTo4()
-                val txDataLength = txData.size
-                txData.setShort(txLengthOffset, txDataLength)
-                baseMessage.writeBytes(txData.toByteArray())
-            }
-
-            finalizeAndSend(baseMessage, header, udpSocket, addedSpots.size)
-
-            if (!flush && synchronized(lock) { spots.isEmpty() }) return
-            if (!flush && ++flushCounter % FLUSH_INTERVAL == 0) {
-                continue
-            }
-            if (flush && synchronized(lock) { spots.isEmpty() }) return
         }
     }
 
-    private fun createBaseMessage(): MessageHeader {
-        val message = PacketWriter()
-        message.writeShort(IPFIX_VERSION)
-        val lengthOffset = message.position
-        message.writeShort(0)
-        val exportTimeOffset = message.position
-        message.writeInt(0)
-        val sequenceOffset = message.position
-        message.writeInt(0)
-        message.writeInt(observationId)
-
-        val includesDescriptors = sendDescriptors > 0
-        if (includesDescriptors) {
-            val sid = buildSenderInfoDescriptor()
-            message.writeBytes(sid)
-            val rid = buildReceiverInfoDescriptor()
-            message.writeBytes(rid)
-        }
-
-        val receiver = buildReceiverRecord()
-        message.writeBytes(receiver)
-        return MessageHeader(message, lengthOffset, exportTimeOffset, sequenceOffset, includesDescriptors)
-    }
-
-    private fun finalizeAndSend(
-        message: PacketWriter,
-        header: MessageHeader,
-        udpSocket: DatagramSocket,
-        reportCount: Int
-    ): Boolean {
-        message.padTo4()
-        val length = message.size
-        message.setShort(header.lengthOffset, length)
-        message.setInt(header.sequenceOffset, sequenceNumber + reportCount)
-        val exportTime = (System.currentTimeMillis() / 1000).toInt()
-        message.setInt(header.exportTimeOffset, exportTime)
-        val payload = message.toByteArray()
+    /** PC handle_socket_error: an error drops the spots waiting to go (PSKReporter.cpp 385-397). */
+    private fun send(udpSocket: DatagramSocket, bytes: ByteArray) {
         try {
-            val packet = DatagramPacket(payload, payload.size)
-            udpSocket.send(packet)
-            if (header.includesDescriptors) sendDescriptors -= 1
-            sequenceNumber += reportCount
-            Log.d(TAG, "PSKReporter sent ${payload.size} bytes")
-            return true
+            udpSocket.send(DatagramPacket(bytes, bytes.size))
+            Log.d(TAG, "PSKReporter sent ${bytes.size} bytes")
         } catch (e: Exception) {
             Log.w(TAG, "PSKReporter send failed", e)
+            synchronized(lock) { spots.clear() }
             onUnavailable?.invoke()
-            return false
         }
     }
 
@@ -409,25 +391,9 @@ class PskReporterClient(
         return if (rem == 0) 0 else 4 - rem
     }
 
-    private fun bandKeyForFrequency(frequencyHz: Long): String {
-        val mhz = frequencyHz.toDouble() / 1_000_000.0
-        return when {
-            mhz in 1.8..2.0 -> "160m"
-            mhz in 3.5..4.0 -> "80m"
-            mhz in 5.0..5.5 -> "60m"
-            mhz in 7.0..7.3 -> "40m"
-            mhz in 10.0..10.2 -> "30m"
-            mhz in 14.0..14.35 -> "20m"
-            mhz in 18.0..18.2 -> "17m"
-            mhz in 21.0..21.45 -> "15m"
-            mhz in 24.8..25.0 -> "12m"
-            mhz in 28.0..29.7 -> "10m"
-            mhz in 50.0..54.0 -> "6m"
-            mhz in 144.0..148.0 -> "2m"
-            mhz in 420.0..450.0 -> "70cm"
-            else -> String.format(Locale.US, "%.1fMHz", mhz)
-        }
-    }
+    private fun bandKey(frequencyHz: Long) = com.js8call.example.util.BandUtils.bandOrNull(frequencyHz).orEmpty()
+
+    private fun eclipseActive(timestampSeconds: Long) = ECLIPSE_SECONDS.any { kotlin.math.abs(it - timestampSeconds) <= 6 * 3600L }
 
     private class PacketWriter(initialSize: Int = 1024) {
         private var buffer = ByteArray(initialSize)
@@ -485,6 +451,10 @@ class PskReporterClient(
             return buffer.copyOf(position)
         }
 
+        fun clear() {
+            position = 0
+        }
+
         private fun ensure(extra: Int) {
             if (position + extra <= buffer.size) return
             var newSize = buffer.size * 2
@@ -495,13 +465,7 @@ class PskReporterClient(
         }
     }
 
-    private data class MessageHeader(
-        val writer: PacketWriter,
-        val lengthOffset: Int,
-        val exportTimeOffset: Int,
-        val sequenceOffset: Int,
-        val includesDescriptors: Boolean
-    )
+    private data class MessageHeader(val lengthOffset: Int, val exportTimeOffset: Int)
 
     companion object {
         private const val TAG = "PskReporter"
@@ -512,13 +476,26 @@ class PskReporterClient(
         private const val TEMPLATE_ID_RECEIVER = 0x50e2
         private const val ENTERPRISE_NUMBER = 30351
         private const val REPORTER_SOURCE_AUTOMATIC = 1
-        private const val MIN_SEND_INTERVAL_SECONDS = 600
+        // PC PSKReporter.cpp 50-52: every 120-125 s; every 4th time sends what it has
+        private const val MIN_SEND_INTERVAL_SECONDS = 120
         private const val JITTER_MAX_SECONDS = 5
-        private const val FLUSH_INTERVAL = 125
+        private const val FLUSH_INTERVAL = 4
         private const val MAX_STRING_LENGTH = 254
         private const val CACHE_TIMEOUT_SECONDS = 3600L
         private const val MIN_PAYLOAD_LENGTH = 508
         private const val MAX_PAYLOAD_LENGTH = 10000
         private const val DESCRIPTOR_REFRESH_MS = 60L * 60L * 1000L
+
+        /** PC JS8_Include/eclipse.txt (eclipse.gsfc.nasa.gov SEdecade2021), UTC. */
+        private val ECLIPSE_SECONDS = listOf(
+            "2024-10-02T18:46:13Z", "2025-03-29T10:48:36Z", "2025-09-21T19:43:04Z", "2026-02-17T12:13:05Z",
+            "2026-08-12T17:47:05Z", "2027-02-06T16:00:47Z", "2027-08-02T10:04:49Z", "2028-01-26T15:08:58Z",
+            "2028-07-22T02:56:39Z", "2029-01-14T17:13:47Z", "2029-06-12T04:06:13Z", "2029-07-11T15:37:18Z",
+            "2029-12-05T15:03:57Z", "2030-06-01T06:29:13Z", "2030-11-25T06:51:37Z"
+        ).map { iso ->
+            java.text.SimpleDateFormat("yyyy-MM-dd'T'HH:mm:ss'Z'", Locale.US).apply {
+                timeZone = java.util.TimeZone.getTimeZone("UTC")
+            }.parse(iso)!!.time / 1000
+        }
     }
 }

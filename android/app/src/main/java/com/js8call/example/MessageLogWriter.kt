@@ -25,8 +25,14 @@ class MessageLogWriter(private val context: Context) {
     private val dayFormatter = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply {
         timeZone = TimeZone.getTimeZone("UTC")
     }
-    /** Day of the last line; the PC's m_RxLog writes a date and frequency line when the day turns. */
-    private var lastDay = ""
+    /**
+     * PC m_RxLog: a date and frequency line goes before the next decode line. Set at start, by Erase ALL.TXT
+     * and when the period time goes back (the UTC day turns); cleared at the end of every decode run, so it
+     * is written only inside that run (UI_Constructor.cpp 43, mw 2104-2105, 2188, 4227, 7032-7038).
+     */
+    @Volatile
+    private var rxLog = true
+    private var nutc0 = 999999
     private var lastDial = 0L
 
     private val directedTimeFormatter = SimpleDateFormat("yyyy-MM-dd HH:mm:ss", Locale.US).apply {
@@ -49,6 +55,7 @@ class MessageLogWriter(private val context: Context) {
     /** Erase ALL.TXT. The next line starts a new file. */
     fun erase() {
         executor.execute {
+            rxLog = true
             logTarget = null
             for (name in listOf(LOG_NAME)) {
                 try {
@@ -65,40 +72,55 @@ class MessageLogWriter(private val context: Context) {
         }
     }
 
-    /**
-     * PC writeAllTxt: "yyyy-MM-dd hh:mm:ss snr dt offset mode  frame         bits   message", UTC.
-     * The engine hands the app decoded text, not the 12-character frame, so the frame column holds
-     * its first 12 characters.
-     */
-    fun logRx(utcMs: Long, dialHz: Long, text: String, snr: Int, dt: Float, offset: Int, modeChar: String, bits: Int) {
-        if (!enabled) return
-        val line = String.format(Locale.US, "%s %3d %4.1f %4d %s  %-12s         %d   %s",
-            directedTimeFormatter.format(Date(utcMs)), snr, dt, offset, modeChar, text.take(12), bits, text)
-        enqueue(line, utcMs, dialHz)
+    /** A decode run starts; [nutc] is its period time, hhmmss (PC decodeStart, mw 2097-2105). */
+    fun decodeStarted(nutc: Int) {
+        if (nutc < nutc0) rxLog = true
+        nutc0 = nutc
     }
 
-    /** PC write_transmit_entry: the start of the period, "Transmitting x MHz  JS8:  message". */
-    fun logTx(utcMs: Long, dialHz: Long, periodSec: Int, text: String) {
+    /** PC decodeDone: no date line after this decode run. */
+    fun decodeDone() {
+        rxLog = false
+    }
+
+    /**
+     * PC writeAllTxt(date + " " + DecodedText::string() + " " + message): the date now, then the period
+     * time [nutc] with no space before the SNR, the 12-character [frame], 4 spaces before the text, UTC
+     * (processDecodeEvent.cpp 241-245, DecodedText.cpp 326). [dialHz] is the dial for the date line.
+     */
+    fun logRx(utcMs: Long, nutc: Int, dialHz: Long, frame: String, text: String, snr: Int, dt: Float, offset: Int, modeChar: String, bits: Int) {
+        if (!enabled) return
+        val line = String.format(Locale.US, "%s %02d:%02d:%02d%3d %4.1f %4d %s  %s         %d    %s",
+            dayFormatter.format(Date(utcMs)), nutc / 10000, nutc % 10000 / 100, nutc % 100, snr, dt, offset, modeChar, frame, bits, text)
+        val header = if (rxLog) directedTimeFormatter.format(Date(utcMs)) + "  ${mhz(dialHz)} MHz  JS8" else null
+        rxLog = false
+        enqueue(line, header)
+    }
+
+    /**
+     * PC write_transmit_entry: the start of the period, "Transmitting x MHz  JS8:  " and the text of the
+     * frame going out, as it is (mw 2667-2670, 6994-7009).
+     */
+    fun logTx(utcMs: Long, dialHz: Long, periodSec: Int, frameText: String) {
         if (!enabled) return
         val start = utcMs - (utcMs / 1000 % periodSec) * 1000
-        enqueue(directedTimeFormatter.format(Date(start)) + "  Transmitting ${mhz(dialHz)} MHz  JS8:  ${sanitizeText(text)}", utcMs, dialHz)
+        enqueue(directedTimeFormatter.format(Date(start)) + "  Transmitting ${mhz(dialHz)} MHz  JS8:  $frameText", null)
     }
 
     /** PC write_frequency_entry: a new dial frequency, below 30 MHz only. */
     fun logFrequency(utcMs: Long, dialHz: Long) {
         if (!enabled || dialHz >= 30_000_000L || dialHz == lastDial) return
         lastDial = dialHz
-        lastDay = dayFormatter.format(Date(utcMs))
-        enqueue(directedTimeFormatter.format(Date(utcMs)) + "  ${mhz(dialHz)} MHz  JS8", utcMs, dialHz)
+        enqueue(directedTimeFormatter.format(Date(utcMs)) + "  ${mhz(dialHz)} MHz  JS8", null)
     }
 
     /** qSetRealNumberPrecision(12): no trailing zeros. */
     private fun mhz(dialHz: Long) = java.math.BigDecimal(dialHz).movePointLeft(6).stripTrailingZeros().toPlainString()
 
-    /** PC writeMsgTxt: DIRECTED.TXT, UTC date, dial MHz, offset, SNR and text, tab separated. */
-    fun logDirected(dialHz: Long, offset: Int, snr: String, text: String) {
+    /** PC writeMsgTxt: DIRECTED.TXT, the drifted UTC time [utcMs] (mw 7062), dial MHz, offset, SNR and text, tab separated. */
+    fun logDirected(utcMs: Long, dialHz: Long, offset: Int, snr: String, text: String) {
         if (!enabled) return
-        val line = directedTimeFormatter.format(Date()) + "\t" + String.format(Locale.US, "%.6f", dialHz / 1_000_000.0) +
+        val line = directedTimeFormatter.format(Date(utcMs)) + "\t" + String.format(Locale.US, "%.6f", dialHz / 1_000_000.0) +
             "\t$offset\t$snr\t$text\n"
         executor.execute {
             try {
@@ -115,11 +137,8 @@ class MessageLogWriter(private val context: Context) {
         }
     }
 
-    private fun enqueue(line: String, utcMs: Long, dialHz: Long) {
+    private fun enqueue(line: String, header: String?) {
         if (!enabled) return
-        val day = dayFormatter.format(Date(utcMs))
-        val header = if (day != lastDay) directedTimeFormatter.format(Date(utcMs)) + "  ${mhz(dialHz)} MHz  JS8" else null
-        lastDay = day
         executor.execute {
             try {
                 header?.let { appendLine(it) }
@@ -220,11 +239,6 @@ class MessageLogWriter(private val context: Context) {
             Log.w(TAG, "Failed creating log entry", e)
             null
         }
-    }
-
-    private fun sanitizeText(text: String): String {
-        val normalized = text.replace(Regex("\\s+"), " ").trim()
-        return normalized.replace("\"", "\\\"")
     }
 
     private sealed class LogTarget {

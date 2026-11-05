@@ -62,5 +62,31 @@ BASE = dict(autoreply_enabled=True, js8cfg_autoreply_startup=True, js8cfg_autore
 
 
 def fresh(**k):
-    setprefs(**{**BASE, **k})
-    start()
+    with part('restart', 20):  # setprefs about 3 s, start 6 s
+        setprefs(**{**BASE, **k})
+        start()
+
+def show_call(call):
+    """Scroll the Callsigns list until the call shows. The list's height changes with the Message Window
+    (upright 240 to 630 px), so the swipe is read from its bounds each time; down to the end, then back up."""
+    step, last = 1, None
+    for _ in range(60):
+        x = dump()
+        p = find(x, call)
+        if p:
+            return p
+        m = re.search(r'resource-id="[^"]*js8_call_activity"[^>]*bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"', x)
+        if not m:
+            return None
+        l, top, r, bot = map(int, m.groups())
+        rows = re.findall(r'<node [^>]*text="([^"]+)"[^>]*bounds="\[(\d+),\d+\]\[\d+,\d+\]"', x)
+        seen = [t for t, a in rows if l <= int(a) < r]
+        if seen == last:
+            if step == -1:
+                return None
+            step = -1  # end of the list: go back up
+        last = seen
+        cx, y1, y2 = (l + r) // 2, bot - 50, top + 95  # under the header row (81 px), above the line's drag strip (24 dp)
+        adb('shell', 'input', 'swipe', str(cx), str(y1 if step == 1 else y2), str(cx), str(y2 if step == 1 else y1), '700')
+        time.sleep(.8)
+    return None

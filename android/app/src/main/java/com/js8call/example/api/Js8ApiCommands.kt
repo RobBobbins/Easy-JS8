@@ -220,15 +220,16 @@ class Js8ApiCommands(private val context: Context) {
                 (params["GROUPS"] as? List<*>)?.forEach { v ->
                     val g = v?.toString()?.trim().orEmpty()
                     if (g.isEmpty() || !g.startsWith("@")) return@forEach
-                    if (g.uppercase(Locale.US) in setOf("@APRSIS", "@JS8NET")) {
+                    // PC networkMessage.cpp 466-483: the name as sent, so "@group" is an invalid name
+                    if (g in setOf("@APRSIS", "@JS8NET")) {
                         reply("STATION.SET_GROUPS", "", mapOf("_ID" to id, "ERROR" to "Group not allowed: $g"))
                         return
                     }
-                    if (!com.js8call.example.js8ui.Js8Callsign.isCompound(g.uppercase())) {
+                    if (!com.js8call.example.js8ui.Js8Callsign.isCompound(g)) {
                         reply("STATION.SET_GROUPS", "", mapOf("_ID" to id, "ERROR" to "Invalid group name: $g"))
                         return
                     }
-                    newGroups += g.uppercase(Locale.US)
+                    newGroups += g
                 }
                 prefs().edit().putString("my_groups", newGroups.joinToString(",")).apply()
                 refresh()
@@ -339,10 +340,10 @@ class Js8ApiCommands(private val context: Context) {
         Log.d("Js8Api", "Unable to process networkMessage: $type")
     }
 
-    private fun hbInterval() = api.int(prefs(), "heartbeat_interval", 0)
+    private fun hbInterval() = api.int(prefs(), "heartbeat_interval", 30)
     private fun hbTimerActive() = com.js8call.example.service.HeartbeatTimer.on
 
-    private fun groups(): List<String> = prefs().getString("my_groups", "").orEmpty().split(',', ' ')
+    private fun groups(): List<String> = prefs().getString("my_groups", "").orEmpty().split(',') // PC splitGroups: commas only
         .map { it.trim().uppercase(Locale.US) }.filter { it.startsWith("@") }
 
     // ---- Message Window text (textEditRX) ---------------------------------------------------------

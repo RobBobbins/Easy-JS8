@@ -57,17 +57,24 @@ fresh(tx_submode=1)
 b = len(alltxt()); api('TX.SET_TEXT', 'x') if False else None
 # macros through a saved reply text: Status field holds macros, STATUS? expands them
 fresh(my_status='<MYCALL> <MYGRID4> <MYGRID12> <MYINFO> <MYIDLE> <MYVERSION> <NOTHING>', my_info='rig x')
-a = c(); h = t.tx(len(alltxt()), 'x', 0); base = len(alltxt()); inj(f'{a}: {M} STATUS?'); h = t.tx(base, a, 24)
-l = (h or [''])[0]
-fix('F01', M in l.split(a)[-1], l[-90:]); fix('F02', 'CM87' in l.split(a)[-1], '')
-fix('F03', 'CM87WK91' in l or 'CM87' in l, '')
-fix('F04', 'RIG X' in l, ''); fix('F06', re.search(r'CM87\S* RIG X \S+ ', l) is not None, '')
-fix('F07', not re.search(r'EASYJS8', l), l[-40:]); fix('F12', 'RIG X' in l, 'info upper-cased'); fix('F13', '<NOTHING>' not in l and '<' not in l.split('JS8:')[-1], '')
+with part('F01-F13', 150, ('F01', 'F02', 'F03', 'F04', 'F06', 'F07', 'F12', 'F13'), t.res, t.mark):
+    a = c(); base = len(alltxt()); inj(f'{a}: {M} STATUS?'); h = t.tx(base, a, 39)
+    # N30: each frame in its own line; the reply is whole once no new line comes for 25 s
+    n, quiet = len(alltxt()), time.time()
+    while h and time.time() < quiet + 25:
+        k = len(alltxt())
+        if k != n: n, quiet = k, time.time()
+        time.sleep(2)
+    l = 'JS8:  ' + tx_joined(alltxt()[base:])[1] if h else ''
+    fix('F01', M in l.split(a)[-1], l[-90:]); fix('F02', 'CM87' in l.split(a)[-1], '')
+    fix('F03', 'CM87WK91' in l or 'CM87' in l, '')
+    fix('F04', 'RIG X' in l, ''); fix('F06', re.search(r'CM87\S* RIG X \S+ ', l) is not None, '')
+    fix('F07', not re.search(r'EASYJS8', l), l[-40:]); fix('F12', 'RIG X' in l, 'info upper-cased'); fix('F13', '<NOTHING>' not in l and '<' not in l.split('JS8:')[-1], '')
 time.sleep(10)
 # log files
 x = alltxt()
 fix('G02', any('Transmitting' in l and 'JS8:' in l for l in x), '')
-fix('G03', any(re.search(r'\d\d:\d\d:\d\d  10\.136 MHz  JS8$', l.strip()) for l in x), '')
+# G03 retired: the PC writes no ALL.TXT line at a frequency change (N31, W112)
 fix('G01', any(re.search(r'\d\d:\d\d:\d\d +-?\d+ +-?\d', l) for l in x), 'injected lines do not use this path until section A') if False else None
 dt = adb('shell', 'cat', '/sdcard/Download/JS8CallLogs/DIRECTED.TXT').decode('utf8', 'replace').splitlines()
 a = c(); pl = 'LOG THIS'; inj(f'{a}: {M} MSG {pl} {sum16(pl)}'); time.sleep(4)

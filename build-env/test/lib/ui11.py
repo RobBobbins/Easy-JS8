@@ -173,7 +173,7 @@ row_list = [('J02', j02l), ('J03', wfrow(j03)), ('J08', wfrow(j08)), ('J10', wfr
             ('J23', wfrow(j23)),
             ('J25', wfrow(spec)), ('J13', j13l), ('JL', look), ('I24', i24l), ('I25', i25l)]
 SET = 'Save'
-MENUS = (('H05', 'js8_btn_mode', 'JS8 Fast'), ('H16', 'js8_btn_saved', 'Edit Saved Messages…'), ('H06', 'js8_btn_settings', SET))
+MENUS = (('H05', 'js8_btn_mode', 'JS8 Fast'), ('H16', 'js8_btn_saved', 'Edit Saved Messages'), ('H06', 'js8_btn_settings', SET))
 BAR = (('N01', 'js8_menubar_file', 'Exit'), ('N02', 'js8_menubar_configurations', 'Default'), ('N08', 'js8_menubar_view', 'Show Fullscreen'), ('N09', 'js8_menubar_mode', 'JS8 Fast'),
        ('N10', 'js8_menubar_control', 'Send Heartbeat...'), ('N11', 'js8_menubar_log', 'Add Log Entry...'), ('N12', 'js8_menubar_help', 'About'))
 

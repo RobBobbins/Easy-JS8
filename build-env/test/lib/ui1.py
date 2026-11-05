@@ -229,8 +229,8 @@ def sec_h():
     check('H13', fills('js8_btn_snr', r'K4AQA SNR'))
     check('H14', fills('js8_btn_info', r'INFO'))
     check('H15', fills('js8_btn_status', r'STATUS|IDLE'))
-    check('H16', opens('js8_btn_saved', 'Edit Saved Messages…'))
-    check('H17', lambda: opens('js8_btn_saved', 'Edit Saved Messages…')() and tapk('Edit Saved Messages…', 2.5) and has('Saved Messages'))
+    check('H16', opens('js8_btn_saved', 'Edit Saved Messages'))
+    check('H17', lambda: opens('js8_btn_saved', 'Edit Saved Messages')() and tapk('Edit Saved Messages', 2.5) and has('Saved Messages'))
     for row, name in (('H18', 'APRS EMAIL'), ('H19', 'APRS TXT'), ('H20', 'APRS GRID'), ('H21', 'APRS MSG')):
         check(row, opens('js8_btn_saved', name))
     check('H22', lambda: select() and tp('js8_btn_directed', 2) and has('SNR'))

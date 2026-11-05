@@ -39,13 +39,13 @@ object Js8Macros {
         val values = base + mapOf(
             "<MYINFO>" to sub(com.js8call.example.api.Js8Api.myInfo(prefs)),
             "<MYSTATUS>" to sub(com.js8call.example.api.Js8Api.myStatus(prefs)),
-            "<MYHB>" to "",
+            "<MYHB>" to sub("HB <MYGRID4>"),  // PC hidden HB Message, its default (Configuration.cpp 2153)
             "<MYCQ>" to sub(prefs.getString("js8cfg_cq_message", "CQ CQ CQ <MYGRID4>").orEmpty()),
             "<MYREPLY>" to sub(prefs.getString("js8cfg_reply_message", "HW CPY?").orEmpty())
         )
-        // PC replaceMacros: values upper-cased, what is left in <> removed
+        // PC replaceMacros: values upper-cased, what is left in <> removed, spaces kept as typed
         return values.entries.fold(text) { acc, (k, v) -> acc.replace(k, v.uppercase()) }
-            .replace(Regex("[<][^>]+[>]"), "").replace(Regex("\\s+"), " ").trim()
+            .replace(Regex("[<][^>]+[>]"), "")
     }
 
     /** PC buildMacroValues: only with a selected callsign in Call Activity; <SNR> above -31. */

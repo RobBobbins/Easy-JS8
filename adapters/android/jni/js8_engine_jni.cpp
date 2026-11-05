@@ -333,10 +333,12 @@ static std::string render_decoded_text(std::vector<JS8Engine_Native::CompoundCal
     for (std::size_t i = found.size(); i-- > 0;) compound_calls.erase(compound_calls.begin() + static_cast<std::ptrdiff_t>(found[i]));
     return true;
   };
+  // PC DecodedText::tryUnpackDirected, "0: 12 " / "0: 12 3 ": the command keeps its own leading space
+  // ("K4NMA ACK", "K4NMA>"), and the text ends in a space
   auto const join_tokens = [](std::vector<std::string> const& tokens) {
     std::string out = tokens[0] + ": " + tokens[1];
-    for (std::size_t i = 2; i < tokens.size(); ++i) out += " " + tokens[i];
-    return out;
+    for (std::size_t i = 2; i < tokens.size(); ++i) out += (i > 2 ? " " : "") + tokens[i];
+    return out + " ";
   };
 
   *type = decoded.type;
@@ -466,13 +468,8 @@ static std::string render_decoded_text(std::vector<JS8Engine_Native::CompoundCal
     std::uint8_t type = 0;
     auto parts = unpack_directed_message(frame, &type);
     if (!parts.empty()) {
-      std::vector<std::string> tokens;
-      tokens.reserve(parts.size());
-      for (auto part : parts) {
-        while (!part.empty() && part.front() == ' ') part.erase(part.begin());
-        if (!part.empty()) tokens.push_back(part);
-      }
-      if (!tokens.empty()) {
+      auto tokens = parts;
+      {
         std::string out;
         if (tokens.size() >= 2) {
           if ((tokens[0] == "<....>" || tokens[1] == "<....>") && !fill_placeholders(tokens, decoded.frequency)) {
@@ -514,6 +511,16 @@ static void event_callback(JS8Engine_Native* native, js8core::events::Variant co
                        "DECODED: SNR=%d dB, freq=%.1f Hz, text='%s', raw='%s', type=%d, mode=%d",
                        decoded->snr, decoded->frequency, rendered.c_str(),
                        decoded->data.c_str(), type, decoded->mode);
+
+    // The 12-character on-air frame, for ALL.TXT (PC DecodedText frame_); sent just before onDecoded
+    jmethodID frame_method = env->GetMethodID(handler_class, "onDecodedFrame", "(Ljava/lang/String;)V");
+    if (frame_method) {
+      jstring frame = env->NewStringUTF(decoded->data.c_str());
+      env->CallVoidMethod(native->callback_handler, frame_method, frame);
+      env->DeleteLocalRef(frame);
+    } else {
+      env->ExceptionClear();
+    }
 
     jmethodID method = env->GetMethodID(handler_class, "onDecoded", "(IIFFLjava/lang/String;IFII)V");
     if (method) {

@@ -38,6 +38,24 @@ object AudioDevices {
         }
     }
 
+    /**
+     * PC update_audio_channels: the channel choices greyed for a device. Mono greyed on a stereo device,
+     * Left / Right on a mono one, Both on a mono one and always on the input; a device whose channels
+     * are unknown (none listed, the phone's current output, a serial-audio rig) keeps only Mono.
+     */
+    fun greyedChannels(context: Context, id: String?, input: Boolean): Set<String> {
+        val manager = context.getSystemService(Context.AUDIO_SERVICE) as AudioManager
+        val flag = if (input) AudioManager.GET_DEVICES_INPUTS else AudioManager.GET_DEVICES_OUTPUTS
+        val ch = manager.getDevices(flag).firstOrNull { it.id.toString() == id }?.channelCounts?.maxOrNull() ?: 0
+        val mono = ch == 1
+        val stereo = ch >= 2
+        return setOfNotNull(
+            "Mono".takeUnless { mono || ch == 0 },
+            "Left".takeUnless { stereo }, "Right".takeUnless { stereo },
+            "Both".takeUnless { stereo && !input }
+        )
+    }
+
     /** The display name for a capture device, or null for types not offered. */
     fun nameFor(device: AudioDeviceInfo): String? = when (device.type) {
         AudioDeviceInfo.TYPE_BUILTIN_MIC -> "Internal Microphone"

@@ -124,14 +124,14 @@ const std::regex kGridPattern(R"(^[A-R]{2}[0-9]{2}([A-X]{2})?$)", std::regex::ic
 const std::regex kHeartbeatRe(
     R"(^\s*(?:[@](?:ALLCALL|HB)\s+)?(CQ CQ CQ|CQ DX|CQ QRP|CQ CONTEST|CQ FIELD|CQ FD|CQ CQ|CQ|HB|HEARTBEAT(?!\s+SNR))(?:\s([A-R]{2}[0-9]{2}))?\b)",
     std::regex::icase);
-// Capture groups: 1=callsign, 2=grid, 3=cmd, 4=num
+// Capture groups: 1=callsign, 2=grid, 3=cmd. PC compound_re: the start of the line only, the rest goes out as text
+// (Varicode.cpp 157-160, 1444, 1487). The number after SNR is read in pack_compound_message.
 const std::regex kCompoundRe(
-    R"(^\s*[`]([A-Z0-9@/]+)(?:\s+([A-R]{2}[0-9]{2}(?:[A-X]{2})?))?(\s?(?:AGN[?]|QSL[?]|HW CPY[?]|MSG TO[:]|SNR[?]|INFO[?]|GRID[?]|STATUS[?]|QUERY MSGS[?]|HEARING[?]|(?:(?:STATUS|HEARING|QUERY CALL|QUERY MSGS|QUERY|CMD|MSG|NACK|ACK|73|YES|NO|HEARTBEAT SNR|SNR|QSL|RR|SK|FB|INFO|GRID|DIT DIT)(?=[ ]|$))|[?> ]))?(\s*[+-]?\d{1,3})?\s*$)",
-    std::regex::icase);
-// Capture groups: 1=to, 2=cmd, 3=num
+    R"(^\s*[`]([@]?[A-Z0-9/]+)(?:\s?([A-R]{2}[0-9]{2}))?(\s?(?:AGN[?]|QSL[?]|HW CPY[?]|MSG TO[:]|SNR[?]|INFO[?]|GRID[?]|STATUS[?]|QUERY MSGS[?]|HEARING[?]|(?:(?:STATUS|HEARING|QUERY CALL|QUERY MSGS|QUERY|CMD|MSG|NACK|ACK|73|YES|NO|HEARTBEAT SNR|SNR|QSL|RR|SK|FB|INFO|GRID|DIT DIT)(?=[ ]|$))|[?> ]))?)");
+// Capture groups: 1=to, 2=cmd. PC directed_re: the line starts with the callsign, then the command, capitals only
+// (Varicode.cpp 137-152). The number after SNR is read in pack_directed_message.
 const std::regex kDirectedRe(
-    R"(^\s*([A-Z0-9@/]+):?(\s?(?:AGN[?]|QSL[?]|HW CPY[?]|MSG TO[:]|SNR[?]|INFO[?]|GRID[?]|STATUS[?]|QUERY MSGS[?]|HEARING[?]|(?:(?:STATUS|HEARING|QUERY CALL|QUERY MSGS|QUERY|CMD|MSG|NACK|ACK|73|YES|NO|HEARTBEAT SNR|SNR|QSL|RR|SK|FB|INFO|GRID|DIT DIT)(?=[ ]|$))|[?> ]))?(\s*[+-]?\d{1,3})?)",
-    std::regex::icase);
+    R"(^([@]?[A-Z0-9/]+)(\s?(?:AGN[?]|QSL[?]|HW CPY[?]|MSG TO[:]|SNR[?]|INFO[?]|GRID[?]|STATUS[?]|QUERY MSGS[?]|HEARING[?]|(?:(?:STATUS|HEARING|QUERY CALL|QUERY MSGS|QUERY|CMD|MSG|NACK|ACK|73|YES|NO|HEARTBEAT SNR|SNR|QSL|RR|SK|FB|INFO|GRID|DIT DIT)(?=[ ]|$))|[?> ]))?)");
 
 inline std::uint8_t pack_num_qtstyle(std::string const& num, bool* ok) {
   try {
@@ -902,16 +902,27 @@ std::vector<std::string> unpack_heartbeat_message(std::string const& text, std::
 
 std::string pack_compound_message(std::string const& text, int* n) {
   std::smatch match;
-  if (!std::regex_match(text, match, kCompoundRe)) {
+  if (!std::regex_search(text, match, kCompoundRe)) {
     if (g_backend.pack_compound_message) return g_backend.pack_compound_message(text, n);
     if (n) *n = 0;
     return {};
   }
 
   auto callsign = match[1].str();
-  auto grid = match.size() > 2 ? match[2].str() : std::string{};
-  auto cmd = match.size() > 3 ? match[3].str() : std::string{};
-  auto num = trimmed_left(match.size() > 4 ? match[4].str() : std::string{});
+  auto grid = match[2].str();
+  auto cmd = match[3].str();
+  // PC (?<num>(?<=SNR)\s?[-+]?(?:3[01]|[0-2]?[0-9])): a number only straight after SNR
+  auto consumed = static_cast<std::size_t>(match.length(0));
+  std::string num;
+  if (consumed >= 3 && text.compare(consumed - 3, 3, "SNR") == 0) {
+    static const std::regex snr_num_re(R"(^\s?[-+]?(?:3[01]|[0-2]?[0-9]))");
+    std::smatch num_match;
+    auto const rest = text.substr(consumed);
+    if (std::regex_search(rest, num_match, snr_num_re)) {
+      num = trimmed_left(num_match.str(0));
+      consumed += static_cast<std::size_t>(num_match.length(0));
+    }
+  }
 
   if (callsign.empty()) {
     if (n) *n = 0;
@@ -935,7 +946,7 @@ std::string pack_compound_message(std::string const& text, int* n) {
   }
 
   auto frame = pack_compound_frame(callsign, type, extra, 0);
-  if (n) *n = static_cast<int>(match.length(0));
+  if (n) *n = static_cast<int>(consumed);
   return frame;
 }
 std::vector<std::string> unpack_compound_message(std::string const& text, std::uint8_t* pType, std::uint16_t* pNum, std::uint8_t* pBits3) {
@@ -1122,9 +1133,12 @@ std::vector<std::string> unpack_directed_message(std::string const& text, std::u
   auto from = unpack_callsign(packed_from, portable_from);
   auto to   = unpack_callsign(packed_to, portable_to);
 
+  // PC directed_cmds.key(): a QMap, so the first key in key order with that value (31: " ", not "  ")
   std::string cmd;
-  auto it = std::find_if(kDirectedCmds.begin(), kDirectedCmds.end(), [&](auto const& dc) { return dc.value == packed_cmd % 32; });
-  if (it != kDirectedCmds.end()) cmd = it->key;
+  bool found = false;
+  for (auto const& dc : kDirectedCmds) {
+    if (dc.value == packed_cmd % 32 && (!found || dc.key < cmd)) { cmd = dc.key; found = true; }
+  }
 
   if (!from.empty()) out.push_back(from);
   if (!to.empty())   out.push_back(to);
@@ -1329,6 +1343,21 @@ std::string unpack_fast_data_message(std::string const& text) {
   return jsc::decompress(bits64);
 }
 
+// PC Varicode::parseCallsigns (Varicode.cpp 518-538): each match of the compound callsign pattern that is a valid
+// callsign and holds no grid, in line order.
+static std::vector<std::string> parse_callsigns(std::string const& input) {
+  static const std::regex call_re(R"((?:[@]?|\b)([A-Z0-9\/@][A-Z0-9\/]{0,2}[\/]?[A-Z0-9\/]{0,3}[\/]?[A-Z0-9\/]{0,3})\b)");
+  static const std::regex grid_re(R"(([A-X]{2}[0-9]{2}(?:[A-X]{2}(?:[0-9]{2})?)*)+)");
+  std::vector<std::string> calls;
+  for (auto it = std::sregex_iterator(input.begin(), input.end(), call_re); it != std::sregex_iterator(); ++it) {
+    auto const call = trimmed_left(trimmed_right(it->str(0)));
+    if (!is_valid_callsign(call, nullptr)) continue;
+    if (std::regex_search(call, grid_re)) continue;
+    calls.push_back(call);
+  }
+  return calls;
+}
+
 std::vector<std::pair<std::string, int>> build_message_frames(std::string const& mycall,
                                                               std::string const& mygrid,
                                                               std::string const& selectedCall,
@@ -1361,10 +1390,8 @@ std::vector<std::pair<std::string, int>> build_message_frames(std::string const&
     // Auto-append selected call if needed
     if (!selectedCall.empty() && line.rfind(selectedCall, 0) != 0 && line.rfind("`", 0) != 0 && !forceData) {
       bool lineStartsWithBase = (line.rfind("@ALLCALL", 0) == 0) || (line.rfind("CQ", 0) == 0) || (line.rfind("HB", 0) == 0);
-      auto const separator = line.find_first_of(" :");
-      auto const firstToken = line.substr(0, separator);
-      bool isCompound = false;
-      bool lineStartsWithCallsign = is_valid_callsign(firstToken, &isCompound) && firstToken.size() > 3;
+      auto const calls = parse_callsigns(line);
+      bool lineStartsWithCallsign = !calls.empty() && line.rfind(calls.front(), 0) == 0 && calls.front().size() > 3;
       if (!lineStartsWithBase && !lineStartsWithCallsign) {
         auto sep = line.rfind(" ", 0) == 0 ? "" : " ";
         line = selectedCall + sep + line;

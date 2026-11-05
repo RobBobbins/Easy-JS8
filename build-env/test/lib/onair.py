@@ -4,6 +4,7 @@ sys.stdout.reconfigure(encoding='utf8')
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from u import adb, ADB, dump, find, tap, text, shot, texts
 from sig import synth
+from parts import part, TimedOut
 PKG = 'com.easyjs8.app'
 PREFS = f'shared_prefs/{PKG}_preferences.xml'
 ALPHA = '0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZ+-./?'
@@ -48,6 +49,11 @@ def sum16(s):
     v = crc16k(s); return ALPHA[v // 1681] + ALPHA[v // 41 % 41] + ALPHA[v % 41]
 ALL = '/sdcard/Download/JS8CallLogs/ALL.TXT'
 def alltxt(): return adb('shell', 'cat', ALL).decode('utf8', 'replace').splitlines()
+def tx_joined(lines):
+    """The transmit lines' frames joined, as the message went out (N30: one frame per line). A frame can end
+    inside a word ("K4IB" then "A") or without its space ("VE3TST: K4MRB YES" then "MSG ID 147"): both readings."""
+    fr = [l.split('JS8:', 1)[-1][2:] for l in lines if 'Transmitting' in l]
+    return [''.join(fr), re.sub(' +', ' ', ' '.join(fr))]
 class T:
     """Injected-decode tests: each gets a new callsign, checks what ALL.TXT transmits."""
     n = 0
@@ -63,27 +69,36 @@ class T:
             tl = [l for l in new if 'Transmitting' in l]
             hit = [l for l in tl if re.search(pat, l)]
             if hit: return hit
+            # each transmit line holds its own frame (N30): the frames joined, as the message went out
+            for joined in tx_joined(tl):
+                if tl and re.search(pat, joined): return ['JS8:  ' + joined]
             time.sleep(1)
         return []
+    def part(s, id, sends, wait):
+        """The row's timer: its wait, 8 s after a send, 3 s an injected decode, 5 s for the reads."""
+        return part(id, wait + 8 + 3 * len(sends) + 5, (id,), s.res, s.mark)
     def expect(s, id, sends, pat, wait=24, note=''):
         if s.only and id not in s.only: return
-        base = len(alltxt())
-        for m in sends:
-            if isinstance(m, str): inj(m)
-            elif callable(m): m()
-            else: inj(*m)
-            time.sleep(.3)
-        h = s.tx(base, pat, wait)
-        s.mark(id, bool(h), (h[0].split('JS8:')[-1].strip() if h else 'no matching send: ' + ' / '.join(l.split('JS8:')[-1].strip() for l in alltxt()[base:] if 'Transmitting' in l)))
-        if h: time.sleep(8)
+        wait += 15  # N30: a reply's later frames reach ALL.TXT one period later, each in its own line
+        with s.part(id, sends, wait):
+            base = len(alltxt())
+            for m in sends:
+                if isinstance(m, str): inj(m)
+                elif callable(m): m()
+                else: inj(*m)
+                time.sleep(.3)
+            h = s.tx(base, pat, wait)
+            s.mark(id, bool(h), (h[0].split('JS8:')[-1].strip() if h else 'no matching send: ' + ' / '.join(l.split('JS8:')[-1].strip() for l in alltxt()[base:] if 'Transmitting' in l)))
+            if h: time.sleep(8)
     def silent(s, id, sends, pat='.', wait=14):
         if s.only and id not in s.only: return
-        base = len(alltxt())
-        for m in sends:
-            if isinstance(m, str): inj(m)
-            elif callable(m): m()
-            else: inj(*m)
-            time.sleep(.3)
-        h = s.tx(base, pat, wait)
-        s.mark(id, not h, ('sent: ' + h[0].split('JS8:')[-1].strip()) if h else 'nothing sent')
-        if h: time.sleep(8)
+        with s.part(id, sends, wait):
+            base = len(alltxt())
+            for m in sends:
+                if isinstance(m, str): inj(m)
+                elif callable(m): m()
+                else: inj(*m)
+                time.sleep(.3)
+            h = s.tx(base, pat, wait)
+            s.mark(id, not h, ('sent: ' + h[0].split('JS8:')[-1].strip()) if h else 'nothing sent')
+            if h: time.sleep(8)

@@ -12,18 +12,24 @@ import com.js8call.example.R
 
 private fun View.dp(v: Float) = v * resources.displayMetrics.density
 
-/** Audio input level meter under the CAT button: 0–90 dB scale with a green bar (desktop SignalMeter). */
+/** Audio input level meter under the CAT button: 0–100 dB scale with a green bar (desktop SignalMeter, Meter::MAX 100). */
 class Js8LevelMeterView @JvmOverloads constructor(context: Context, attrs: AttributeSet? = null) :
     View(context, attrs) {
 
-    /** Current level in dB, 0..90. */
+    /** Current level in dB, 0..100. */
     private var levelDb = 0f
+    /** The level as read, for the number under the bar (PC m_value, not clamped). */
+    private var shownDb = 0f
+    /** PC m_max: the loudest sample in dB (dataSink m_pxmax). */
+    private var maxDb = 0f
     /** PC SignalMeter: the last 10 readings; the highest is the peak hold mark. */
     private val readings = ArrayDeque<Float>()
     private var peak = 0f
 
-    fun setLevel(value: Float) {
-        levelDb = value.coerceIn(0f, 90f)
+    fun setLevel(value: Float, loudest: Float) {
+        shownDb = value
+        levelDb = value.coerceIn(0f, MAX)
+        maxDb = loudest
         readings.addLast(levelDb)
         if (readings.size > 10) readings.removeFirst()
         peak = readings.maxOrNull() ?: 0f
@@ -51,24 +57,24 @@ class Js8LevelMeterView @JvmOverloads constructor(context: Context, attrs: Attri
         val axisX = dp(50f) * s
         val span = bottom - top
         canvas.drawLine(axisX, top, axisX, bottom, line)
-        for (db in 0..90 step 10) {
-            val y = bottom - span * db / 90f
+        for (db in 0..MAX.toInt() step 10) {
+            val y = bottom - span * db / MAX
             val major = db % 20 == 10
             canvas.drawLine(axisX - dp(if (major) 6f else 3f) * s, y, axisX, y, line)
             if (major) canvas.drawText("$db", axisX - dp(8f) * s, y + text.textSize * 0.35f, text)
         }
-        canvas.drawText("${levelDb.toInt()} dB", axisX + dp(18f) * s, height - dp(8f), text)
-        // PC Meter::paintEvent: red above 85, yellow when the peak is below 15, otherwise green
+        canvas.drawText("${shownDb.toInt()} dB", axisX + dp(18f) * s, height - dp(8f), text)
+        // PC Meter::paintEvent: red when the loudest sample is above 85, yellow when the peak is below 15, otherwise green
         bar.color = when {
-            levelDb > 85f -> Color.RED
+            maxDb > 85f -> Color.RED
             peak < 15f -> Color.YELLOW
             else -> green
         }
         val left = axisX + dp(6f) * s
         val right = axisX + dp(22f) * s
-        if (levelDb > 0f) canvas.drawRect(left, bottom - span * levelDb / 90f, right, bottom, bar)
+        if (levelDb > 0f) canvas.drawRect(left, bottom - span * levelDb / MAX, right, bottom, bar)
         if (peak > 0f) {
-            val y = bottom - span * peak / 90f
+            val y = bottom - span * peak / MAX
             peakMark.reset()
             peakMark.moveTo(right, y - dp(4f))
             peakMark.lineTo(right, y + dp(4f))
@@ -76,6 +82,10 @@ class Js8LevelMeterView @JvmOverloads constructor(context: Context, attrs: Attri
             peakMark.close()
             canvas.drawPath(peakMark, line)
         }
+    }
+
+    private companion object {
+        const val MAX = 100f
     }
 }
 

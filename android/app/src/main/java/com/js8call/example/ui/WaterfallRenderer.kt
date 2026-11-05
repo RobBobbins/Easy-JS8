@@ -146,7 +146,7 @@ class WaterfallRenderer {
     private var textRows = Int.MAX_VALUE
     private val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE }
     private val dotted = Paint().apply {
-        color = Color.DKGRAY
+        color = Color.rgb(128, 128, 128) // PC Qt::darkGray
         style = Paint.Style.STROKE
         pathEffect = android.graphics.DashPathEffect(floatArrayOf(2f, 2f), 0f)
     }
@@ -508,10 +508,10 @@ class WaterfallRenderer {
         c.save()
         c.clipRect(0f, top, width.toFloat(), height.toFloat())
         c.drawColor(Color.BLACK)
-        // CPlotter::drawMetrics overlay: dark blue to black, dotted grid
+        // CPlotter::drawMetrics overlay: Qt::darkBlue to black, dotted grid
         val bottom = height.toFloat()
         c.drawRect(0f, top, width.toFloat(), bottom, Paint().apply {
-            shader = android.graphics.LinearGradient(0f, top, 0f, bottom, Color.rgb(0, 0, 139), Color.BLACK, android.graphics.Shader.TileMode.CLAMP)
+            shader = android.graphics.LinearGradient(0f, top, 0f, bottom, Color.rgb(0, 0, 128), Color.BLACK, android.graphics.Shader.TileMode.CLAMP)
         })
         dotted.strokeWidth = dp
         val hzPerDp = d.binsPerPixel * PC_BIN_HZ
