@@ -3735,7 +3735,11 @@ class JS8EngineService : Service() {
     private fun queueAutoReply(text: String, directed: String?, priority: Int = 0, onAccepted: (() -> Unit)? = null) {
         // PC processCommandActivity: no reply with text in the Typing Box or a message to me still arriving,
         // and none during an idle timeout (processCommandActivity.cpp 313-318). SWL never transmits.
-        if (!typingBoxEmpty || hasOpenBufferToMe() || idleTimedOutMinutes != 0L || isListenOnly()) return
+        if (!typingBoxEmpty || hasOpenBufferToMe() || idleTimedOutMinutes != 0L || isListenOnly()) {
+            Log.i(TAG, "Reply '$text' not queued: Typing Box empty $typingBoxEmpty, buffer to me ${hasOpenBufferToMe()}, " +
+                "idle timeout $idleTimedOutMinutes, SWL ${isListenOnly()}")
+            return
+        }
         val prefs = PreferenceManager.getDefaultSharedPreferences(this)
         if (!prefs.getBoolean("js8cfg_autoreply_confirmation", true)) {
             broadcastQueueTx(text, directed, priority)
@@ -4440,17 +4444,24 @@ class JS8EngineService : Service() {
         val heartbeat = parseHeartbeat(text)
         if (heartbeat != null) {
             // PC presentlyWantHBReplies: AUTO + HB + ACK, HB and ACK off by default
-            if (!isAutoreplyEnabled() || !prefs.getBoolean(PREF_HB, false) || !prefs.getBoolean(PREF_HB_ACK, false)) return
+            fun skip(why: String) = Log.i(TAG, "HB ACK to ${heartbeat.from} skipped: $why")
+            if (!isAutoreplyEnabled() || !prefs.getBoolean(PREF_HB, false) || !prefs.getBoolean(PREF_HB_ACK, false)) {
+                skip("AUTO ${isAutoreplyEnabled()} HB ${prefs.getBoolean(PREF_HB, false)} ACK ${prefs.getBoolean(PREF_HB_ACK, false)}"); return
+            }
             if (isSelfCallsign(callsign, heartbeat.from)) return
             // PC canCurrentModeSendHeartbeat, then no ACK with a buffer open or, when paused, a callsign selected
-            if (getPreferredTxSubmode() !in setOf(SUBMODE_NORMAL, SUBMODE_FAST, SUBMODE_SLOW)) return
-            if (synchronized(msgLock) { msgBuffers.isNotEmpty() }) return
-            if (prefs.getBoolean("js8cfg_heartbeat_qso_pause", true) && !Js8Api.State.selectedCall.isNullOrEmpty()) return
+            if (getPreferredTxSubmode() !in setOf(SUBMODE_NORMAL, SUBMODE_FAST, SUBMODE_SLOW)) { skip("speed ${getPreferredTxSubmode()}"); return }
+            synchronized(msgLock) { msgBuffers.values.map { "${it.from}>${it.to} ${it.command}" } }.let {
+                if (it.isNotEmpty()) { skip("open buffers $it"); return }
+            }
+            if (prefs.getBoolean("js8cfg_heartbeat_qso_pause", true) && !Js8Api.State.selectedCall.isNullOrEmpty()) {
+                skip("callsign selected ${Js8Api.State.selectedCall}"); return
+            }
             processHeartbeatRateLimit(heartbeat.from.trim().uppercase())
-            if (isAutoreplyBlocked(heartbeat.from) || isOnCallList("js8cfg_hb_blacklist", heartbeat.from)) return
-            if (allCallRepliedRecently(heartbeat.from)) return
+            if (isAutoreplyBlocked(heartbeat.from) || isOnCallList("js8cfg_hb_blacklist", heartbeat.from)) { skip("callsign list"); return }
+            if (allCallRepliedRecently(heartbeat.from)) { skip("replied in the last 15 minutes"); return }
             val snrText = formatSNR(snr)
-            if (snrText.isEmpty()) return
+            if (snrText.isEmpty()) { skip("SNR $snr"); return }
             val target = heartbeat.from.trim().uppercase()
             // A message held for them: "MSG ID n" (+ how many more) on the ACK (PC sendHeartbeatAck extra)
             messageScope.launch {
