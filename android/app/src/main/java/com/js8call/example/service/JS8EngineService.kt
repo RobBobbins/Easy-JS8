@@ -2761,6 +2761,7 @@ class JS8EngineService : Service() {
         } else {
             Log.e(TAG, "Failed to start audio capture")
             broadcastError("Failed to start audio capture")
+            broadcastEngineState(STATE_ERROR) // no audio, no receiving: RX off (errors alone no longer change it)
         }
     }
 

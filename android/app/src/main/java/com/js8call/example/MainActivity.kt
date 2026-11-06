@@ -163,7 +163,7 @@ class MainActivity : AppCompatActivity() {
                 }
                 JS8EngineService.ACTION_ERROR -> {
                     val message = intent.getStringExtra(JS8EngineService.EXTRA_ERROR_MESSAGE) ?: "Unknown error"
-                    monitorViewModel.onError(message)
+                    monitorViewModel.onServiceError(message)
                 }
                 JS8EngineService.ACTION_AUDIO_DEVICE_LOST -> {
                     val device = intent.getStringExtra(JS8EngineService.EXTRA_AUDIO_DEVICE) ?: "Audio device"

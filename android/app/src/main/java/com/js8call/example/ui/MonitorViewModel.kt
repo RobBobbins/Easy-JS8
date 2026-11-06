@@ -161,6 +161,14 @@ class MonitorViewModel(application: Application) : AndroidViewModel(application)
         waterfallRenderer.clear()
     }
 
+    /**
+     * A service error (rig, PTT, a send): the engine state is left as it is. The service sends its own
+     * state when the engine stops; a failed heartbeat greyed RX while receiving went on (S22, 2026-11-06).
+     */
+    fun onServiceError(message: String) {
+        _status.value = _status.value?.copy(errorMessage = message)
+    }
+
     fun clearError() {
         val current = _status.value ?: return
         if (current.errorMessage == null) return
