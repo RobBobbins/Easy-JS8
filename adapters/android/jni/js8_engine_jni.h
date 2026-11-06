@@ -73,8 +73,6 @@ bool js8_engine_tx_first_frame_is_data(JS8Engine_Native* engine);
 void js8_engine_set_ft8_enabled(JS8Engine_Native* engine, bool enabled);
 // Debug builds: decode one 15 s recording with the FT8 monitor.
 void js8_engine_debug_ft8_recording(JS8Engine_Native* engine, const int16_t* samples, size_t frames);
-// RTTY monitor on/off (Easy JS8: RTTY decodes in the Message Window).
-void js8_engine_set_rtty_enabled(JS8Engine_Native* engine, bool enabled);
 void js8_engine_debug_mix_rx(JS8Engine_Native* engine, const int16_t* samples, size_t frames);
 void js8_engine_set_tx_ready(JS8Engine_Native* engine, bool ready);
 

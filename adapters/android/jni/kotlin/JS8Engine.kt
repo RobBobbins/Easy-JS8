@@ -298,11 +298,6 @@ class JS8Engine private constructor(
         withNativeHandle { nativeSetFt8Enabled(it, enabled) }
     }
 
-    /** RTTY monitor on/off: decodes RTTY signals heard in the JS8 audio (receive only). */
-    fun setRttyEnabled(enabled: Boolean) {
-        withNativeHandle { nativeSetRttyEnabled(it, enabled) }
-    }
-
     /** Debug builds: 12 kHz samples added to the incoming audio (tests without a radio). */
     fun debugMixRx(samples: ShortArray) {
         withNativeHandle { nativeDebugMixRx(it, samples) }
@@ -471,7 +466,6 @@ class JS8Engine private constructor(
     private external fun nativeGetTxFrameTones(handle: Long): IntArray
     private external fun nativeSetFt8Enabled(handle: Long, enabled: Boolean)
     private external fun nativeDebugFt8Recording(handle: Long, samples: ShortArray)
-    private external fun nativeSetRttyEnabled(handle: Long, enabled: Boolean)
     private external fun nativeDebugMixRx(handle: Long, samples: ShortArray)
     private external fun nativeTxMillisecondsUntilAudio(handle: Long): Int
     private external fun nativeSetTxReady(handle: Long, ready: Boolean)
@@ -533,12 +527,6 @@ class JS8Engine private constructor(
          * 15 s slot; callDe = transmitting callsign, empty when the message has none.
          */
         fun onFt8Decoded(slotUtcMs: Long, freq: Float, snr: Int, text: String, callDe: String) {}
-
-        /**
-         * One line of RTTY decoded by the RTTY monitor (setRttyEnabled). utcMs = when its first
-         * character arrived; freq = audio offset of the signal.
-         */
-        fun onRttyDecoded(utcMs: Long, freq: Float, text: String) {}
 
         /**
          * Called when decode cycle finishes.

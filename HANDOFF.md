@@ -2,9 +2,12 @@
 
 ## Next session starts here (2026-11-05): audit B sections 1-12 are fixed
 
-**State at 19:58, 2026-11-05: tablet header buttons and RTTY decodes, not committed**
+**State at 21:30, 2026-11-05: RTTY decodes removed (Rob)**
+- RTTY decodes (fldigi's RTTY viewer, added in 271a4001) taken out again: on SM-X210 a real signal near 2250 Hz
+  (170 Hz shift) came out as garbled text and the cause wasn't found. Polarity matches fldigi on USB.
+- FT8 decodes still start off. `core/src/engine/engine.cpp` keeps the fix: test sound mixed in with `debug_mix_rx`
+  reaches the FT8 monitor (before, it got only the microphone samples). `rttychk.py` now has only W131-W132.
 - Tablet (smallest width 600 dp or more), upright: header buttons half their stretched width, centred (`Js8MainFragment.kt`, `fragment_js8_main.xml` id `js8_header_buttons_row`). Checked on SM-X210 and S22-Fresh.
-- RTTY decodes added and FT8 decodes now start off: see "RTTY monitor (2026-11-05)". W131-W135 passed twice; W136 (junk from noise) failed twice, Rob keeps fldigi's squelch.
 
 **State at 11:15, 2026-11-05 (read this block first): N55, N22, N23, N44 and Rename written as the PC, regressions on the new build**
 - Rob, 11:00: "there is no desicions for me, we do what js8call does". So N55, Rename (empty name turns OK on) and N22 / N23 / N44 follow the PC; audit B items marked [x] with what was not run.
@@ -308,23 +311,6 @@ values (ViewModel keyed by window).
   `adb shell am broadcast -n com.easyjs8.app/com.js8call.example.debug.DebugFt8Receiver --es file ft8.wav`
   (RX on). Test WAVs: `E:\new-w3bguru-websites\easyft8\ft8af\app\src\main\cpp\ft8af_glue\testdata\ft8`
   (20m_busy_test_01: 18 of 24 listed decodes). Not tested with real FT8 over a radio.
-
-### RTTY monitor (2026-11-05)
-
-- RTTY signals heard in the JS8 audio (receive only, every signal at once, as FT8) appear in the Message Window:
-  `HH:MM:SS - (offset) - RTTY: CQ DE N0CALL N0CALL K`. **Settings → View → Show RTTY decodes in the Message Window**
-  (`js8cfg_show_rtty`, off by default, Rob); off = decoder not fed.
-- Decoder: fldigi 4.2.13's multi-channel RTTY viewer (`view_rtty`, the signal browser's RTTY part), copied unchanged
-  from Rob's fldigi-android into `vendor/fldigi_rtty/upstream` with stand-in headers (`vendor/fldigi_rtty/README.md`).
-  fldigi's defaults: 170 Hz shift, 45 baud (index 0, not 45.45), Baudot, squelch -6.0, 30 channels 100 Hz apart.
-- `adapters/android/jni/rtty_monitor.cpp`: 12000 -> 8000 resampler, fldigi's waterfall power and viewer on a worker
-  thread. A line ends at the sender's line end, after 5 s without characters, when the signal is lost, or at 80
-  characters; lines with fewer than 2 letters or digits are dropped. Size: +45 KB in the arm64 debug library.
-- Test: `build-env/test/lib/rttychk.py` (W131-W136), sound `rtty_src8k.raw` from fldigi-android's
-  `modetest browser RTTY` (fldigi's own transmitter). `core/src/engine/engine.cpp`: test sound mixed in with
-  `debug_mix_rx` now also reaches the FT8 and RTTY monitors (before, they got only the microphone samples).
-- Noise alone gives 2-3 junk lines a minute at fldigi's squelch (W136 fails), and 2-3 junk lines follow a
-  signal on its offset. Rob, 2026-11-05: "Keep fldigi's" squelch. Not tried with a radio.
 
 ### Call Activity menu, menus, status bar (third session, 2026-10-19/20)
 

@@ -152,12 +152,6 @@ class Js8ActivityViewModel(app: Application) : AndroidViewModel(app) {
         changed()
     }
 
-    /** RTTY signal heard in the JS8 audio (Settings > View > Show RTTY decodes in the Message Window). */
-    fun onRtty(utcMs: Long, offset: Int, text: String) {
-        activity.writeRtty(utcMs, offset, text)
-        changed()
-    }
-
     /** Transmission finished or failed: the typed message (if it was on air) leaves the box. */
     fun onTxEnded() {
         frameOnAir?.let { lastTx = it }

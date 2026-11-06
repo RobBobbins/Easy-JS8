@@ -189,7 +189,7 @@ public:
     if (callbacks_.on_rx_audio && frames > 0) {
       int const ring_size = static_cast<int>(decode_state_.samples.size());
       if (mixed) {
-        // Test sound played in (debug_mix_rx): the FT8 and RTTY monitors hear it too
+        // Test sound played in (debug_mix_rx): the FT8 monitor hears it too
         std::vector<std::int16_t> ring(frames);
         for (std::size_t i = 0; i < frames; ++i)
           ring[i] = decode_state_.samples[(static_cast<std::size_t>(ring_start) + i) % decode_state_.samples.size()];

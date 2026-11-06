@@ -426,10 +426,6 @@ These rows and W19-W33 ran through the network rigctl choice, which was removed 
 | W130 | A relay to me whose text starts with "@" is ACKed, not dropped or forwarded (PC pCA 420-434). Audit B N52 | Pass | Pass | s1chk.py, runs 33 and 34 |
 | W131 | **Show FT8 decodes in the Message Window** starts off: no FT8 lines from a busy FT8 recording (Rob, 2026-11-05) | Pass | Pass | rttychk.py runs 1 and 2 |
 | W132 | FT8 ticked: the same recording gives 18 FT8 lines | Pass | Pass | rttychk.py runs 1 and 2 |
-| W133 | **Show RTTY decodes in the Message Window** starts off: no RTTY lines from fldigi RTTY sound | Pass | Pass | rttychk.py runs 1 and 2 |
-| W134 | RTTY ticked: fldigi's two stations (1000 Hz, 1800 Hz) show as "RTTY: CQ DE N0CALL N0CALL K" (996-999 Hz) and "RTTY: ... DE K1ABC TEST TEST" (1785-1798 Hz) in the Message Window | Pass | Pass | rttychk.py runs 1 and 2; 2-3 junk lines follow on the same offsets after the signals stop |
-| W135 | RTTY at 10 dB signal to noise (2500 Hz): both stations still decode | Pass | Pass | rttychk.py runs 1 and 2 |
-| W136 | RTTY ticked, 60 s of noise alone: no RTTY lines | Fail | Fail | rttychk.py: 2 and 3 junk lines ("UDQ", "EFURRA"; "QFVMV", "AI", "RGEZ") at fldigi's default squelch -6.0; Rob, 2026-11-05: keep fldigi's squelch |
 | W47 | Cumulative spectrum: the same audio (1000 Hz tone + noise) read at the same second of the minute in the app and in JS8Call on the PC | Pass | Pass | cumchk.py, tone / noise dB at second 28.5: app 49.7 / 19.0, JS8Call 48.1 / 16.4; at 43.5: app 50.4 / 19.7, JS8Call 48.1 / 16.4. App 1.6-2.3 dB higher on the tone, 2.6-3.3 on the noise; Rob: that difference doesn't matter, the function does. Fixed first (2026-11-04): the count Cumulative is divided by now follows JS8Call's dataSink m_ihsym (not reset each cycle), and the line is reduced like CPlotter's RDP (2 px). Before: JS8Call moved 6 dB between runs, the app never did |
 
 ## H. Main window

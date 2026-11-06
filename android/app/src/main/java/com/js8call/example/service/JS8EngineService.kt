@@ -356,9 +356,6 @@ class JS8EngineService : Service() {
         if (key == PREF_SHOW_FT8) {
             applyFt8Setting()
         }
-        if (key == PREF_SHOW_RTTY) {
-            applyRttySetting()
-        }
     }
 
     override fun onCreate() {
@@ -878,18 +875,6 @@ class JS8EngineService : Service() {
                     }
                 }
 
-                // Easy JS8: RTTY heard in the JS8 audio, shown in the Message Window
-                override fun onRttyDecoded(utcMs: Long, freq: Float, text: String) {
-                    Log.i(TAG, "RTTY: $text (${freq.toInt()} Hz)")
-                    mainHandler.post {
-                        LocalBroadcastManager.getInstance(this@JS8EngineService).sendBroadcast(Intent(ACTION_RTTY_DECODED).apply {
-                            putExtra(EXTRA_RTTY_UTC_MS, utcMs)
-                            putExtra(EXTRA_RTTY_FREQ, freq)
-                            putExtra(EXTRA_RTTY_TEXT, text)
-                        })
-                    }
-                }
-
                 override fun onError(message: String) {
                     Log.e(TAG, "Engine error: $message")
                     mainHandler.post {
@@ -943,7 +928,6 @@ class JS8EngineService : Service() {
                 applyTxBoostSetting()
                 applyTxOutput()
                 applyFt8Setting()
-                applyRttySetting()
                 applyTimeDriftSetting()
                 engine?.setAutoSync(autoDriftOn)
                 // The screen shows Start / Stop Automatic Time Drift as kept from the last run
@@ -1323,13 +1307,6 @@ class JS8EngineService : Service() {
         val on = PreferenceManager.getDefaultSharedPreferences(this).getBoolean(PREF_SHOW_FT8, false)
         engine?.setFt8Enabled(on)
         Log.i(TAG, "FT8 monitor: ${if (on) "on" else "off"}")
-    }
-
-    /** Settings > View > Show RTTY decodes in the Message Window (off when first installed). */
-    private fun applyRttySetting() {
-        val on = PreferenceManager.getDefaultSharedPreferences(this).getBoolean(PREF_SHOW_RTTY, false)
-        engine?.setRttyEnabled(on)
-        Log.i(TAG, "RTTY monitor: ${if (on) "on" else "off"}")
     }
 
     private fun applyTxBoostSetting() {
@@ -6092,12 +6069,6 @@ class JS8EngineService : Service() {
         const val EXTRA_FT8_TEXT = "ft8_text"
         const val EXTRA_FT8_CALL_DE = "ft8_call_de"
         const val PREF_SHOW_FT8 = "js8cfg_show_ft8"
-        /** RTTY line decoded in the JS8 audio (UTC ms of its first character, freq, text). */
-        const val ACTION_RTTY_DECODED = "com.js8call.example.ACTION_RTTY_DECODED"
-        const val EXTRA_RTTY_UTC_MS = "rtty_utc_ms"
-        const val EXTRA_RTTY_FREQ = "rtty_freq"
-        const val EXTRA_RTTY_TEXT = "rtty_text"
-        const val PREF_SHOW_RTTY = "js8cfg_show_rtty"
         /** Settings > Power: PC outAttenuation, 0-450, a / 10 dB. */
         const val PREF_OUT_ATTENUATION = "js8cfg_out_attenuation"
         private const val PREF_PWR_TX_MEMORY = "js8cfg_pwr_band_tx_memory"

@@ -28,31 +28,6 @@ target_include_directories(ft8lib PUBLIC ${FT8LIB_ROOT})
 target_compile_options(ft8lib PRIVATE -Wno-unused-function)
 set_target_properties(ft8lib PROPERTIES POSITION_INDEPENDENT_CODE ON)
 
-# fldigi's RTTY viewer (fldigi 4.2.13, GPL-3.0-or-later, vendor/fldigi_rtty) and the RTTY monitor
-# around it, built as fldigi is (gnu++17)
-set(FLDIGI_RTTY_ROOT ${CMAKE_CURRENT_SOURCE_DIR}/../../../vendor/fldigi_rtty)
-add_library(fldigi_rtty STATIC
-  rtty_monitor.cpp
-  ${FLDIGI_RTTY_ROOT}/upstream/src/rtty/view_rtty.cxx
-  ${FLDIGI_RTTY_ROOT}/upstream/src/filters/fftfilt.cxx
-  ${FLDIGI_RTTY_ROOT}/upstream/src/filters/filters.cxx
-  ${FLDIGI_RTTY_ROOT}/upstream/src/misc/misc.cxx
-  ${FLDIGI_RTTY_ROOT}/port/waterfall.cxx
-  ${FLDIGI_RTTY_ROOT}/port/settings.cxx
-)
-target_include_directories(fldigi_rtty PRIVATE
-  ${FLDIGI_RTTY_ROOT}/port/include
-  ${FLDIGI_RTTY_ROOT}/upstream/src/include
-)
-set_target_properties(fldigi_rtty PROPERTIES
-  CXX_STANDARD 17
-  CXX_EXTENSIONS ON
-  POSITION_INDEPENDENT_CODE ON
-  CXX_VISIBILITY_PRESET hidden
-)
-target_compile_options(fldigi_rtty PRIVATE -O2 -Wno-unused -Wno-deprecated-declarations)
-target_link_libraries(fldigi_rtty PRIVATE log)
-
 # Create the JNI library
 add_library(js8core-jni SHARED
   ft8_monitor.cpp
@@ -77,7 +52,6 @@ target_link_libraries(js8core-jni
     js8core::js8core
     js8core::android-adapter
     ft8lib
-    fldigi_rtty
 )
 
 # Android-specific configuration

@@ -540,12 +540,6 @@ class Js8Activity {
         while (rxLines.size > 500) rxLines.removeAt(0)
     }
 
-    /** RTTY signal heard in the JS8 audio: one line of its text, "RTTY: CQ CQ DE W1AW W1AW K". */
-    fun writeRtty(utcMs: Long, offset: Int, message: String) {
-        rxLines += RxLine(utcMs, offset, isTx = false, text = StringBuilder("RTTY: $message"), closed = true)
-        while (rxLines.size > 500) rxLines.removeAt(0)
-    }
-
     /**
      * One part of our own transmission, shown in the TX color as it starts going out
      * (PC prepareNextMessageFrame -> displayTextForFreq): the first part starts a line,

@@ -553,12 +553,6 @@ class UIThreadCallbackAdapter(
         }
     }
 
-    override fun onRttyDecoded(utcMs: Long, freq: Float, text: String) {
-        handler.post {
-            delegate.onRttyDecoded(utcMs, freq, text)
-        }
-    }
-
     override fun onError(message: String) {
         handler.post {
             delegate.onError(message)
