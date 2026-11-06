@@ -63,4 +63,6 @@
     <color name="js8_ft8call_button_border">#ADADAD</color>
     <color name="js8_ft8call_button_disabled">#F4F4F4</color>
     <color name="js8_ft8call_button_border_disabled">#D6D6D6</color>
+    <!-- Easy JS8 icon and intro navy (Rob's images) -->
+    <color name="js8_icon_navy">#04061A</color>
 </resources>

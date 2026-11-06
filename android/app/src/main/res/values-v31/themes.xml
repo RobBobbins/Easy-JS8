@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <!-- Android 12+ start screen: the app icon on the intro's navy -->
+    <style name="Theme.JS8Call" parent="Base.Theme.JS8Call">
+        <item name="android:windowSplashScreenBackground">@color/js8_icon_navy</item>
+    </style>
+</resources>

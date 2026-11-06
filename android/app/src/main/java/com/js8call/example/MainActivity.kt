@@ -305,6 +305,15 @@ class MainActivity : AppCompatActivity() {
     companion object {
         /** PC PriorityNormal for TX.SEND_MESSAGE: the service's PRIORITY_NORMAL, a queued reply's. */
         const val API_PRIORITY_NORMAL = 100
+        private const val INTRO_HOLD_MS = 1000L
+        private const val INTRO_LAND_MS = 300L
+        private const val INTRO_LAND_FADE_MS = 150L
+        private const val INTRO_NO_SPLASH_MS = 1000L
+        /** Logo box (left, top, right, bottom) as fractions of Rob's intro images and of the r2 icon. */
+        private val INTRO_LOGO_PORT = floatArrayOf(0.3991f, 0.4162f, 0.6231f, 0.5286f)
+        private val INTRO_LOGO_LAND = floatArrayOf(0.4534f, 0.3185f, 0.5568f, 0.5620f)
+        private val ICON_LOGO = floatArrayOf(0.2963f, 0.2616f, 0.7037f, 0.7083f)
+        private const val INTRO_FADE_OUT_MS = 500L
         private const val REQUEST_RECORD_AUDIO = 1
         private const val REQUEST_BLUETOOTH_CONNECT = 3
         private const val REQUEST_LOCATION = 2
@@ -318,9 +327,138 @@ class MainActivity : AppCompatActivity() {
         }
     }
 
+    /** False until [setUpMain] has run; the intro draws first at app start. */
+    private var mainReady = false
+
+    /** Runs [block] once the frame now being prepared has been drawn. */
+    private fun afterNextFrame(block: () -> Unit) {
+        android.view.Choreographer.getInstance().postFrameCallback { hopUi.post(block) }
+    }
+
+    /**
+     * Easy JS8 intro: Rob's image (res/drawable-port-nodpi and -land-nodpi js8_intro.png), cropped to fill the
+     * screen. It is the app's first frame, so Android's start screen goes as early as it can; on Android 12+ its
+     * logo moves onto the intro logo ([landSplashLogo]). The app is set up behind the intro, which holds for
+     * [INTRO_HOLD_MS] once the main screen is drawn, then fades into it. A tap skips the hold.
+     */
+    private fun showIntro() {
+        val intro = android.widget.ImageView(this).apply {
+            setImageResource(R.drawable.js8_intro)
+            scaleType = android.widget.ImageView.ScaleType.CENTER_CROP
+            setBackgroundColor(0xFF04061A.toInt())
+            isClickable = true
+        }
+        setContentView(intro)
+        var setUpStarted = false
+        fun startSetUp() {
+            if (setUpStarted) return
+            setUpStarted = true
+            setUpBehindIntro(intro)
+        }
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) {
+            // Set-up blocks the main thread, so it waits for the move to end
+            var splashSeen = false
+            splashScreen.setOnExitAnimationListener { splash ->
+                splashSeen = true
+                landSplashLogo(splash, intro) { startSetUp() }
+            }
+            // A start with no start screen
+            afterNextFrame { intro.postDelayed({ if (!splashSeen) startSetUp() }, INTRO_NO_SPLASH_MS) }
+        } else {
+            startSetUp()
+        }
+    }
+
+    /**
+     * Android's start screen logo shrinks and moves onto the intro logo over [INTRO_LAND_MS], then the start
+     * screen fades out over [INTRO_LAND_FADE_MS]; both screens are the same navy.
+     */
+    @androidx.annotation.RequiresApi(Build.VERSION_CODES.S)
+    private fun landSplashLogo(splash: android.window.SplashScreenView, intro: android.widget.ImageView, done: () -> Unit) {
+        val icon = splash.iconView
+        val image = intro.drawable
+        if (icon == null || image == null || intro.width == 0 || icon.width == 0) {
+            splash.remove()
+            done()
+            return
+        }
+        // Intro logo on the screen: the image is centre-cropped
+        val f = if (intro.width > intro.height) INTRO_LOGO_LAND else INTRO_LOGO_PORT
+        val iw = image.intrinsicWidth
+        val ih = image.intrinsicHeight
+        val s = maxOf(intro.width / iw.toFloat(), intro.height / ih.toFloat())
+        val at = IntArray(2).also { intro.getLocationOnScreen(it) }
+        val left = at[0] + (intro.width - iw * s) / 2
+        val top = at[1] + (intro.height - ih * s) / 2
+        val tW = (f[2] - f[0]) * iw * s
+        val tH = (f[3] - f[1]) * ih * s
+        val tCx = left + (f[0] + f[2]) / 2 * iw * s
+        val tCy = top + (f[1] + f[3]) / 2 * ih * s
+        // Start-screen logo: the icon view shows the middle 72 of the icon's 108 dp, so the r2 image is drawn 1.5
+        // times the view's size, a quarter of the view past each edge (measured on SM-X210: 146 px logo, 240 px view)
+        val iconAt = IntArray(2).also { icon.getLocationOnScreen(it) }
+        val cW = icon.width * 1.5f
+        val cH = icon.height * 1.5f
+        val lW = (ICON_LOGO[2] - ICON_LOGO[0]) * cW
+        val lH = (ICON_LOGO[3] - ICON_LOGO[1]) * cH
+        val lCx = (ICON_LOGO[0] + ICON_LOGO[2]) / 2 * cW - icon.width * 0.25f
+        val lCy = (ICON_LOGO[1] + ICON_LOGO[3]) / 2 * cH - icon.height * 0.25f
+        val k = (tW / lW + tH / lH) / 2
+        android.util.Log.d("Js8Intro", "icon at ${iconAt[0]},${iconAt[1]} ${icon.width}x${icon.height}, intro logo ${tW}x$tH at $tCx,$tCy, scale $k")
+        icon.pivotX = 0f
+        icon.pivotY = 0f
+        icon.animate().scaleX(k).scaleY(k)
+            .translationX(tCx - iconAt[0] - k * lCx).translationY(tCy - iconAt[1] - k * lCy)
+            .setDuration(INTRO_LAND_MS)
+            .withEndAction {
+                splash.animate().alpha(0f).setDuration(INTRO_LAND_FADE_MS)
+                    .withEndAction { splash.remove(); done() }.start()
+            }.start()
+    }
+
+    /** The intro waiting for [onStart]: the app was put away before its set-up ran. */
+    private var introWaiting: android.widget.ImageView? = null
+
+    /** Adds the main screen under the intro and sets the app up, then holds and fades the intro. */
+    private fun setUpBehindIntro(intro: android.widget.ImageView) {
+        afterNextFrame {
+            if (isDestroyed) return@afterNextFrame
+            // The screens can't be added once Android has saved the app's state (locked phone, Home pressed)
+            if (supportFragmentManager.isStateSaved) {
+                introWaiting = intro
+                return@afterNextFrame
+            }
+            val root = findViewById<android.view.ViewGroup>(android.R.id.content)
+            root.addView(layoutInflater.inflate(R.layout.activity_main, root, false), 0)
+            setUpMain()
+            afterNextFrame {
+                val fadeOut = Runnable {
+                    intro.setOnClickListener(null)
+                    intro.animate().alpha(0f).setDuration(INTRO_FADE_OUT_MS)
+                        .withEndAction { root.removeView(intro) }.start()
+                }
+                intro.postDelayed(fadeOut, INTRO_HOLD_MS)
+                intro.setOnClickListener {
+                    intro.removeCallbacks(fadeOut)
+                    fadeOut.run()
+                }
+            }
+        }
+    }
+
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_main)
+        if (savedInstanceState == null) {
+            showIntro()
+        } else {
+            setContentView(R.layout.activity_main)
+            setUpMain()
+        }
+    }
+
+    /** The screens, view models, receivers and permission checks; behind the intro at app start. */
+    private fun setUpMain() {
+        mainReady = true
 
         // Set up bottom navigation
         bottomNav = findViewById(R.id.bottom_navigation)
@@ -415,6 +553,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onStart() {
         super.onStart()
+        introWaiting?.let { introWaiting = null; setUpBehindIntro(it) }
         val prefs = PreferenceManager.getDefaultSharedPreferences(this)
         prefs.registerOnSharedPreferenceChangeListener(prefsListener)
         applyKeepScreenOn(prefs.getBoolean(PREF_KEEP_SCREEN_ON, false))
@@ -439,7 +578,7 @@ class MainActivity : AppCompatActivity() {
         closeConfirmDialog()
         idleDialog?.dismiss()
         idleDialog = null
-        decodeViewModel.persistDecodesOnStop()
+        if (mainReady) decodeViewModel.persistDecodesOnStop()
         if (isFinishing && !isChangingConfigurations) {
             Js8Api.closing() // PC closeEvent: STATION.CLOSING
             stopEngineService()
