@@ -21,6 +21,12 @@ import java.util.concurrent.Executors
 class MessageLogWriter(private val context: Context) {
 
     private val resolver = context.applicationContext.contentResolver
+    /**
+     * The MediaStore numbers of the log files this install made. Android hides a file an uninstalled copy
+     * made, so a search by name made a new "ALL (n).TXT" on every start (S20, 2026-11-06). Kept apart from
+     * the settings, which a configuration switch clears; the PC keeps one ALL.TXT for every configuration.
+     */
+    private val fileIds = context.applicationContext.getSharedPreferences("js8_log_files", Context.MODE_PRIVATE)
     private val executor = Executors.newSingleThreadExecutor()
     private val dayFormatter = SimpleDateFormat("yyyy-MM-dd", Locale.US).apply {
         timeZone = TimeZone.getTimeZone("UTC")
@@ -61,6 +67,7 @@ class MessageLogWriter(private val context: Context) {
                 try {
                     if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                         findMediaStoreEntry(name)?.let { resolver.delete(it, null, null) }
+                        fileIds.edit().remove(name).apply()
                     } else {
                         File(File(Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_DOWNLOADS), LOG_DIR), name).delete()
                     }
@@ -209,7 +216,19 @@ class MessageLogWriter(private val context: Context) {
         FileOutputStream(file, true).use { it.write(bytes) }
     }
 
+    /** The file saved under [displayName] while it still exists, else the search by name. */
     private fun findMediaStoreEntry(displayName: String): Uri? {
+        val saved = fileIds.getLong(displayName, -1L)
+        if (saved >= 0) {
+            val uri = Uri.withAppendedPath(MediaStore.Downloads.EXTERNAL_CONTENT_URI, saved.toString())
+            val exists = try {
+                resolver.query(uri, arrayOf(MediaStore.MediaColumns._ID), null, null, null)?.use { it.moveToFirst() } == true
+            } catch (e: Exception) {
+                false
+            }
+            if (exists) return uri
+            fileIds.edit().remove(displayName).apply()
+        }
         val selection = "${MediaStore.MediaColumns.DISPLAY_NAME}=? AND ${MediaStore.MediaColumns.RELATIVE_PATH}=?"
         val args = arrayOf(displayName, RELATIVE_PATH)
         resolver.query(
@@ -221,6 +240,7 @@ class MessageLogWriter(private val context: Context) {
         )?.use { cursor ->
             if (cursor.moveToFirst()) {
                 val id = cursor.getLong(0)
+                fileIds.edit().putLong(displayName, id).apply()
                 return Uri.withAppendedPath(MediaStore.Downloads.EXTERNAL_CONTENT_URI, id.toString())
             }
         }
@@ -234,7 +254,9 @@ class MessageLogWriter(private val context: Context) {
                 put(MediaStore.MediaColumns.MIME_TYPE, "text/plain")
                 put(MediaStore.MediaColumns.RELATIVE_PATH, RELATIVE_PATH)
             }
-            resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)
+            resolver.insert(MediaStore.Downloads.EXTERNAL_CONTENT_URI, values)?.also { uri ->
+                uri.lastPathSegment?.toLongOrNull()?.let { fileIds.edit().putLong(displayName, it).apply() }
+            }
         } catch (e: Exception) {
             Log.w(TAG, "Failed creating log entry", e)
             null
