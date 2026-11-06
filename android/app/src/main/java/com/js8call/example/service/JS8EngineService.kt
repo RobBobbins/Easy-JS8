@@ -752,6 +752,10 @@ class JS8EngineService : Service() {
         val generation = if (resumeGeneration == null) {
             if (engineStartInProgress || engine != null) {
                 Log.w(TAG, "Ignoring duplicate engine start request")
+                // A screen opened while the engine runs missed the one-time RUNNING: tell it again (S20, 2026-11-06)
+                if (engine != null && Js8Api.State.monitoring) {
+                    LocalBroadcastManager.getInstance(this).sendBroadcast(Intent(ACTION_ENGINE_STATE).putExtra(EXTRA_STATE, STATE_RUNNING))
+                }
                 return
             }
             if (trusdxStartupWorkerActive) {

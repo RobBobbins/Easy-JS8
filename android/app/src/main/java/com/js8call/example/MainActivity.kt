@@ -485,6 +485,10 @@ class MainActivity : AppCompatActivity() {
 
         decodeViewModel = ViewModelProvider(this)[DecodeViewModel::class.java]
         monitorViewModel = ViewModelProvider(this)[MonitorViewModel::class.java]
+        // A new screen while the engine already runs: the one-time RUNNING went out before it was here (S20, 2026-11-06)
+        if (Js8Api.State.monitoring && monitorViewModel.status.value?.state == EngineState.STOPPED) {
+            monitorViewModel.updateState(EngineState.RUNNING)
+        }
         messagesViewModel = ViewModelProvider(this)[MessagesViewModel::class.java]
         transmitViewModel = ViewModelProvider(this)[TransmitViewModel::class.java]
         js8ActivityViewModel = ViewModelProvider(this)[com.js8call.example.js8ui.Js8ActivityViewModel::class.java]
