@@ -41,6 +41,8 @@ object BandUtils {
             mhz in 18.068..18.168 -> "17m"
             mhz in 21.0..21.45 -> "15m"
             mhz in 24.89..24.99 -> "12m"
+            // CB JS8 is on 27.245 (Rob, 2026-11-05); not in the PC's table. The 40 CB channels.
+            mhz in 26.965..27.405 -> "11m"
             mhz in 28.0..29.7 -> "10m"
             mhz in 50.0..54.0 -> "6m"
             mhz in 70.0..71.0 -> "4m"

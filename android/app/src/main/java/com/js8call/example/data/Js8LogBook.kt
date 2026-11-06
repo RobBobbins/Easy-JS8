@@ -43,7 +43,9 @@ object Js8LogBook {
         sb.append(" <time_on:6>").append(timeFormat.format(Date(onMs)))
         sb.append(" <qso_date_off:8>").append(dateFormat.format(Date(offMs)))
         sb.append(" <time_off:6>").append(timeFormat.format(Date(offMs)))
-        sb.append(f("band", band)).append(f("freq", dialMhz))
+        // ADIF 3.1.6 has no 11m band (Rob's CB frequency, 2026-11-05): the frequency alone
+        if (band != "11m") sb.append(f("band", band))
+        sb.append(f("freq", dialMhz))
         sb.append(f("station_callsign", myCall)).append(f("my_gridsquare", myGrid))
         if (comments.isNotEmpty()) sb.append(f("comment", comments))
         if (name.isNotEmpty()) sb.append(f("name", name))

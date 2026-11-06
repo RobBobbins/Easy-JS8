@@ -32,6 +32,15 @@
             android:text="NOCALL"
             android:textSize="@dimen/js8_text_callsign" />
 
+        <!-- Upright only: the band right of the callsign, "VA3OSO   20M" (Rob, 2026-11-05) -->
+        <TextView
+            android:id="@+id/js8_callsign_band"
+            style="@style/Js8Text"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:textSize="@dimen/js8_text_callsign"
+            android:visibility="gone" />
+
         <TextView
             android:id="@+id/js8_clock_drift"
             style="@style/Js8Text"

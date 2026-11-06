@@ -1522,6 +1522,18 @@ class Js8MainFragment : Fragment() {
         freqDisplay?.text = formatMhz(dialHz)
         ruler.dialHz = dialHz
         waterfall.setBandText(com.js8call.example.util.BandUtils.bandLabelForFrequencyHz(dialHz))
+        // Upright: the band right of the callsign, nothing outside the bands (Rob, 2026-11-05)
+        view?.findViewById<TextView?>(R.id.js8_callsign_band)?.let { band ->
+            val name = com.js8call.example.util.BandUtils.bandOrNull(dialHz)
+            if (resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE || name == null) {
+                band.visibility = View.GONE
+            } else {
+                if (band.text.toString() != name) band.text = name
+                // about three letters between them
+                (band.layoutParams as ViewGroup.MarginLayoutParams).marginStart = (band.textSize * 1.8f).toInt()
+                band.visibility = View.VISIBLE
+            }
+        }
         // FT8Call layout: the band above the frequency
         view?.findViewById<TextView?>(R.id.js8_band_label)?.text =
             com.js8call.example.util.BandUtils.bandLabelForFrequencyHz(dialHz)

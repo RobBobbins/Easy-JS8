@@ -2,6 +2,12 @@
 
 ## Next session starts here (2026-11-05): audit B sections 1-12 are fixed
 
+**State at 21:45, 2026-11-05: band beside the callsign, 11m (Rob)**
+- Upright header: the band right of the callsign, "VA3OSO   20m" (`js8_callsign_band`, `Js8MainFragment.renderFrequency`);
+  nothing outside the bands. Frequency list and Station > Frequencies defaults: 11m - 27.245 MHz (CB JS8, one
+  frequency). Band table: 11m = 26.965-27.405 MHz (not in the PC). ADIF 3.1.6 has no 11m, so 11m QSOs are logged
+  without BAND, FREQ only. Checked twice on S22-Fresh (20m, 11m, off-band, list, ADIF) and on SM-X210.
+
 **State at 21:30, 2026-11-05: RTTY decodes removed (Rob)**
 - RTTY decodes (fldigi's RTTY viewer, added in 271a4001) taken out again: on SM-X210 a real signal near 2250 Hz
   (170 Hz shift) came out as garbled text and the cause wasn't found. Polarity matches fldigi on USB.
