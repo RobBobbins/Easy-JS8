@@ -17,7 +17,7 @@ Emulator test pass (2026-11-01 to 11-04): 1,045 checks, each run twice; all pass
 - Tap the waterfall to set the offset
 - JS8 Slow is now decoded
 - APRS forms (Saved > APRS EMAIL / TXT / GRID / MSG)
-- FT8 decodes in the Message Window
+- FT8 and RTTY decodes in the Message Window (both off until ticked in Settings > View)
 - Press-and-hold callsign menu in Call Activity
 - Waterfall Controls: Control, Timing and Display tabs, palette designer
 - Sending part by part, sent text crossed out
@@ -57,6 +57,8 @@ The first line is needed only once. The APK is written to
 - JS8Call: Jordan Sherer KN4CRD and the JS8Call-improved team,
   [github.com/JS8Call-improved/JS8Call-improved](https://github.com/JS8Call-improved/JS8Call-improved)
 - WSJT-X: Joe Taylor K1JT and the WSJT Development Group. JS8 is based on their FT8 mode.
+- ft8_lib: Kārlis Goba, MIT licence (FT8 decodes, `vendor/ft8_lib`)
+- fldigi: Dave Freese W1HKJ and the fldigi developers, GPLv3 (RTTY decodes, `vendor/fldigi_rtty`)
 - Fonts: Selawik and Cascadia Mono (SIL Open Font License, see `fonts-licenses/`)
 
 ## Notice

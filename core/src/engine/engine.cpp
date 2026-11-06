@@ -176,17 +176,25 @@ public:
       auto write_index = (static_cast<std::size_t>(decode_state_.params.kin) + i) % decode_state_.samples.size();
       decode_state_.samples[write_index] = raw[i * buffer.format.channels];
     }
+    bool mixed = false;
     {
       std::lock_guard<std::mutex> lock(debug_mix_mutex_);
       for (std::size_t i = 0; i < frames && !debug_mix_.empty(); ++i) {
         auto write_index = (static_cast<std::size_t>(decode_state_.params.kin) + i) % decode_state_.samples.size();
         decode_state_.samples[write_index] = debug_mix_.front();
         debug_mix_.pop_front();
+        mixed = true;
       }
     }
     if (callbacks_.on_rx_audio && frames > 0) {
       int const ring_size = static_cast<int>(decode_state_.samples.size());
-      if (buffer.format.channels == 1) {
+      if (mixed) {
+        // Test sound played in (debug_mix_rx): the FT8 and RTTY monitors hear it too
+        std::vector<std::int16_t> ring(frames);
+        for (std::size_t i = 0; i < frames; ++i)
+          ring[i] = decode_state_.samples[(static_cast<std::size_t>(ring_start) + i) % decode_state_.samples.size()];
+        callbacks_.on_rx_audio(ring.data(), frames, ring_start, ring_size);
+      } else if (buffer.format.channels == 1) {
         callbacks_.on_rx_audio(raw, frames, ring_start, ring_size);
       } else {
         std::vector<std::int16_t> mono(frames);

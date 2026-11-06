@@ -458,6 +458,16 @@ Java_com_js8call_core_JS8Engine_nativeSetFt8Enabled(
 }
 
 JNIEXPORT void JNICALL
+Java_com_js8call_core_JS8Engine_nativeSetRttyEnabled(
+    JNIEnv* /* env */,
+    jobject /* thiz */,
+    jlong handle,
+    jboolean enabled) {
+  JS8Engine_Native* engine = reinterpret_cast<JS8Engine_Native*>(handle);
+  js8_engine_set_rtty_enabled(engine, enabled == JNI_TRUE);
+}
+
+JNIEXPORT void JNICALL
 Java_com_js8call_core_JS8Engine_nativeDebugMixRx(
     JNIEnv* env,
     jobject /* thiz */,

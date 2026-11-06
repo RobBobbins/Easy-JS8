@@ -281,6 +281,19 @@ class Js8MainFragment : Fragment() {
         statusFreq = view.findViewById(R.id.js8_status_freq)
         statusAutoReply = view.findViewById(R.id.js8_status_autoreply)
         progress = view.findViewById(R.id.js8_status_progress)
+        // Tablets (Rob, 2026-11-05): upright header buttons half the width they stretch to,
+        // centred under the clock. The 36 dp is the three 12 dp gaps between the four columns.
+        if (resources.configuration.smallestScreenWidthDp >= 600) {
+            view.findViewById<View?>(R.id.js8_header_buttons_row)?.let { row ->
+                val header = row.parent as View
+                val gaps = (36 * resources.displayMetrics.density).toInt()
+                header.addOnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
+                    val inner = header.width - header.paddingLeft - header.paddingRight
+                    val w = (inner - gaps) / 2 + gaps
+                    if (w > 0 && row.layoutParams.width != w) row.layoutParams = row.layoutParams.apply { width = w }
+                }
+            }
+        }
         // Upright: Receiving | wpm box | cycle progress bar, which takes what is left and ends at
         // the page's right edge (Rob, 2026-10-19 / 2026-10-22)
         // Tablets (Rob, 2026-11-05): when Saved is wider than Receiving's 110 dp, Receiving takes

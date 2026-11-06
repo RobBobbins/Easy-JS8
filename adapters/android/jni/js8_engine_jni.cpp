@@ -26,6 +26,7 @@
 #include "js8core/android/scheduler_android.hpp"
 #include "js8core/android/storage_android.hpp"
 #include "ft8_monitor.hpp"
+#include "rtty_monitor.hpp"
 
 // Forward declarations of JNI methods (defined in js8_jni_methods.cpp)
 extern "C" {
@@ -57,6 +58,7 @@ JNIEXPORT jboolean JNICALL Java_com_js8call_core_JS8Engine_nativeJscCorrect(JNIE
 JNIEXPORT jobjectArray JNICALL Java_com_js8call_core_JS8Engine_nativeJscSuggestions(JNIEnv*, jclass, jstring, jint);
 JNIEXPORT void JNICALL Java_com_js8call_core_JS8Engine_nativeSetFt8Enabled(JNIEnv*, jobject, jlong, jboolean);
 JNIEXPORT void JNICALL Java_com_js8call_core_JS8Engine_nativeDebugFt8Recording(JNIEnv*, jobject, jlong, jshortArray);
+JNIEXPORT void JNICALL Java_com_js8call_core_JS8Engine_nativeSetRttyEnabled(JNIEnv*, jobject, jlong, jboolean);
 JNIEXPORT void JNICALL Java_com_js8call_core_JS8Engine_nativeDebugMixRx(JNIEnv*, jobject, jlong, jshortArray);
 JNIEXPORT jint JNICALL Java_com_js8call_core_JS8Engine_nativeTxMillisecondsUntilAudio(JNIEnv*, jobject, jlong);
 JNIEXPORT void JNICALL Java_com_js8call_core_JS8Engine_nativeSetTxReady(JNIEnv*, jobject, jlong, jboolean);
@@ -102,6 +104,8 @@ struct JS8Engine_Native {
 
   // Easy JS8: FT8 signals heard in the JS8 audio (receive only)
   std::unique_ptr<Ft8Monitor> ft8;
+  // Easy JS8: RTTY signals heard in the JS8 audio (receive only)
+  std::unique_ptr<RttyMonitor> rtty;
 
   bool tx_boost_enabled = false;
   std::mutex tx_boost_mutex;
@@ -640,6 +644,29 @@ static void ft8_callback(JS8Engine_Native* native, std::vector<Ft8Decode> const&
   env->DeleteLocalRef(handler_class);
 }
 
+// RTTY decodes to Java: CallbackHandler.onRttyDecoded(utcMs, freq, text).
+static void rtty_callback(JS8Engine_Native* native, std::vector<RttyDecode> const& decodes) {
+  if (!native || !native->callback_handler) return;
+  JNIEnv* env = get_jni_env();
+  if (!env) return;
+  std::lock_guard<std::mutex> lock(native->callback_mutex);
+  jclass handler_class = env->GetObjectClass(native->callback_handler);
+  if (!handler_class) return;
+  jmethodID method = env->GetMethodID(handler_class, "onRttyDecoded", "(JFLjava/lang/String;)V");
+  if (!method) {
+    env->ExceptionClear();
+  } else {
+    for (auto const& d : decodes) {
+      jstring text = env->NewStringUTF(d.text.c_str());
+      env->CallVoidMethod(native->callback_handler, method, static_cast<jlong>(d.utc_ms),
+                          static_cast<jfloat>(d.freq_hz), text);
+      if (env->ExceptionCheck()) env->ExceptionClear();
+      env->DeleteLocalRef(text);
+    }
+  }
+  env->DeleteLocalRef(handler_class);
+}
+
 JS8Engine_Native* js8_engine_create(JNIEnv* env, jobject callback_handler,
                                      int sample_rate_hz, int submodes,
                                      int enable_tx_audio_tap,
@@ -739,9 +766,14 @@ JS8Engine_Native* js8_engine_create(JNIEnv* env, jobject callback_handler,
   native->ft8 = std::make_unique<Ft8Monitor>(
       [native](std::vector<Ft8Decode> const& decodes) { ft8_callback(native, decodes); },
       []() { if (g_jvm) g_jvm->DetachCurrentThread(); });
+  // RTTY monitor: off until the app turns it on (Settings > View > Show RTTY decodes ...)
+  native->rtty = std::make_unique<RttyMonitor>(
+      [native](std::vector<RttyDecode> const& decodes) { rtty_callback(native, decodes); },
+      []() { if (g_jvm) g_jvm->DetachCurrentThread(); });
   callbacks.on_rx_audio = [native, sample_rate_hz](std::int16_t const* samples, std::size_t frames,
                                                    int ring_pos, int ring_size) {
     if (native->ft8) native->ft8->feed(samples, frames, ring_pos, ring_size, sample_rate_hz);
+    if (native->rtty) native->rtty->feed(samples, frames, sample_rate_hz);
   };
 
   js8core::EngineDependencies deps;
@@ -775,6 +807,7 @@ void js8_engine_destroy(JS8Engine_Native* engine) {
   engine->engine.reset();
   // Then the FT8 monitor (joins its worker, which may still call into Java)
   engine->ft8.reset();
+  engine->rtty.reset();
 
   // Delete global reference to callback handler
   if (engine->callback_handler) {
@@ -1189,6 +1222,11 @@ void js8_engine_set_ft8_enabled(JS8Engine_Native* engine, bool enabled) {
   engine->ft8->set_enabled(enabled);
 }
 
+void js8_engine_set_rtty_enabled(JS8Engine_Native* engine, bool enabled) {
+  if (!engine || !engine->rtty) return;
+  engine->rtty->set_enabled(enabled);
+}
+
 int js8_engine_tx_frames_started(JS8Engine_Native* engine) {
   if (!engine || !engine->engine) return 0;
   return engine->engine->tx_frames_started();
@@ -1299,6 +1337,8 @@ int js8_register_natives(JavaVM* vm, JNIEnv* env) {
      (void*)Java_com_js8call_core_JS8Engine_nativeDebugMixRx},
     {"nativeDebugFt8Recording", "(J[S)V",
      (void*)Java_com_js8call_core_JS8Engine_nativeDebugFt8Recording},
+    {"nativeSetRttyEnabled", "(JZ)V",
+     (void*)Java_com_js8call_core_JS8Engine_nativeSetRttyEnabled},
     {"nativeTxMillisecondsUntilAudio", "(J)I",
      (void*)Java_com_js8call_core_JS8Engine_nativeTxMillisecondsUntilAudio},
     {"nativeSetTxReady", "(JZ)V",

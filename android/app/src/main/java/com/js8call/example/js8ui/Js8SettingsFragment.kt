@@ -598,7 +598,7 @@ class Js8SettingsFragment : Fragment() {
         line("Easy JS8 is a fork of JS8Android.", top = 12, parent = left)
         line("Features", size = 1.1f, bold = true, top = if (sideways) 0 else 16, parent = right)
         val features = listOf("Traditional style", "Upright and sideways layouts", "SWL mode", "JS8 Slow decoding",
-            "APRS forms", "FT8 decodes", "APRS-IS relay", "Message mailbox", "HB and CQ timers",
+            "APRS forms", "FT8 and RTTY decodes", "APRS-IS relay", "Message mailbox", "HB and CQ timers",
             "Log QSO and ADIF export", "API and logging links", "Waterfall Controls")
         // Upright the list is two columns of six (Rob, 2026-10-31)
         var first = right
@@ -621,6 +621,7 @@ class Js8SettingsFragment : Fragment() {
         line("JS8Call-improved team: AC9KH, W6BAZ, KJ4CTD, K0OG, DJ3EI, K4RWR, KN4CRD", top = 6)
         line("JS8Android: https://github.com/JS8Call-improved/Android-port", top = 6)
         line("ft8_lib (FT8 decodes): Kārlis Goba, MIT licence", top = 6)
+        line("fldigi (RTTY decodes): Dave Freese W1HKJ and the fldigi developers, GPLv3 licence", top = 6)
         line("Fonts: Selawik, Cascadia Mono (SIL Open Font Licence)", top = 6)
     }
 

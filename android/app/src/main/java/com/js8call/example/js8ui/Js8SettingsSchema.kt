@@ -270,8 +270,11 @@ object Js8SettingsSchema {
             // Upright has no View menu to bring the labels back once they are off
             check("js8_table_${BAND_TABLE_UPRIGHT}_col_labels", "Show Column Labels in Band Activity", true),
             check("js8_table_call_col_labels", "Show Column Labels in Call Activity", true),
-            // FT8 signals heard on the JS8 frequency (Rob, 2026-10-19); off = the FT8 decoder doesn't run
-            check("js8cfg_show_ft8", "Show FT8 decodes in the Message Window", true),
+            // FT8 signals heard on the JS8 frequency (Rob, 2026-10-19); off = the FT8 decoder doesn't run.
+            // FT8 and RTTY start off (Rob, 2026-11-05)
+            check("js8cfg_show_ft8", "Show FT8 decodes in the Message Window", false),
+            // RTTY signals heard on the JS8 frequency (Rob, 2026-11-05); off = the RTTY decoder doesn't run
+            check("js8cfg_show_rtty", "Show RTTY decodes in the Message Window", false),
             // PC View > Show ...: every layout
             *Js8PcSplitters.PANELS.map { (key, name) -> check(key, name, true) }.toTypedArray(),
             ButtonRow(listOf("Clear Band Activity" to "clear_band")),
