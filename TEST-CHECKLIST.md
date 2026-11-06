@@ -150,7 +150,7 @@ From 2026-11-01 the test build's engine is compiled at -O3, the same as release.
 | F04 | <MYINFO> | Pass | Pass |  |
 | F05 | <MYSTATUS> | Pass | Pass |  |
 | F06 | <MYIDLE> | Pass | Pass |  |
-| F07 | <MYVERSION> sends the plain version | Pass | Pass |  |
+| F07 | <MYVERSION> sends EASY JS8 and the version | Pass | Pass |  |
 | F08 | <CALL> | Pass | Pass |  |
 | F09 | <SNR> | Pass | Pass |  |
 | F10 | <TDELTA> | Pass | Pass |  |

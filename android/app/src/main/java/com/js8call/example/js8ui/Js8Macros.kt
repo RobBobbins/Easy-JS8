@@ -32,7 +32,7 @@ object Js8Macros {
             "<MYCALL>" to prefs.getString("callsign", "").orEmpty().trim().uppercase(),
             "<MYGRID4>" to grid.take(4),
             "<MYGRID12>" to grid.take(12),
-            "<MYVERSION>" to BuildConfig.VERSION_NAME,
+            "<MYVERSION>" to "EASY JS8 ${BuildConfig.VERSION_NAME}", // PC sends the plain version (Rob, 2026-11-06)
             "<MYIDLE>" to idle()
         ) + selectedValues()
         fun sub(s: String) = base.entries.fold(s) { acc, (k, v) -> acc.replace(k, v) }
