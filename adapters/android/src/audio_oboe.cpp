@@ -100,12 +100,17 @@ bool OboeAudioInput::start(AudioStreamParams const& params,
 }
 
 void OboeAudioInput::stop() {
-  std::lock_guard<std::mutex> lock(mutex_);
+  // stop() waits for the data callback to return, and the callback takes
+  // mutex_, so the stream is stopped with the lock released.
+  decltype(stream_) stream;
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    stream = std::move(stream_);
+  }
 
-  if (stream_) {
-    stream_->stop();
-    stream_->close();
-    stream_.reset();
+  if (stream) {
+    stream->stop();
+    stream->close();
   }
 }
 
@@ -210,10 +215,14 @@ bool OboeAudioOutput::start(AudioStreamParams const& params,
   fill_ = std::move(fill);
   on_error_ = std::move(on_error);
 
+  // Easy JS8: the normal (mixer) path, not low latency. On the SM-X210 with the IC-7300's USB
+  // sound card, a low-latency output opened as an MMAP stream, and the USB capture read zeros
+  // from that moment until the capture was reopened (2026-11-07 22:29:29 and 23:20:08): the
+  // waterfall went blank after a transmit.
   oboe::AudioStreamBuilder builder;
   builder.setDirection(oboe::Direction::Output)
-      ->setPerformanceMode(oboe::PerformanceMode::LowLatency)
-      ->setSharingMode(oboe::SharingMode::Exclusive)
+      ->setPerformanceMode(oboe::PerformanceMode::None)
+      ->setSharingMode(oboe::SharingMode::Shared)
       ->setChannelCount(params.format.channels)
       ->setDataCallback(this);
 
@@ -274,12 +283,17 @@ bool OboeAudioOutput::start(AudioStreamParams const& params,
 }
 
 void OboeAudioOutput::stop() {
-  std::lock_guard<std::mutex> lock(mutex_);
+  // stop() waits for the data callback to return, and the callback takes
+  // mutex_, so the stream is stopped with the lock released.
+  decltype(stream_) stream;
+  {
+    std::lock_guard<std::mutex> lock(mutex_);
+    stream = std::move(stream_);
+  }
 
-  if (stream_) {
-    stream_->stop();
-    stream_->close();
-    stream_.reset();
+  if (stream) {
+    stream->stop();
+    stream->close();
   }
 }
 

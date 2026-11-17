@@ -48,7 +48,11 @@ def crc16k(s):
 def sum16(s):
     v = crc16k(s); return ALPHA[v // 1681] + ALPHA[v // 41 % 41] + ALPHA[v % 41]
 ALL = '/sdcard/Download/JS8CallLogs/ALL.TXT'
-def alltxt(): return adb('shell', 'cat', ALL).decode('utf8', 'replace').splitlines()
+def alltxt():
+    """The newest ALL*.TXT: since the 1.0.2 fix the app writes "ALL (1).TXT" when it can't reach an ALL.TXT an
+    earlier install made (seen 2026-11-06)."""
+    name = adb('shell', 'ls -t /sdcard/Download/JS8CallLogs/ | grep "^ALL" | head -1').decode().strip()
+    return adb('shell', f'cat "/sdcard/Download/JS8CallLogs/{name}"').decode('utf8', 'replace').splitlines()
 def tx_joined(lines):
     """The transmit lines' frames joined, as the message went out (N30: one frame per line). A frame can end
     inside a word ("K4IB" then "A") or without its space ("VE3TST: K4MRB YES" then "MSG ID 147"): both readings."""

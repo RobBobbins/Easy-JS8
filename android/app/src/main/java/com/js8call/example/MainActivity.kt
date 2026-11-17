@@ -111,7 +111,9 @@ class MainActivity : AppCompatActivity() {
                         intent.getIntExtra(JS8EngineService.EXTRA_TX_FRAME_CHARS_SENT, 0),
                         intent.getDoubleExtra(JS8EngineService.EXTRA_TX_OFFSET_HZ, 0.0).toInt(),
                         intent.getStringExtra(JS8EngineService.EXTRA_TX_FRAME_FULL_TEXT).orEmpty(),
-                        intent.getBooleanExtra(JS8EngineService.EXTRA_TX_FRAME_IS_DATA, false)
+                        intent.getBooleanExtra(JS8EngineService.EXTRA_TX_FRAME_IS_DATA, false),
+                        intent.getIntExtra(JS8EngineService.EXTRA_TX_FRAME_TYPED_CHARS_SENT,
+                            intent.getIntExtra(JS8EngineService.EXTRA_TX_FRAME_CHARS_SENT, 0))
                     )
                 }
                 ACTION_PROCESS_TX_QUEUE -> {

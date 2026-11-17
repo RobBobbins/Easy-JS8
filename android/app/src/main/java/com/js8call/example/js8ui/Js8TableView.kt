@@ -46,6 +46,8 @@ class Js8TableView @JvmOverloads constructor(
         val defaultVisible: Boolean = true,
         /** Last visible column stretches to fill the table width. */
         val stretch: Boolean = false,
+        /** A stretch column that also grows to its longest text, so a slide to the right reaches the end. */
+        val fitText: Boolean = false,
         val numeric: Boolean = false,
         val menuLabel: String = label,
         /** Shown only while a row has something in it, and not in Show Columns (PC Call Activity icon column). */
@@ -308,7 +310,7 @@ class Js8TableView @JvmOverloads constructor(
 
     private fun widthPx(col: Column): Int {
         val min = (col.widthDp * dp).toInt()
-        if (col.stretch) return min
+        if (col.stretch && !col.fitText) return min
         return maxOf(min, contentPx[col.key] ?: 0)
     }
 
@@ -517,6 +519,9 @@ class Js8TableView @JvmOverloads constructor(
                     rebindAll()
                 } else if (lastClickId == row.id && now - lastClickTime < 400) {
                     onRowDoubleClick?.invoke(row)
+                    // PC (Qt): a third quick tap is a single tap, not a second double tap
+                    lastClickId = null
+                    return@setOnClickListener
                 } else {
                     selectedRowId = if (selectedRowId == row.id) null else row.id
                     onRowClick?.invoke(row)

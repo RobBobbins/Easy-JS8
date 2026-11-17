@@ -106,9 +106,11 @@ class Js8PcSplitters(private val window: FrameLayout, private val prefs: SharedP
     init {
         mainLine.barCentrePx = (STRIP - MAIN_BAR_ABOVE_BUTTONS) * density
         textLine.passTouch = { ev -> overTyping(mainDp(textLine.top, ev.y)) }
+        // Over the Typing Box the line under the lists keeps only the box's bottom edge: its strip reaches above a
+        // short box and took the touches of the line on top of it (Rob, 2026-11-06, tablet)
         mainLine.passTouch = { ev ->
             val x = mainDp(mainLine.left, ev.x)
-            x >= typingLeft && x <= typingRight && overTyping(mainDp(mainLine.top, ev.y))
+            x >= typingLeft && x <= typingRight && mainDp(mainLine.top, ev.y) < typingBottom - TYPING_EDGE
         }
         listOf(bandLine, callLine, textLine, mainLine, wfLine).forEach { window.addView(it) }
         apply()
@@ -143,11 +145,19 @@ class Js8PcSplitters(private val window: FrameLayout, private val prefs: SharedP
         apply()
     }
 
+    /** The Typing Box at least two lines of text tall, PC dp (Rob, 2026-11-06: one line on the tablet was too small). */
+    private fun minTypingH(): Float {
+        val box = v(R.id.js8_typing_box) as android.widget.TextView
+        return (box.paddingTop + box.paddingBottom + 2 * box.lineHeight) / density + 8f
+    }
+
     private fun clamp() {
-        main = main.coerceIn(TOP + MIN_MAIN_H, WATERFALL_BOTTOM - MIN_WATERFALL_H - WATERFALL_GAP - BUTTONS_H - BUTTONS_GAP)
+        val minTyping = minTypingH()
+        main = main.coerceIn(TOP + maxOf(MIN_MAIN_H, MIN_TEXT_H + GAP_TEXT + minTyping),
+            WATERFALL_BOTTOM - MIN_WATERFALL_H - WATERFALL_GAP - BUTTONS_H - BUTTONS_GAP)
         band = band.coerceIn(LEFT + MIN_LIST_W, RIGHT - MIN_LIST_W - GAP_CALL - MIN_MID_W - GAP_BAND)
         call = call.coerceIn(band + GAP_BAND + MIN_MID_W + GAP_CALL, RIGHT - MIN_LIST_W)
-        text = text.coerceIn(TOP + MIN_TEXT_H, main - MIN_TEXT_H - GAP_TEXT)
+        text = text.coerceIn(TOP + MIN_TEXT_H, main - minTyping - GAP_TEXT)
         wf = wf.coerceIn(LEFT + CAT_W + MIN_WATERFALL_W + GAP_WF, CONTROLS_RIGHT - MIN_CONTROLS_W)
     }
 

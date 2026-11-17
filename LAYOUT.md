@@ -74,6 +74,8 @@ Operating settings. Easy JS8 only (the PC has these in its Mode / View menus and
 
 ```
 ← Back                         ⚙
+ Frequency                                   (upright: first, boxes side by side; 2026-11-06)
+   Frequency: [ 20m - 14.078 MHz ▾ ]   Custom frequency (MHz): [      ]
  Operation
    [x] Enable Simultaneous Decoding of All Speeds (MULTI)
    [ ] Enable Autoreply (AUTO)
@@ -81,9 +83,7 @@ Operating settings. Easy JS8 only (the PC has these in its Mode / View menus and
    [ ] Enable Heartbeat Acknowledgments (ACK)      (greyed unless AUTO and HB)
  Mode
    Speed: (•) JS8 Normal  ( ) Fast  ( ) 40  (JS8 60 greyed)  ( ) Slow
- Frequency
-   Frequency: [ 20m - 14.078 MHz ▾ ]
-   Custom frequency (MHz): [      ]
+ Frequency                                   (sideways: here, top of the right column, stacked)
  Offset
    Offset: [ 1500 Hz ▲▼ ]
  View
@@ -184,6 +184,7 @@ Five screens, swipe left/right or tap the tab bar at the bottom
 3. **Waterfall**: CAT + level meter | ruler + waterfall | Waterfall Controls | gain slider.
 4. **Inbox**: table | selected message + reply text + Reply.
 5. **Settings**: shows the Station window (tab label not yet changed).
+6. **Map** (2026-11-17, between Inbox and Station since then): offline outline map, stations with a grid, who hears who. Settings: Station > Layout > Map.
 
 ## Menu page (sideways only)
 

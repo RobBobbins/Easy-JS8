@@ -192,6 +192,10 @@ class JS8EngineService : Service() {
     )
     private var callsignWarningShown = false
     private var lastTxMessage: String = ""
+    // The text handed to the engine as typed (no "CALLSIGN: ", no selected call the frames put in front)
+    private var lastTxTyped: String = ""
+    // Characters of the parts that are not in that text, counted when the first part goes out
+    private var txTypedAdded: Int = 0
     private var lastTxDirected: String = ""
     private var lastTxSubmode: Int = SUBMODE_NORMAL
     private var lastTxFrequencyHz: Double = DEFAULT_AUDIO_FREQUENCY_HZ
@@ -1382,16 +1386,19 @@ class JS8EngineService : Service() {
         val host = prefs.getString("rigctld_host", "").orEmpty().trim()
         val port = prefs.getString("rigctld_port", "").orEmpty().trim()
         val path = if (host.isEmpty()) "" else if (port.isEmpty()) host else "$host:$port"
+        val generation = engineStartGeneration
+        val rig = hamlibRigControl
         Thread {
-            val ok = hamlibRigControl?.openSerialPath(rigModel, path, 0, 0, 0, "None") == true
+            val ok = rig?.openSerialPath(rigModel, path, 0, 0, 0, "None") == true
             mainHandler.post {
+                if (staleHamlibOpen(generation, ok, rig)) return@post
                 hamlibRigConnected = ok
                 rigCtlErrorShown = false
                 if (ok) {
                     Log.i(TAG, "Hamlib network rig opened (model=$rigModel path=$path)")
                     rigOnline()
                 } else {
-                    rigFailure("Hamlib could not open the rig at ${path.ifEmpty { "its default address" }}: ${hamlibRigControl?.getLastError().orEmpty()}")
+                    rigFailure("Hamlib could not open the rig at ${path.ifEmpty { "its default address" }}: ${rig?.getLastError().orEmpty()}")
                     rigCtlErrorShown = true
                 }
             }
@@ -1655,6 +1662,8 @@ class JS8EngineService : Service() {
         portIndex: Int,
         params: SerialParams
     ) {
+        val generation = engineStartGeneration
+        val rig = hamlibRigControl
         Thread {
             val preopenOk = usbSerialBridge?.open(
                 deviceId,
@@ -1678,7 +1687,7 @@ class JS8EngineService : Service() {
             val resolvedPortIndex = usbSerialBridge?.getActivePortIndex() ?: portIndex
             val serialPath = "android-usb:$deviceId:$resolvedPortIndex"
 
-            val ok = hamlibRigControl?.openSerialPath(
+            val ok = rig?.openSerialPath(
                 rigModel,
                 serialPath,
                 params.baudRate,
@@ -1691,13 +1700,14 @@ class JS8EngineService : Service() {
             ) == true
 
             mainHandler.post {
+                if (staleHamlibOpen(generation, ok, rig)) return@post
                 hamlibRigConnected = ok
                 rigCtlErrorShown = false
                 if (ok) {
                     Log.i(TAG, "Hamlib rig opened (model=$rigModel path=$serialPath)")
                     rigOnline()
                 } else {
-                    val detail = hamlibRigControl?.getLastError().orEmpty()
+                    val detail = rig?.getLastError().orEmpty()
                     if (detail.isNotBlank()) {
                         Log.w(TAG, "Hamlib rig open failed: $detail")
                         rigFailure("Failed to open Hamlib rig: $detail")
@@ -1731,6 +1741,8 @@ class JS8EngineService : Service() {
             return
         }
 
+        val generation = engineStartGeneration
+        val rig = hamlibRigControl
         Thread {
             val preopenOk = bluetoothSerialBridge?.open(
                 address,
@@ -1760,7 +1772,7 @@ class JS8EngineService : Service() {
             Log.i(TAG, "Hamlib Bluetooth pre-open ok for addr=$address port=${selection.portIndex}")
             val serialPath = selection.path
             Log.i(TAG, "Hamlib opening Bluetooth rig via path=$serialPath")
-            val ok = hamlibRigControl?.openSerialPath(
+            val ok = rig?.openSerialPath(
                 rigModel,
                 serialPath,
                 params.baudRate,
@@ -1773,13 +1785,14 @@ class JS8EngineService : Service() {
             ) == true
 
             mainHandler.post {
+                if (staleHamlibOpen(generation, ok, rig)) return@post
                 hamlibRigConnected = ok
                 rigCtlErrorShown = false
                 if (ok) {
                     Log.i(TAG, "Hamlib rig opened (model=$rigModel path=$serialPath)")
                     rigOnline()
                 } else {
-                    val detail = hamlibRigControl?.getLastError().orEmpty()
+                    val detail = rig?.getLastError().orEmpty()
                     if (detail.isNotBlank()) {
                         Log.w(TAG, "Hamlib rig open failed: $detail")
                         rigFailure("Failed to open Hamlib rig: $detail")
@@ -3553,6 +3566,13 @@ class JS8EngineService : Service() {
             // 2026-10-21: the strike-out ran 8 characters ahead and crossed out short messages at once)
             val added = Regex("^[A-Z0-9/]+: ").find(texts[0])?.value?.length ?: 0
             putExtra(EXTRA_TX_FRAME_CHARS_SENT, (texts.take(index + 1).sumOf { it.length } - added).coerceAtLeast(0))
+            // The Typing Box holds only what was typed: the selected call the frames put in front ("VA3OSO: W3STS ")
+            // is not in it either (S20, 2026-11-06: "30W 30FT VERTICAL" lost "30W 30" to typeahead)
+            if (index == 0) {
+                val extra = texts.joinToString("").trimEnd().length - lastTxTyped.length
+                txTypedAdded = if (lastTxTyped.isNotEmpty() && extra in 0..texts[0].length) extra else added
+            }
+            putExtra(EXTRA_TX_FRAME_TYPED_CHARS_SENT, (texts.take(index + 1).sumOf { it.length } - txTypedAdded).coerceAtLeast(0))
             // The whole message as sent, without the "CALLSIGN: ": shown in the Typing Box for messages
             // that did not come from it (heartbeats, replies; Rob, 2026-10-21: "all messages do it")
             putExtra(EXTRA_TX_FRAME_FULL_TEXT, texts.joinToString("").drop(added).trim())
@@ -4748,7 +4768,7 @@ class JS8EngineService : Service() {
 
     private fun initPskReporter() {
         if (pskReporterClient != null) return
-        val programInfo = "EasyJS8-${BuildConfig.VERSION_NAME}"
+        val programInfo = "Easy JS8 ${BuildConfig.VERSION_NAME}"
         // Debug builds never reach the real PSK Reporter: test decodes would be false spots
         val pskHost = if (BuildConfig.DEBUG) {
             PreferenceManager.getDefaultSharedPreferences(this).getString("debug_psk_host", "10.0.2.2") ?: "10.0.2.2"
@@ -5413,6 +5433,7 @@ class JS8EngineService : Service() {
         val built = buildTxMessage(JS8Engine.normalizeText(text), directedCall) // the text as sent
         if (built.isNotBlank()) {
             lastTxMessage = built
+            lastTxTyped = JS8Engine.normalizeText(text).trim()
             lastTxDirected = directedCall.trim().uppercase()
             lastTxSubmode = submode
             lastTxFrequencyHz = frequencyHz
@@ -5742,6 +5763,18 @@ class JS8EngineService : Service() {
     private fun rigOpen() {
         rigFailed = false
         initializeRigControl(engineStartGeneration)
+    }
+
+    /**
+     * A Hamlib open that finishes after the engine stopped belongs to the old start: its failure must not start the
+     * retry, and a rig it opened is closed. Tablet 2026-11-06: a late failure from a stopped service retried, and two
+     * connections shared the IC-7300's USB port, so each read half of the replies (14164.039564 MHz shown).
+     */
+    private fun staleHamlibOpen(generation: Int, ok: Boolean, rig: HamlibRigControl?): Boolean {
+        if (generation == engineStartGeneration) return false
+        Log.i(TAG, "Ignoring stale Hamlib open generation=$generation ok=$ok")
+        if (ok) Thread { rig?.close() }.start()
+        return true
     }
 
     /** A frequency read from the rig becomes the dial (PC onRigStateChanged). */
@@ -6084,6 +6117,7 @@ class JS8EngineService : Service() {
         const val EXTRA_TX_FRAME_INDEX = "tx_frame_index"
         const val EXTRA_TX_FRAME_COUNT = "tx_frame_count"
         const val EXTRA_TX_FRAME_CHARS_SENT = "tx_frame_chars_sent"
+        const val EXTRA_TX_FRAME_TYPED_CHARS_SENT = "tx_frame_typed_chars_sent"
         const val EXTRA_TX_FRAME_FULL_TEXT = "tx_frame_full_text"
         const val EXTRA_TX_FRAME_IS_DATA = "tx_frame_is_data"
         const val ACTION_RADIO_FREQUENCY = "com.js8call.example.ACTION_RADIO_FREQUENCY"

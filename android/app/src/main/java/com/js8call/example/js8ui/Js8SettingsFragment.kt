@@ -641,7 +641,8 @@ class Js8SettingsFragment : Fragment() {
             sections.take(2).forEach { section(left, it) }
             sections.drop(2).forEach { section(right, it) }
         } else {
-            for (s in sections) section(col, s)
+            // Frequency first (Rob, 2026-11-06); sideways unchanged
+            for (s in sections.sortedBy { it.tab != "Frequency" }) section(col, s)
             centreUpright(col)
         }
         content.addView(ScrollView(requireContext()).apply { addView(col) })
@@ -857,6 +858,19 @@ class Js8SettingsFragment : Fragment() {
                 continue
             }
             if (grid != null && item === grid) continue
+            // Settings window upright: Frequency and Custom frequency (MHz) side by side (Rob, 2026-11-06)
+            val custom = fields.firstOrNull { it.key == Js8SettingsSchema.CUSTOM_FREQUENCY_KEY }.takeIf { !station && !sideways }
+            if (custom != null && item is Field && item.key == Js8SettingsSchema.FREQUENCY_KEY) {
+                parent.addView(LinearLayout(requireContext()).apply {
+                    orientation = LinearLayout.HORIZONTAL
+                    gravity = Gravity.BOTTOM // boxes level when "Custom frequency (MHz):" wraps to two lines
+                    addView(fieldRow(item))
+                    addView(fieldRow(custom), LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
+                        ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginStart = px(16) })
+                })
+                continue
+            }
+            if (custom != null && item === custom) continue
             // Radio page: a checkbox right after a spin box sits beside its ▲▼ (Advanced: Tx delay, Hold PTT),
             // laid out like the spin box: its label level with "Tx delay:", the box under it level with the
             // value (Rob, 2026-10-21), label shortened to "Hold PTT between frames" (Rob)

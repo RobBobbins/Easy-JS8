@@ -131,7 +131,7 @@ class Js8ActivityViewModel(app: Application) : AndroidViewModel(app) {
 
     /** A part of any of our transmissions started going out (heartbeats and replies too). */
     fun onTxFrame(text: String, index: Int, count: Int, charsSent: Int, offset: Int, fullText: String = "",
-                  isData: Boolean = false) {
+                  isData: Boolean = false, typedCharsSent: Int = charsSent) {
         frameOnAir?.let { lastTx = it }
         frameOnAir = text
         txFramesLeft = count - index - 1
@@ -141,7 +141,7 @@ class Js8ActivityViewModel(app: Application) : AndroidViewModel(app) {
         if (_typed.value == null && typingBoxEmpty && fullText.isNotEmpty()) {
             _typed.value = TypedTx(fullText, onAir = true, charsSent = charsSent, auto = true)
         } else {
-            _typed.value?.let { if (it.onAir) _typed.value = it.copy(charsSent = charsSent, framesStarted = index + 1, onLastFrame = index + 1 >= count) }
+            _typed.value?.let { if (it.onAir) _typed.value = it.copy(charsSent = if (it.auto) charsSent else typedCharsSent, framesStarted = index + 1, onLastFrame = index + 1 >= count) }
         }
         changed()
     }

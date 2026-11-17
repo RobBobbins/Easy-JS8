@@ -264,6 +264,8 @@ object Js8SettingsSchema {
         Section("View", null, listOf(
             // PC default on (BandHBActivityVisible, true) (Rob, 2026-10-22)
             check("js8cfg_show_hb_acks", "Show Band Heartbeats and ACKs", true),
+            // Off = the PC's one line per offset; on by default (Rob, 2026-11-07)
+            check(Js8MainFragment.BAND_SPLIT_KEY, "New Band Activity line for each message", true),
             // Band Activity columns, upright (Rob, 2026-10-19); same setting as press-and-hold on the header
             check("js8_table_${BAND_TABLE_UPRIGHT}_col_offset", "Show Offset in Band Activity", false),
             check("js8_table_${BAND_TABLE_UPRIGHT}_col_snr", "Show SNR in Band Activity", false),
@@ -392,7 +394,8 @@ object Js8SettingsSchema {
             )),
             Group("Aging", listOf(
                 spin("js8cfg_callsign_aging", "Remove callsigns from call activity after:", 0, 0.0, 1440.0, suffix = " minutes", special = "Disabled"),
-                spin("js8cfg_activity_aging", "Remove messages from band activity after:", 2, 0.0, 1440.0, suffix = " minutes", special = "Disabled")
+                // Disabled by default (Rob, 2026-11-07; PC 2 minutes)
+                spin("js8cfg_activity_aging", "Remove messages from band activity after:", 0, 0.0, 1440.0, suffix = " minutes", special = "Disabled")
             )),
             Group("Customization", listOf(
                 text("js8cfg_eot", "End of Transmission Character Indicator:", "♢", maxLength = 2, required = true),
@@ -510,6 +513,14 @@ object Js8SettingsSchema {
         Section(LAYOUT_PAGE, null, listOf(
             Group(null, listOf(
                 choice(Js8MainFragment.PREF_LANDSCAPE_LAYOUT, "Sideways layout:", "pc", listOf("PC" to "pc", "Pages" to "swipe", "FT8Call" to "ft8call"))
+            )),
+            // Pages layout Map screen (Easy JS8 only, Rob 2026-11-17)
+            Group("Map", listOf(
+                choice(Js8MapView.PREF_LINES, "Lines:", "arrows", Js8MapView.LINE_CHOICES),
+                choice(Js8MapView.PREF_AGING, "Remove stations from map after:", "0", Js8MapView.AGING_CHOICES),
+                check(Js8MapView.PREF_CALLS, "Show callsigns", true),
+                check(Js8MapView.PREF_STATES, "Show state and province lines", true),
+                check(Js8MapView.PREF_GRIDS, "Show grid squares", false)
             ))
         )),
         Section("Reporting", null, listOf(

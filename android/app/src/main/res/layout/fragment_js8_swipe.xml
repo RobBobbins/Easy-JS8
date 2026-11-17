@@ -256,7 +256,71 @@
             </LinearLayout>
         </LinearLayout>
 
-        <!-- 5. Station: the PC's File > Settings window -->
+        <!-- 5. Map (Easy JS8 only, Rob 2026-11-17): stations and who hears who -->
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="match_parent">
+
+            <com.js8call.example.js8ui.Js8MapView
+                android:id="@+id/js8_map"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent" />
+
+            <!-- Zoom buttons, bottom-right (Rob, 2026-11-17): 2 times in / out around the map's middle -->
+            <LinearLayout
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="bottom|end"
+                android:layout_margin="8dp"
+                android:orientation="vertical">
+
+                <!-- Map options box (Rob, 2026-11-17) -->
+                <ImageView
+                    android:id="@+id/js8_map_options"
+                    android:layout_width="44dp"
+                    android:layout_height="44dp"
+                    android:layout_marginBottom="6dp"
+                    android:background="@drawable/js8_shape_blue"
+                    android:contentDescription="Map options"
+                    android:padding="9dp"
+                    android:src="@drawable/js8_map_gear" />
+
+                <TextView
+                    android:id="@+id/js8_map_zoom_in"
+                    android:layout_width="44dp"
+                    android:layout_height="44dp"
+                    android:layout_marginBottom="6dp"
+                    android:background="@drawable/js8_shape_blue"
+                    android:gravity="center"
+                    android:text="+"
+                    android:textColor="#000000"
+                    android:textSize="26sp" />
+
+                <TextView
+                    android:id="@+id/js8_map_zoom_out"
+                    android:layout_width="44dp"
+                    android:layout_height="44dp"
+                    android:layout_marginBottom="6dp"
+                    android:background="@drawable/js8_shape_blue"
+                    android:gravity="center"
+                    android:text="−"
+                    android:textColor="#000000"
+                    android:textSize="26sp" />
+
+                <!-- Fit (Rob, 2026-11-17): every station again, as a double tap -->
+                <TextView
+                    android:id="@+id/js8_map_fit"
+                    android:layout_width="44dp"
+                    android:layout_height="44dp"
+                    android:background="@drawable/js8_shape_blue"
+                    android:gravity="center"
+                    android:text="Fit"
+                    android:textColor="#000000"
+                    android:textSize="16sp" />
+            </LinearLayout>
+        </FrameLayout>
+
+        <!-- 6. Station: the PC's File > Settings window -->
         <androidx.fragment.app.FragmentContainerView
             android:id="@+id/js8_settings_container"
             android:name="com.js8call.example.js8ui.Js8SettingsFragment"
@@ -283,6 +347,10 @@
         <TextView android:id="@+id/js8_tab_3" style="@style/Js8FrameText" android:layout_width="0dp"
             android:layout_height="match_parent" android:layout_weight="1" android:gravity="center"
             android:text="Inbox" />
+        <!-- js8_tab_5 sits before js8_tab_4: Station kept its id when Map came in -->
+        <TextView android:id="@+id/js8_tab_5" style="@style/Js8FrameText" android:layout_width="0dp"
+            android:layout_height="match_parent" android:layout_weight="1" android:gravity="center"
+            android:text="Map" />
         <TextView android:id="@+id/js8_tab_4" style="@style/Js8FrameText" android:layout_width="0dp"
             android:layout_height="match_parent" android:layout_weight="1" android:gravity="center"
             android:text="Station" />

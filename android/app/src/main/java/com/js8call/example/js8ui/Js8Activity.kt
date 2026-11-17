@@ -77,6 +77,8 @@ class Js8Activity {
 
     companion object {
         const val NOTICE_OFFSET = -1
+        /** Frames kept per Band Activity offset (PC 10; Rob, 2026-11-07: 50). */
+        const val BAND_FRAMES = 50
         const val SUBMODE_NORMAL = 0
         const val SUBMODE_FAST = 1
         const val SUBMODE_TURBO = 2
@@ -339,7 +341,8 @@ class Js8Activity {
         val isFirst = (m.type and 1) != 0
         val isLast = (m.type and 2) != 0
 
-        // Band Activity: follow a drifting signal to its new offset, keep the last 10 frames
+        // Band Activity: follow a drifting signal to its new offset, keep the last 50 frames (PC 10; Rob, 2026-11-07:
+        // the tablet's longest message in 41 hours was 45 frames)
         if (!bandActivity.containsKey(offset)) {
             bandActivity.keys.firstOrNull { abs(it - offset) <= range }?.let { prev ->
                 bandActivity.remove(prev)?.let { bandActivity[offset] = it }
@@ -348,7 +351,7 @@ class Js8Activity {
         val list = bandActivity.getOrPut(offset) { mutableListOf() }
         list += ActivityDetail(offset, text, m.snr, now, m.dt, m.mode, m.type, directed != null, m.isDataFrame(), m.quality < 0.17f,
             com.js8call.example.service.JS8EngineService.decodeDialHz)
-        while (list.size > 10) list.removeAt(0)
+        while (list.size > BAND_FRAMES) list.removeAt(0)
 
         // Heartbeat / CQ (compound frames): call activity only
         val upper = text.uppercase()
@@ -560,7 +563,7 @@ class Js8Activity {
             if ((last.bits and 2) != 0 || last.text == cfg.mfi) return@forEach
             if ((now - last.utcMs) < periodSec(last.submode) * 1500L) return@forEach
             list += ActivityDetail(offset, cfg.mfi, last.snr, last.utcMs, last.tdrift, last.submode, 0, false, true)
-            while (list.size > 10) list.removeAt(0)
+            while (list.size > BAND_FRAMES) list.removeAt(0)
             val bucket = offset / 10 * 10
             if (openRxLine[offset] ?: openRxLine[bucket] ?: openRxLine[bucket + 10] != null) {
                 writeRx(cfg.mfi, offset, last.utcMs, isTx = false, newLine = false, isLast = false, cfg = cfg, isData = true)
@@ -572,7 +575,19 @@ class Js8Activity {
 
     /** Band Activity row text for one offset, with the hide rules of displayBandActivity.cpp. */
     fun bandRowText(offset: Int, now: Long, agingMin: Int, showHb: Boolean, selected: Boolean, eot: String): Pair<String, ActivityDetail?> {
-        val items = bandActivity[offset] ?: return "" to null
+        val lines = bandRowLines(offset, now, agingMin, showHb, selected, eot, split = false)
+        return lines.firstOrNull()?.let { it.text to it.last } ?: ("" to null)
+    }
+
+    /** One Band Activity line: its text, its first and last shown frames. */
+    class BandLine(val text: String, val first: ActivityDetail, val last: ActivityDetail)
+
+    /**
+     * Band Activity lines for one offset. split = false: one line, as the PC. split = true (Settings > View,
+     * "New Band Activity line for each message", Rob 2026-11-07): a frame the sender marked first starts a new line.
+     */
+    fun bandRowLines(offset: Int, now: Long, agingMin: Int, showHb: Boolean, selected: Boolean, eot: String, split: Boolean): List<BandLine> {
+        val items = bandActivity[offset] ?: return emptyList()
         val show = BooleanArray(items.size) { true }
         items.forEachIndexed { i, item ->
             var ok = true
@@ -587,19 +602,28 @@ class Js8Activity {
             if (item.text.isEmpty()) ok = false
             show[i] = ok
         }
+        val lines = mutableListOf<BandLine>()
         val sb = StringBuilder()
-        var last: ActivityDetail? = null
+        var first: ActivityDetail? = null
         var prev: ActivityDetail? = null
+        fun close() {
+            val f = first; val l = prev
+            if (f != null && l != null) lines += BandLine(sb.toString().trimEnd(), f, l)
+            sb.clear(); first = null; prev = null
+        }
         items.forEachIndexed { i, item ->
             if (!show[i]) return@forEachIndexed
+            if (split && (item.bits and 1) != 0) close()
             var t = item.text
             if (item.lowConfidence) t = "[$t]" // DecodedText::isLowConfidence
             if ((item.bits and 2) != 0) t = t.trimEnd() + " " + eot + " "
             if (prev != null && !prev!!.isDataFrame && sb.isNotEmpty() && !sb.last().isWhitespace() && t.isNotEmpty() && !t.first().isWhitespace()) sb.append(' ')
             sb.append(t)
-            last = item; prev = item
+            if (first == null) first = item
+            prev = item
         }
-        return sb.toString().trimEnd() to last
+        close()
+        return lines
     }
 
     /** UI_Constructor::callsignSelected for a Band Activity row: newest callsign heard within the offset range. */

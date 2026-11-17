@@ -48,6 +48,10 @@ import kotlinx.coroutines.launch
 class Js8MainFragment : Fragment() {
 
     companion object {
+        /** Settings > View "New Band Activity line for each message" (Rob, 2026-11-07; on by default; off = the PC's line per offset). */
+        const val BAND_SPLIT_KEY = "js8cfg_band_line_per_message"
+        /** A Band Activity row's offset: "o1500", or "o1500.<first frame time>" when each message has its line. */
+        fun bandRowOffset(id: String) = id.removePrefix("o").substringBefore('.').toIntOrNull()
         // Call Activity press-and-hold menu
         const val USER_GUIDE_URL = "https://js8call-improved.github.io/JS8Call-improved/d6/d14/md_docs_2user__guide_2JS8Call__User__Guide.html"
         /** PC on_actionCopyright_Notice_triggered. */
@@ -273,6 +277,7 @@ class Js8MainFragment : Fragment() {
         if (ft8call) messageWindow.setTypeface(messageWindow.typeface, android.graphics.Typeface.BOLD_ITALIC)
         typingBox = view.findViewById(R.id.js8_typing_box)
         messageWindowPx = messageWindow.textSize
+        keepMessageWindowPlaceOnResize()
         // PC dialFreqUpButton / dialFreqDownButton (sideways header; upright has no arrows)
         view.findViewById<View?>(R.id.js8_freq_up)?.setOnClickListener { stepDial(250) }
         view.findViewById<View?>(R.id.js8_freq_down)?.setOnClickListener { stepDial(-250) }
@@ -593,8 +598,16 @@ class Js8MainFragment : Fragment() {
             designHeightDp = 196f
         }
         val pager = view.findViewById<Js8PagerLayout?>(R.id.js8_pager) ?: return
-        val tabs = listOf(R.id.js8_tab_0, R.id.js8_tab_1, R.id.js8_tab_2, R.id.js8_tab_3, R.id.js8_tab_4)
+        // Page order: Header, Activity, Waterfall, Inbox, Map (js8_tab_5), Station (js8_tab_4)
+        val tabs = listOf(R.id.js8_tab_0, R.id.js8_tab_1, R.id.js8_tab_2, R.id.js8_tab_3, R.id.js8_tab_5, R.id.js8_tab_4)
             .map { view.findViewById<TextView>(it) }
+        view.findViewById<Js8MapView?>(R.id.js8_map)?.let { map ->
+            map.activity = activityVm.activity
+            view.findViewById<View?>(R.id.js8_map_zoom_in)?.setOnClickListener { map.zoomBy(2.0) }
+            view.findViewById<View?>(R.id.js8_map_zoom_out)?.setOnClickListener { map.zoomBy(0.5) }
+            view.findViewById<View?>(R.id.js8_map_fit)?.setOnClickListener { map.fitAll() }
+            view.findViewById<View?>(R.id.js8_map_options)?.setOnClickListener { Js8MapOptions.show(it, map) }
+        }
         fun renderTabs(page: Int) = tabs.forEachIndexed { i, t ->
             if (i == page) t.setBackgroundResource(R.drawable.js8_shape_blue) else t.background = null
             t.setTextColor(if (i == page) Color.BLACK else ContextCompat.getColor(requireContext(), R.color.js8_frame_text))
@@ -642,7 +655,7 @@ class Js8MainFragment : Fragment() {
             Js8TableView.Column("snr", "SNR", 36, defaultVisible = !upright, numeric = true),
             Js8TableView.Column("tdrift", "Time Delta", 70, defaultVisible = false, numeric = true),
             Js8TableView.Column("submode", "Speed", 76, defaultVisible = false, menuLabel = "Mode Speed"),
-            Js8TableView.Column("message", "Message(s)", 300, stretch = true)
+            Js8TableView.Column("message", "Message(s)", 300, stretch = true, fitText = true)
         ))
         // PC buildShowColumnsMenu (mw 4669-4694): no Message(s) entry
         bandActivity.menuOrder = listOf("offset", "timestamp", "snr", "tdrift", "submode")
@@ -687,13 +700,13 @@ class Js8MainFragment : Fragment() {
         bandActivity.onRowClick = { row ->
             callActivity.selectedRowId = null
             selectedCall = if (bandActivity.selectedRowId == null) null
-                else row.id.removePrefix("o").toIntOrNull()?.let { activityVm.activity.callAtOffset(it) }
+                else bandRowOffset(row.id)?.let { activityVm.activity.callAtOffset(it) }
             renderSelection()
         }
         bandActivity.onRowLongClick = { row, anchor -> showBandMenu(anchor, row.id) }
         // Double-click: move the TX offset there and print its text in the Message Window
         bandActivity.onRowDoubleClick = { row ->
-            val off = row.id.removePrefix("o").toIntOrNull()
+            val off = bandRowOffset(row.id)
             if (off != null) {
                 if (offsetChangeAllowed()) { // PC changeFreq
                     offsetSlider?.progress = off
@@ -702,7 +715,12 @@ class Js8MainFragment : Fragment() {
                 val cfg = Js8Activity.Config(prefs())
                 val (text, last) = activityVm.activity.bandRowText(off, System.currentTimeMillis(), agingActivity(), true, true, cfg.eot)
                 if (text.isNotBlank() && last != null) {
-                    activityVm.activity.writeRx(text, off, last.utcMs, isTx = false, newLine = true, isLast = true, cfg = cfg)
+                    // PC cellDoubleClicked: the row's ♢ is the only one; the line is closed only when the last frame is final
+                    val final = (last.bits and 2) != 0
+                    val body = if (final) text.removeSuffix(cfg.eot).trimEnd() else text
+                    // PC: stamped with the row's first frame (mw 7410-7411)
+                    val first = activityVm.activity.bandActivity[off]?.firstOrNull { it.text.isNotEmpty() }?.utcMs ?: last.utcMs
+                    activityVm.activity.writeRx(body, off, first, isTx = false, newLine = true, isLast = final, cfg = cfg)
                     activityVm.changed()
                 }
             }
@@ -719,9 +737,50 @@ class Js8MainFragment : Fragment() {
 
     private fun prefs() = PreferenceManager.getDefaultSharedPreferences(requireContext())
 
+    /**
+     * Resizing the Message Window keeps its place (Rob, 2026-11-07). The jump to the first line is stopped where the
+     * text is set (no hidden cursor). Here: the first line shown, or the bottom when the newest line was showing, is
+     * remembered and put back after the resize; a box keeps its scroll in pixels, so a shorter box would otherwise
+     * hide the newest line below its bottom edge.
+     */
+    private fun keepMessageWindowPlaceOnResize() {
+        val box = messageWindow
+        var anchor = 0
+        var atBottom = true
+        var resizing = false
+        fun maxScroll(): Int {
+            val l = box.layout ?: return 0
+            return l.height - box.height + box.paddingTop + box.paddingBottom
+        }
+        box.setOnScrollChangeListener { _, _, y, _, _ ->
+            if (resizing || box.isInLayout) return@setOnScrollChangeListener
+            val l = box.layout ?: return@setOnScrollChangeListener
+            atBottom = y >= maxScroll() - 2
+            anchor = l.getLineStart(l.getLineForVertical(y))
+        }
+        box.addOnLayoutChangeListener { _, l, t, r, b, oldL, oldT, oldR, oldB ->
+            if (r - l == oldR - oldL && b - t == oldB - oldT) return@addOnLayoutChangeListener
+            resizing = true
+            // Added after TextView's own pre-draw scroll, so it runs after it
+            box.viewTreeObserver.addOnPreDrawListener(object : android.view.ViewTreeObserver.OnPreDrawListener {
+                override fun onPreDraw(): Boolean {
+                    box.viewTreeObserver.removeOnPreDrawListener(this)
+                    resizing = false
+                    val layout = box.layout ?: return true
+                    val max = maxScroll().coerceAtLeast(0)
+                    val y = if (atBottom) max
+                        else layout.getLineTop(layout.getLineForOffset(anchor.coerceAtMost(box.text.length))).coerceIn(0, max)
+                    if (box.scrollY == y) return true
+                    box.scrollTo(0, y)
+                    return false // skip this frame; the next one is drawn in place
+                }
+            })
+        }
+    }
+
     private fun intPref(key: String, default: Int) = prefs().all[key]?.toString()?.toIntOrNull() ?: default
     private fun boolPref(key: String, default: Boolean) = prefs().all[key]?.toString()?.toBooleanStrictOrNull() ?: default
-    private fun agingActivity() = intPref("js8cfg_activity_aging", 2)
+    private fun agingActivity() = intPref("js8cfg_activity_aging", 0) // Disabled by default (Rob, 2026-11-07)
     private fun agingCalls() = intPref("js8cfg_callsign_aging", 0)
 
     private fun colorPref(key: String, default: String) =
@@ -976,12 +1035,16 @@ class Js8MainFragment : Fragment() {
         val secondary = colorPref("js8cfg_ui_secondary_bg", "#FFFF66")
         val primaryWords = words("js8cfg_ui_primary_words")
         val secondaryWords = words("js8cfg_ui_secondary_words")
-        val selectedOffset = bandActivity.selectedRowId?.removePrefix("o")?.toIntOrNull()
+        val selectedOffset = bandActivity.selectedRowId?.let { bandRowOffset(it) }
+        val splitLines = boolPref(BAND_SPLIT_KEY, true)
 
         // Band Activity
-        val bandRows = a.bandActivity.keys.sorted().mapNotNull { off ->
-            val (text, last) = a.bandRowText(off, now, agingActivity(), showHb, off == selectedOffset, cfg.eot)
-            if (text.isBlank() || last == null) return@mapNotNull null
+        val bandRows = a.bandActivity.keys.sorted().flatMap { off ->
+            a.bandRowLines(off, now, agingActivity(), showHb, off == selectedOffset, cfg.eot, splitLines).map { off to it }
+        }.mapNotNull { (off, line) ->
+            val text = line.text
+            val last = line.last
+            if (text.isBlank()) return@mapNotNull null
             val wordSet = text.uppercase().split(Regex("[:> ]+")).filter { it.isNotEmpty() }.toSet()
             val bg = when {
                 (wordSet intersect primaryWords).isNotEmpty() -> primary
@@ -992,7 +1055,8 @@ class Js8MainFragment : Fragment() {
             }
             val snr = Js8Activity.formatSnr(last.snr)
             Js8TableView.Row(
-                id = "o$off",
+                // one line per message: the offset and the time of the line's first frame
+                id = if (splitLines) "o$off.${line.first.utcMs}" else "o$off",
                 values = mapOf(
                     "offset" to unit(off.toString(), "Hz"),
                     "timestamp" to Js8Activity.since(last.utcMs, now),
@@ -1100,6 +1164,9 @@ class Js8MainFragment : Fragment() {
         if (shown == messageWindowShown) return
         messageWindowShown = shown
         messageWindow.text = sb
+        // setText puts the hidden cursor at the start of the text, and Android scrolls a selectable box to its cursor
+        // on every resize and relayout (the jump to the first line Rob saw, 2026-11-07): no cursor, no jump
+        (messageWindow.text as? android.text.Spannable)?.let { android.text.Selection.removeSelection(it) }
         messageWindow.viewTreeObserver.addOnPreDrawListener(object : android.view.ViewTreeObserver.OnPreDrawListener {
             override fun onPreDraw(): Boolean {
                 messageWindow.viewTreeObserver.removeOnPreDrawListener(this)
@@ -2115,7 +2182,7 @@ class Js8MainFragment : Fragment() {
 
     /** Press and hold a Band Activity row: the PC's right-click menu (UI_Constructor.cpp, tableWidgetRXAll). */
     private fun showBandMenu(anchor: View, rowId: String?) {
-        val offset = rowId?.let { it.removePrefix("o").toIntOrNull() ?: return }
+        val offset = rowId?.let { bandRowOffset(it) ?: return }
         val a = activityVm.activity
         // Pressed below the rows (PC rowAt -1): the selection stays as it is, a Call Activity row or none,
         // no Jump items, Remove Activity greyed (UC 1018-1022)
@@ -2515,14 +2582,12 @@ class Js8MainFragment : Fragment() {
         if (hb.visibility != View.VISIBLE) return
         val timer = com.js8call.example.service.HeartbeatTimer
         val ack = wantHbReplies()
-        // Upright: only "HB" or the seconds, the small button can't hold "HB + ACK" (Rob, 2026-10-22)
-        val base = if (ack && !isUprightLayout()) "HB + ACK" else "HB"
+        // Only "HB" or the seconds, upright (Rob, 2026-10-20 and 10-22) and sideways (Rob, 2026-11-06);
+        // the mode button still shows +ACK
         val text = if (timer.on) {
             val secs = Math.round((timer.nextMs - now) / 1000.0)
-            val count = if (timer.nextMs > 0 && secs > 0) "$secs" else "now"
-            // Upright: only the seconds while counting, the small button can't hold more (Rob, 2026-10-20)
-            if (isUprightLayout()) count else "$base ($count)"
-        } else base
+            if (timer.nextMs > 0 && secs > 0) "$secs" else "now"
+        } else "HB"
         if (hb.text.toString() != text) hb.text = text
         hb.isActivated = timer.on
     }
@@ -2929,6 +2994,7 @@ class Js8MainFragment : Fragment() {
         // New decodes are gathered and drawn by the clock tick (PC: m_rxDisplayDirty)
         activityVm.version.observe(viewLifecycleOwner) {
             requestRender()
+            view?.findViewById<View?>(R.id.js8_map)?.invalidate()
             view?.findViewById<TextView?>(R.id.js8_status_blank)?.text =
                 activityVm.lastTx.takeIf { it.isNotEmpty() }?.let { "Last Tx: $it" }.orEmpty()
         }

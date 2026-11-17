@@ -2,6 +2,131 @@
 
 ## Next session starts here (2026-11-05): audit B sections 1-12 are fixed
 
+**State at 12:05, 2026-11-17: Map screen in the Pages layout (uncommitted, built 11:50, tested on S22-Fresh)**
+- Rob: map of stations and who hears who, offline map, sixth button, every station with a grid, medium detail, options in settings.
+  The PC has no map; this is Easy JS8 only.
+- `Js8MapView.kt`: Natural Earth 1:50m outlines (public domain) in `android/app/src/main/assets/map/world50m.bin`
+  (549 KB, made by `tools/make_map_asset.py` from the GeoJSON files), Mercator. Dots: my grid (red) and every Call
+  Activity station with a grid (yellow) inside Callsign aging and the map's own aging. Lines: me to every Call Activity
+  station not heard only through a relay, plus `Js8Activity.hearing` (PC heard graph). The heard graph is not saved
+  across app restarts (PC the same), so lines between other stations come back only when heard again.
+  Pinch zoom, drag, double tap fits again; the map follows new stations until it is moved.
+- Pages buttons: Header, Activity, Waterfall, Inbox, Map (`js8_tab_5`), Station (`js8_tab_4`, id kept for the test scripts).
+- Station > Layout > group **Map**: Lines (Arrows / Plain lines / No lines), Remove stations from map after (Same as Call
+  Activity / 15 / 30 minutes / 1 / 2 hours), Show callsigns (on), Show state and province lines (on), Show grid squares (off).
+  Keys `js8cfg_map_*`.
+- W148-W154 (`build-env/test/lib/mapchk.py`) passed twice. Screens: `build-env/test/lib/shots/map.2.*.png`.
+- Zoom buttons (Rob, 12:10): + and − (44 dp, blue) bottom-right of the map, 2 times in / out around the middle
+  (`Js8MapView.zoomBy`, ids `js8_map_zoom_in`, `js8_map_zoom_out`).
+- Fit button (Rob, 12:20): under −, 44 dp (Rob kept 44 dp after smaller was offered), "Fit" 16 sp, id `js8_map_fit`,
+  `Js8MapView.fitAll` (same as double tap; the map follows new stations again until moved). W156 passed twice
+  (runs 5, 6); W148-W155 passed again in run 5 (built 12:23).
+- Gear button (Rob, 12:30): above +, 44 dp, black gear (`drawable/js8_map_gear.xml`, Material Icons, Apache 2.0),
+  id `js8_map_options`. Opens `Js8MapOptions` (a box 300 dp wide, left of the buttons, top at the map's top) with the
+  five Map settings; each change saved at once and drawn; a tap outside closes it. Choice lists shared with Station >
+  Layout (`Js8MapView.LINE_CHOICES`, `AGING_CHOICES`). W157 passed twice (runs 8, 9); W148-W156 passed again in run 7
+  (built 12:36). The open box covers about 40% of the map's width.
+  W155 passed twice (runs 3, 4); W148-W154 passed again in run 3 (built 12:12).
+- Rob, 12:10: the map is far from finished; phone when Rob says.
+- Not tested: real radio decodes, a real phone or tablet, pinch zoom (adb has no two-finger touch).
+- Emulator stopped; no test process left.
+
+
+**State at 23:45, 2026-11-07: waterfall blank after a transmit on the tablet (uncommitted, built 23:32, not on the tablet yet)**
+- Tablet (SM-X210, IC-7300 USB sound card) on the air: twice the receive sound went to zeros the moment a transmit
+  opened its sound output, and stayed zeros after the transmit (22:29:29 until the app restart 23:19; 23:20:08 until
+  now, output closed 23:20:23). Rig read PTT off (`1c 00 00`). Android's own record (dumpsys media.audio_flinger,
+  Signal power history) shows -38 dB, then -89 dB and zeros from that second. Both times the output was an
+  AAudio MMAP stream (`AudioMmapOut`, flags 0x4001) on USB Headset Out. Reopening the capture (app restart) brought the sound back.
+- Fix: `adapters/android/src/audio_oboe.cpp` `OboeAudioOutput::start` uses PerformanceMode::None and SharingMode::Shared
+  (was LowLatency / Exclusive, upstream since d299ced8): the output goes through Android's mixer, not MMAP.
+- S22-Fresh: W143 (`hbhalt.py`, 10 rounds) passed twice (runs 201, 202); during a heartbeat the app's sound is on the
+  MIXER thread with signal (TX rms 0.38), capture read on through and after it. The emulator has no MMAP, so the
+  tablet fault can't be reproduced there. Not tested: the tablet with the IC-7300 (needs Rob at the radio).
+- Earlier transmits today that worked: no log left (logcat starts 23:12), so it isn't known which path they used.
+- Emulator stopped; no test process left.
+- Installed on the tablet 23:53 (Rob, "install please"). At 23:43:53 the IC-7300's USB had re-connected (cause unknown):
+  new numbers sound in 600 / out 595 (were 567 / 562), CAT `/dev/bus/usb/001/012` (was 1009), so the app started on
+  the Internal Microphone with no rig. Saved settings changed on the tablet (app stopped first; backup in the session
+  scratchpad `tablet_prefs.bak.xml`): `last_audio_device_id` 600, `js8cfg_output_device` 595, `js8cfg_ptt_port` and
+  `rig_hamlib_usb_port` android-usb:1012:0. 23:55: CAT green, 7.078 MHz, radio sound on the waterfall.
+- Seen, not changed: the app keeps the radio's devices by Android's number, which changes when the USB re-connects;
+  it then falls back to the tablet microphone without saying so.
+
+**State at 13:30, 2026-11-07: Message Window resize, Band Activity line per message (uncommitted, built 11:46, on the tablet)**
+- Message Window resize jumped to the first line: `textIsSelectable` gives the box a hidden cursor that setText puts
+  at 0, and Android scrolls a selectable TextView to its cursor on resize (TextView.onMeasure -> onPreDraw, or later in
+  onLayout). Fix in `Js8MainFragment.kt`: the selection is removed after each setText; `keepMessageWindowPlaceOnResize`
+  puts the newest line back at the bottom, or keeps the first line shown. First try (restore only) failed: the deferred
+  jump in onLayout was recorded as the place to go back to.
+- Band Activity: 50 frames per offset (`Js8Activity.BAND_FRAMES`, PC 10, both caps). Settings > View
+  "New Band Activity line for each message" (`js8cfg_band_line_per_message`, default off = PC): display only,
+  `bandRowLines` cuts an offset's frames at each frame the sender marked first; row id `o<offset>.<first frame ms>`,
+  `bandRowOffset` reads the offset back (click, double-click, menu act on the whole offset as before).
+- Defaults (Rob, 11:45): the box ticked; "Remove messages from band activity after:" Disabled (was 2 minutes; the
+  callsign one was already Disabled). Built 11:46.
+- W144-W147 (`mwband.py`) passed runs 6 and 7 on the 11:46 build. Regressions on the 11:46 build: air2 44/45 runs
+  66 and 67 (B04 test data); s27chk 26/27 runs 66 and 68 (W95 test setup); tapchk 3/3 runs 68 and 69. s27chk run 67
+  stopped at W83 by an ANR: main thread in HardwareRenderer.setStopped, RenderThread in qemu_pipe_read, 90th gpu
+  percentile 4950 ms; the emulator had been started without `-cores 8 -memory 4096 -gpu host`. Restarted with them:
+  15 ms. tapchk run 66: its callsign letter was chr(64 + run) = chr(130); now `chr(65 + (run - 1) % 26)`.
+- Tablet: the 11:46 build installed 13:26; 7.078 MHz, one rig_open, no USB read errors, box ticked, both agings 0.
+- Emulator stopped; no test process left.
+
+**State at 11:05, 2026-11-07: two Hamlib connections on one USB port (uncommitted, built 08:45, tested on S22-Fresh)**
+- Cause of the tablet's 14164.039564 MHz (2026-11-06 21:50): the first service started a Hamlib USB open, was
+  destroyed (task removed) before it finished; its late "open failed" (21:50:03.45) reached the dead service, whose
+  one-time retry (`rigFailure` -> `rigOpen`) opened a second connection beside the new service's. Log: "rig_open ok"
+  twice, every USB read error twice; the radio's 7.078 MHz bytes (`80 07 07 00`) split across replies.
+- Fix: `JS8EngineService.staleHamlibOpen` (after `rigOpen`): the network, USB and Bluetooth Hamlib opens keep the
+  start generation and rig object; a result after the engine stopped is ignored, a rig it opened is closed.
+- Regressions after the PC restart, runs 62 and 63 (`regress.hamlib.62.log`, `regress.hamlib.63.log`): air2 52/53
+  twice (B04 test data), s27chk 26/27 twice (W95 test setup), same fails as runs 60 and 61. Emulator started from Git
+  Bash (`emulator.exe -avd S22-Fresh -no-snapshot -port 5600`); PowerShell Start-Process hung before the restart.
+- Not on the tablet yet: at 11:00 the tablet (1.0.4 from 23:55 11-06, freeze fix only) was running on the air, dial
+  7.078 MHz read correctly, decoding; installing would close the app, left for Rob. The USB path can only be tested
+  on the tablet with the IC-7300.
+
+**State at 22:40, 2026-11-06: sound stop froze the tablet (uncommitted, built 22:12, on S22-Fresh, not on the tablet yet)**
+- Tablet on the air, 21:48-21:50: an auto HB ACK stuck "still going out"; Test CAT pressed 21:49:25 froze the screen
+  (ANR 21:49:49, killed 21:49:57, restarted). Freeze report (`dumpsys dropbox --print data_app_anr`): the Js8Tx thread in
+  `OboeAudioOutput::stop` held `mutex_` and waited for the sound callback thread, which waited for `mutex_` in
+  `onAudioReady`; the main thread in `testCat` -> `stopEngine` -> `JS8Engine.close` waited behind it.
+- Fix: `adapters/android/src/audio_oboe.cpp` `OboeAudioInput::stop` and `OboeAudioOutput::stop` take the stream out under
+  the lock and stop / close it with the lock released.
+- After the restart the IC-7300 USB link gave garbled replies: the app read 14,164,039,564 Hz and shows 14164.039 564,
+  CAT orange, every poll times out ("android USB read failed"). The app sent no set-frequency; decodes stayed 40m. Not
+  changed: the PC shows whatever Hamlib reads (no range check). Cause of the bad USB reads after the restart unknown;
+  Rob to unplug / replug the radio's USB. Tablet's PSK Reporter address is 10.0.2.2 (test address).
+- W143 (`build-env/test/lib/hbhalt.py`, HB then Halt 50 rounds, Normal mode: the HB button shows in Normal only) passed
+  twice. Regressions `air2.py` and `s27chk.py` runs 60 and 61 (`regress.oboe.log`): air2 52/53 twice, s27chk 26/27
+  twice. Both fails are test setup, not the app: B04 expects grid CM87, the emulator's grid is FN03 (the reply
+  "GRID FN03" went out); W95 needs `js8cfg_wf_spec_height` above 0, the emulator has none saved (default 0, no spectrum).
+- `onair.py` `alltxt()` now reads the newest ALL*.TXT (the app writes `ALL (1).TXT`; every air2 row failed on the old
+  path).
+- Installed on the tablet 23:55 (app was closed, screen off). Not done: HB then Halt on the air (needs Rob at the radio).
+
+**State at 20:25, 2026-11-06: Typing Box and HB button sideways (uncommitted, not on the tablet or S20 yet)**
+- Tablet (SM-X210, callsign VA3OZO is right, Rob), sideways PC layout: the Typing Box was one line and the line above it
+  could not be dragged (it moved the line under the lists). `Js8PcSplitters`: the Typing Box is at least two lines
+  (`minTypingH`, from the box's line height), and over the Typing Box the line under the lists keeps only the box's
+  bottom 10 dp (`mainLine.passTouch`). The tablet's saved sizes grow to two lines on the next start.
+- HB button sideways: "HB" or only the seconds, as upright (`Js8MainFragment.renderHbLabel`); the mode button still shows +ACK.
+- W140-W142 (`splitchk.py`) passed twice on S22-Fresh. Built 20:22.
+
+**State at 19:40, 2026-11-06: typeahead with a selected call, triple tap (uncommitted, not on the S20 yet)**
+- S20 on the air: "30W 30FT VERTICAL" with W3STS selected went out as "VA3OSO: W3STS" then "T VERTICAL" / " FT VERTICAL".
+  The app counted the selected call the frames put in front as typed, so typeahead started 6-7 characters late. Fix:
+  `JS8EngineService.broadcastTxFrame` sends `EXTRA_TX_FRAME_TYPED_CHARS_SENT` (frames text minus the typed text, counted
+  on the first part; `lastTxTyped`), used for typed messages (`Js8ActivityViewModel.onTxFrame`, `MainActivity`).
+- `Js8TableView` click: a third quick tap is a single tap (PC); before, a triple tap printed a Band Activity row twice.
+- W137-W139 (`build-env/test/lib/tapchk.py`) passed twice on S22-Fresh. Built 19:24.
+- **Left for now (Rob, 2026-11-06):** the log name. Since 15:09 on the S20, the app writes every line to `ALL (3).TXT`,
+  through installs and restarts. The PC writes to `ALL.TXT`. Android won't let the app reopen an `ALL.TXT` made by an
+  earlier install, so the first start after the 1.0.2 fix made one new file. `ALL (1)` and `ALL (2)` are left over
+  from before that fix. S22-Fresh the same: one `ALL (1).TXT`. tapchk.py reads the newest ALL*.TXT.
+- **Open:** S20 log 17:44 local: Android stopped `JS8EngineService` "due to app idle".
+
 **State at 21:45, 2026-11-05: band beside the callsign, 11m (Rob)**
 - Upright header: the band and the mode right of the callsign, "VA3OSO   20m   JS8" (`js8_callsign_band`,
   `js8_callsign_mode`, `Js8MainFragment.renderFrequency`); no band outside the bands, JS8 always. Frequency list and Station > Frequencies defaults: 11m - 27.245 MHz (CB JS8, one
