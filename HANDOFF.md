@@ -26,6 +26,55 @@
   five Map settings; each change saved at once and drawn; a tap outside closes it. Choice lists shared with Station >
   Layout (`Js8MapView.LINE_CHOICES`, `AGING_CHOICES`). W157 passed twice (runs 8, 9); W148-W156 passed again in run 7
   (built 12:36). The open box covers about 40% of the map's width.
+- Double tap (Rob, 13:05): zooms 2 times in with the tapped spot staying under the finger (`Js8MapView.zoomAt`, also
+  used by pinch); Fit is now the only way to fit every station. W154 changed, passed runs 10, 11, 12; W148-W157 all
+  passed in run 12 (built 13:08). Installed on the S22 Ultra 13:52 and the tablet SM-X210 13:56 (tablet paired again,
+  Rob typed the code; both started, no crash; the map not looked at on either).
+- Heard list rebuilt at start (Rob, 14:10; the PC keeps it only while running): `Js8Activity.rebuildHeard` replays the
+  saved Band Activity ("A: B ..." = A hears B, HEARING replies) after `fromJson` in `Js8ActivityViewModel` init.
+  Tablet data: 764 directed frames, 61 lines between stations that both have a grid. Side effect: Call Activity
+  press-and-hold **HEARING:** / **HEARD BY:** lines also show the rebuilt lists after a restart (PC: empty).
+  W158 passed twice (runs 13, 14), built 14:03. Installed on the tablet 14:07 and the S22 Ultra 14:07.
+- Line colours (Rob, 14:15): green both ways, yellow one way, in Arrows and Plain lines; station dots white with a
+  black edge (were yellow). Test colour checks changed (W149-W152, W154 dots found as white with callsigns off, W157,
+  W158). W148-W158 passed runs 15 (+15b W153) and 16, built 14:17. Not on the phone or tablet yet.
+- Map title (Rob, 14:25): top left, white on a dark strip, "EASY JS8 - callsign - band - date" with the date in UTC;
+  outside the bands the dial frequency ("27.5550 MHz"). Js8MapView.drawTitle; Js8MainFragment.renderFrequency sets
+  map.dialHz. Fit leaves the strip clear so it covers no station. The title is also the map's content description
+  (tests read it; TalkBack reads it). W148-W159 passed runs 20 and 21, built 14:32. Not on the phone or tablet yet.
+- APRS beacon (Rob, 15:20): Station > General > APRS Beacon group. **APRS beacon:** Off / 2 / 5 / 10 / 15 / 30 minutes /
+  1 hour / SmartBeaconing, plus 7 SmartBeaconing settings (km/h; greyed unless SmartBeaconing). service/AprsBeacon.kt;
+  JS8EngineService.sendAprsBeacon sends "@APRSIS GRID <10-char grid>" over the air like a typed message (TX offset).
+  Each beacon gets a new GPS fix first (GPS provider only), which also sets My Maidenhead Grid Locator; the fix starts
+  early by the last fix time; at beacon time it waits up to 30 s, then the beacon is skipped. SmartBeaconing: GPS on
+  the whole time, HamHUD/Direwolf rules, turn slope in degrees x mph. Engine service now asks for location too
+  (FOREGROUND_SERVICE_LOCATION, type microphone|location) while the beacon is on, so it works with the screen off.
+  OK on Station asks for precise location when the beacon is on. Js8Grid.fromLatLon(..., 10).
+  Found: JS8EngineService.messageQueued is copied from the screen (MainActivity observe) and sticks while the screen
+  is off; the beacon does not check it. Heartbeats still do (not changed, told Rob).
+  The emulator GPS always reports direction 0: W163 uses the test provider (positions only). GPS-reported direction
+  only on the phone (RADIO-CHECKLIST A2). W160-W163 passed runs 10 and 11, built 15:44. Not on the phone or tablet yet.
+- Message-queued fix (Rob, 16:25): MainActivity copies TransmitViewModel.txState into JS8EngineService.messageQueued
+  with observeForever (removed in onDestroy); observe(this) stopped with the screen off and left it "queued", holding
+  back scheduled heartbeats and Frequency Schedule changes. The APRS beacon checks it again, like a heartbeat.
+  W160-W164 passed runs 15 and 16, built 16:27 (the emulator exited once, run 14, restarted). Installed on the S22 Ultra and tablet 16:57.
+- APRS Beacon page (Rob, 17:10): the APRS Beacon group moved from General > Station to its own Station page after
+  Reporting (Js8SettingsSchema Section("APRS Beacon")). W160-W164 passed runs 19 and 20, built 17:14. Not on the phone
+  or tablet yet. RADIO-CHECKLIST beacon rows renamed A1, A2 (11 and 12 were taken by the rig-options table).
+- Upright map (Rob, 17:50, "just put it in there", to be tweaked): the Pages layout's map, title and four buttons
+  between Waterfall Controls and Inbox, 300 dp tall (fragment_js8_main.xml "8a. Map"). Map wiring moved to
+  setUpMap() so both layouts get it. A drag on the map moves the map, not the page. W165 passed runs 22, 23;
+  W148-W159 passed again runs 24, 25 (built 17:52). Seen in the screenshots: at 300 dp the button column covers
+  stations at the right edge (VE3TST's label, K1AAA). Installed on the tablet 19:15 and the S22 Ultra 19:16
+  (its wireless debugging port is now 38773).
+- APRS Beacon status window (Rob, 19:30): Station > APRS Beacon, under APRS beacon:, 10 lines, scrolls inside.
+  The beacon's events with UTC time (AprsBeacon.note, last 200, kept while the app runs); the last line counts down
+  live (AprsBeacon.liveLine, every second). The engine service adds "Waiting for the transmitter: <reasons>",
+  queued / not sent / dropped / rejected. Found by the window and fixed: OK saved the 8 beacon settings one by one
+  and the beacon restarted 8 times; the service now restarts it once (beaconRestart posted).
+  W166 passed runs 22-24; W161-W164 again runs 23, 24; W160 runs 25, 26 (built 19:37).
+- S22 Ultra (SM-S908W, Rob's phone, wireless debugging 10.0.0.185): paired again 13:02 (it had dropped this PC; Rob
+  typed the code); the 12:36 build installed 13:03, app started, no crash. Not looked at on the phone.
   W155 passed twice (runs 3, 4); W148-W154 passed again in run 3 (built 12:12).
 - Rob, 12:10: the map is far from finished; phone when Rob says.
 - Not tested: real radio decodes, a real phone or tablet, pinch zoom (adb has no two-finger touch).
@@ -315,7 +364,7 @@ transmit, audio, rig control) is kept, its screens are replaced.
 
 - **Upright** = always Vertical mode (one scrolling page, no pinch zoom). Section order:
   Header · Band Activity | Call Activity side by side · Message Window · Typing Box ·
-  Buttons (two rows of five) · Status Bar · Waterfall · Waterfall Controls · Inbox.
+  Buttons (two rows of five) · Status Bar · Waterfall · Waterfall Controls · Map · Inbox.
 - **Upright header** (changed this session): callsign over the UTC clock, then
   RX · TX · **Settings**, then SPOT · LOG · TUNE. No frequency display, no ▲▼, no Offset slider,
   no ⋮ (all moved to the Settings window). Waterfall Controls → Control has no Offset box upright.

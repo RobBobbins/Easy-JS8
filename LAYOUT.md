@@ -66,6 +66,7 @@ same place, same blue bold style, opens the Settings window.
    · JS8 Normal · Freq · Auto Reply · Last Tx; the last four scroll in from the right (`js8_status_bar_upright.xml`).
 7. **Waterfall**
 8. **Waterfall Controls** (upright: no Offset box; QSY first)
+8a. **Map** (upright, 300 dp; Rob 2026-11-17)
 9. **Inbox**
 
 ## Settings window (header Settings button)

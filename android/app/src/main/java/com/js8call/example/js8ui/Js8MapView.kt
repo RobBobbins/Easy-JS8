@@ -31,12 +31,16 @@ import kotlin.math.tan
  * a dot for every Call Activity station with a grid, and who-hears-who lines from the PC heard graph
  * (Js8Activity.hearing). Settings: Station > Layout > Map.
  *
- * Pinch to zoom, drag to move, double tap to fit every station again.
+ * Pinch to zoom, drag to move, double tap to zoom in on the tapped spot.
  */
 class Js8MapView @JvmOverloads constructor(context: Context, attrs: AttributeSet? = null) : View(context, attrs) {
 
     /** The activity lists to draw; set by Js8MainFragment. */
     var activity: Js8Activity? = null
+
+    /** Dial frequency for the title; set by Js8MainFragment.renderFrequency. 0 = not known yet. */
+    var dialHz: Long = 0
+        set(v) { if (field != v) { field = v; invalidate() } }
 
     companion object {
         const val PREF_LINES = "js8cfg_map_lines"          // arrows / plain / none
@@ -94,14 +98,24 @@ class Js8MapView @JvmOverloads constructor(context: Context, attrs: AttributeSet
     private val lakePaint = stroke(Color.rgb(95, 168, 255), 0.8f)
     private val statePaint = stroke(Color.rgb(224, 160, 64), 0.7f)
     private val gridPaint = stroke(Color.rgb(255, 64, 64), 1f)
-    private val linePaint = stroke(Color.rgb(64, 224, 64), 1.2f)
-    private val arrowPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(64, 224, 64); style = Paint.Style.FILL }
-    private val dotPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(255, 230, 0) }
+    // Lines: green both ways, yellow one way (Rob, 2026-11-17); the arrow heads the same colour as their line
+    private val bothPaint = stroke(Color.rgb(64, 224, 64), 1.2f)
+    private val onePaint = stroke(Color.rgb(255, 230, 0), 1.2f)
+    private val bothArrow = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(64, 224, 64); style = Paint.Style.FILL }
+    private val oneArrow = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(255, 230, 0); style = Paint.Style.FILL }
+    // Station dots white with a black edge (Rob, 2026-11-17; were yellow, the one-way line colour now)
+    private val dotPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE }
+    private val dotEdge = stroke(Color.BLACK, 1.5f)
     private val myDotPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(255, 64, 64) }
     private val labelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         color = Color.WHITE; textSize = 12 * sp; setShadowLayer(2 * dp, 0f, 0f, Color.BLACK)
     }
     private val notePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE; textSize = 13 * sp }
+    // Title: white on a dark see-through strip (Rob, 2026-11-17)
+    private val titlePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+        color = Color.WHITE; textSize = 14 * sp; typeface = android.graphics.Typeface.DEFAULT_BOLD
+    }
+    private val titleBack = Paint().apply { color = Color.argb(170, 0, 0, 0) }
     private var segs = FloatArray(4096)
 
     private fun stroke(c: Int, w: Float) = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -203,8 +217,10 @@ class Js8MapView @JvmOverloads constructor(context: Context, attrs: AttributeSet
         var y0 = st.minOf { it.y }.toDouble(); var y1 = st.maxOf { it.y }.toDouble()
         val padX = max(5.0, (x1 - x0) * 0.15); val padY = max(4.0, (y1 - y0) * 0.15)
         x0 -= padX; x1 += padX; y0 -= padY; y1 += padY
-        cx = (x0 + x1) / 2; cy = (y0 + y1) / 2
-        scale = min(width / (x1 - x0), height / (y1 - y0))
+        // The title's strip is kept clear at the top, so it covers no station
+        val top = titleHeight()
+        scale = min(width / (x1 - x0), (height - top) / (y1 - y0))
+        cx = (x0 + x1) / 2; cy = (y0 + y1) / 2 + top / 2.0 / scale
         fitted = true
     }
 
@@ -233,18 +249,21 @@ class Js8MapView @JvmOverloads constructor(context: Context, attrs: AttributeSet
         if (boolPref(PREF_GRIDS, false)) st.forEach { drawGrid(canvas, it) }
         when (prefs.getString(PREF_LINES, "arrows")) {
             "none" -> Unit
-            "plain" -> links(st).keys.forEach { (a, b) -> canvas.drawLine(sx(a.x), sy(a.y), sx(b.x), sy(b.y), linePaint) }
+            "plain" -> links(st).forEach { (p, both) ->
+                canvas.drawLine(sx(p.first.x), sy(p.first.y), sx(p.second.x), sy(p.second.y), if (both) bothPaint else onePaint)
+            }
             else -> links(st).forEach { (p, both) ->
                 val (a, b) = p
-                canvas.drawLine(sx(a.x), sy(a.y), sx(b.x), sy(b.y), linePaint)
-                drawArrow(canvas, a, b)
-                if (both) drawArrow(canvas, b, a)
+                canvas.drawLine(sx(a.x), sy(a.y), sx(b.x), sy(b.y), if (both) bothPaint else onePaint)
+                drawArrow(canvas, a, b, if (both) bothArrow else oneArrow)
+                if (both) drawArrow(canvas, b, a, bothArrow)
             }
         }
         val showCalls = boolPref(PREF_CALLS, true)
         st.sortedBy { it.mine }.forEach { s ->
             val x = sx(s.x); val y = sy(s.y)
             canvas.drawCircle(x, y, (if (s.mine) 5f else 4f) * dp, if (s.mine) myDotPaint else dotPaint)
+            if (!s.mine) canvas.drawCircle(x, y, 4f * dp, dotEdge)
             if (showCalls) canvas.drawText(s.call, x + 6 * dp, y - 4 * dp, labelPaint)
         }
         if (st.none { !it.mine }) {
@@ -252,6 +271,33 @@ class Js8MapView @JvmOverloads constructor(context: Context, attrs: AttributeSet
                 else "No stations with a grid yet."
             canvas.drawText(note, 10 * dp, height - 10 * dp, notePaint)
         }
+        drawTitle(canvas)
+    }
+
+    /**
+     * Title, top left (Rob, 2026-11-17): "EASY JS8 - callsign - band - date", the date in UTC.
+     * Outside the bands the frequency in MHz takes the band's place; no callsign set = left out.
+     */
+    /** Pixels from the map's top to just under the title's strip. */
+    private fun titleHeight(): Float {
+        val fm = titlePaint.fontMetrics
+        return 8 * dp + (fm.descent - fm.ascent) + 12 * dp + 4 * dp
+    }
+
+    private fun drawTitle(canvas: Canvas) {
+        val call = prefs.getString("callsign", "").orEmpty().trim().uppercase(Locale.US)
+        val band = if (dialHz <= 0) "" else com.js8call.example.util.BandUtils.bandOrNull(dialHz)
+            ?: String.format(Locale.US, "%.4f MHz", dialHz / 1e6)
+        val date = java.text.SimpleDateFormat("yyyy-MM-dd", Locale.US)
+            .apply { timeZone = java.util.TimeZone.getTimeZone("UTC") }.format(java.util.Date())
+        val title = listOf("EASY JS8", call, band, date).filter { it.isNotEmpty() }.joinToString(" - ")
+        if (contentDescription?.toString() != title) contentDescription = title // readable by the tests and TalkBack
+        val pad = 6 * dp
+        val w = titlePaint.measureText(title)
+        val fm = titlePaint.fontMetrics
+        val left = 8 * dp; val top = 8 * dp
+        canvas.drawRect(left, top, left + w + pad * 2, top + (fm.descent - fm.ascent) + pad * 2, titleBack)
+        canvas.drawText(title, left + pad, top + pad - fm.ascent, titlePaint)
     }
 
     private fun drawLayer(canvas: Canvas, lines: List<FloatArray>, paint: Paint) {
@@ -280,7 +326,7 @@ class Js8MapView @JvmOverloads constructor(context: Context, attrs: AttributeSet
     }
 
     /** Arrow head at [to], on the line from [from]. */
-    private fun drawArrow(canvas: Canvas, from: Station, to: Station) {
+    private fun drawArrow(canvas: Canvas, from: Station, to: Station, paint: Paint) {
         val x0 = sx(from.x); val y0 = sy(from.y); val x1 = sx(to.x); val y1 = sy(to.y)
         if (hypot(x1 - x0, y1 - y0) < 16 * dp) return
         val ang = atan2(y1 - y0, x1 - x0)
@@ -292,12 +338,12 @@ class Js8MapView @JvmOverloads constructor(context: Context, attrs: AttributeSet
             lineTo(tipX - len * cos(ang + wing), tipY - len * sin(ang + wing))
             close()
         }
-        canvas.drawPath(path, arrowPaint)
+        canvas.drawPath(path, paint)
     }
 
     // ---- Touch ------------------------------------------------------------------------------
 
-    /** Fit button and double tap: every station again; the map then follows new stations until it is moved. */
+    /** Fit button: every station again; the map then follows new stations until it is moved. */
     fun fitAll() {
         userMoved = false; fitted = false; invalidate()
     }
@@ -311,18 +357,23 @@ class Js8MapView @JvmOverloads constructor(context: Context, attrs: AttributeSet
         invalidate()
     }
 
+    /** Zooms [factor] times keeping the map point under screen point ([px], [py]) in place (pinch, double tap). */
+    private fun zoomAt(px: Float, py: Float, factor: Double) {
+        if (!fitted) fit(stations())
+        val fx = cx + (px - width / 2.0) / scale
+        val fy = cy - (py - height / 2.0) / scale
+        scale *= factor
+        clampView()
+        cx = fx - (px - width / 2.0) / scale
+        cy = fy + (py - height / 2.0) / scale
+        clampView()
+        userMoved = true
+        invalidate()
+    }
+
     private val scaler = ScaleGestureDetector(context, object : ScaleGestureDetector.SimpleOnScaleGestureListener() {
         override fun onScale(d: ScaleGestureDetector): Boolean {
-            // keep the map point under the fingers in place
-            val fx = cx + (d.focusX - width / 2.0) / scale
-            val fy = cy - (d.focusY - height / 2.0) / scale
-            scale *= d.scaleFactor
-            clampView()
-            cx = fx - (d.focusX - width / 2.0) / scale
-            cy = fy + (d.focusY - height / 2.0) / scale
-            clampView()
-            userMoved = true
-            invalidate()
+            zoomAt(d.focusX, d.focusY, d.scaleFactor.toDouble())
             return true
         }
     })
@@ -334,8 +385,9 @@ class Js8MapView @JvmOverloads constructor(context: Context, attrs: AttributeSet
             clampView(); userMoved = true; invalidate()
             return true
         }
+        // Double tap: 2 times in on the tapped spot (Rob, 2026-11-17; was fit every station, now the Fit button)
         override fun onDoubleTap(e: MotionEvent): Boolean {
-            fitAll()
+            zoomAt(e.x, e.y, 2.0)
             return true
         }
     })

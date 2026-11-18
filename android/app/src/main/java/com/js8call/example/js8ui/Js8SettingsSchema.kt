@@ -108,6 +108,20 @@ object Js8SettingsSchema {
 
     private fun radio(key: String, default: String) = Field(key, "", Kind.RADIO, default)
 
+    // ---- APRS beacon (Station > General) -------------------------------------------------------
+
+    /** APRS beacon: Off, a time, or SmartBeaconing. */
+    private val beaconField = choice(com.js8call.example.service.AprsBeacon.PREF_BEACON, "APRS beacon:", "0",
+        com.js8call.example.service.AprsBeacon.BEACON_CHOICES)
+    private fun smartOn(d: Draft) = d.get(beaconField) == com.js8call.example.service.AprsBeacon.SMART
+
+    /** SmartBeaconing settings: greyed out unless APRS beacon is SmartBeaconing. */
+    private fun spinActive(key: String, label: String, default: Int, min: Double, max: Double, suffix: String) =
+        Field(key, label, Kind.SPIN, default.toString(), min = min, max = max, suffix = suffix, active = { d -> smartOn(d) })
+
+    private fun choiceActive(key: String, label: String, default: String, options: List<Pair<String, String>>) =
+        Field(key, label, Kind.CHOICE, default, choices = { _, _ -> options }, active = { d -> smartOn(d) })
+
     private fun same(vararg v: String) = v.map { it to it }
 
     // ---- Radio: one "Rig" list = JS8Android rig types + every Hamlib model ---------------------
@@ -563,6 +577,22 @@ object Js8SettingsSchema {
                 check(Js8Api.KEY_N1MM_ENABLED, "Enable sending logged contacts to N1MM logging software", false),
                 text(Js8Api.KEY_N1MM_SERVER, "N1MM Server:", "127.0.0.1"),
                 spin(Js8Api.KEY_N1MM_PORT, "N1MM Server Port:", 2333, 0.0, 65535.0)
+            ))
+        )),
+        // Own page after Reporting (Rob 2026-11-17; was in General > Station)
+        Section("APRS Beacon", null, listOf(
+            // Easy JS8 only (Rob 2026-11-17): "@APRSIS GRID" over the air with a new GPS fix, 10-character grid
+            Group("APRS Beacon", listOf(
+                beaconField,
+                Special("aprs_status"), // status window: the beacon's events, last line counting down (Rob 2026-11-17)
+                Note("Each beacon gets a new GPS fix first and puts its grid in My Maidenhead Grid Locator. No new fix = no beacon."),
+                spinActive(com.js8call.example.service.AprsBeacon.PREF_FAST_SPEED, "SmartBeaconing highway speed:", 100, 10.0, 300.0, " km/h"),
+                choiceActive(com.js8call.example.service.AprsBeacon.PREF_FAST_RATE, "Beacon every at highway speed:", "300", com.js8call.example.service.AprsBeacon.FAST_RATE_CHOICES),
+                spinActive(com.js8call.example.service.AprsBeacon.PREF_SLOW_SPEED, "SmartBeaconing stopped speed:", 5, 1.0, 50.0, " km/h"),
+                choiceActive(com.js8call.example.service.AprsBeacon.PREF_SLOW_RATE, "Beacon every when stopped:", "1800", com.js8call.example.service.AprsBeacon.SLOW_RATE_CHOICES),
+                spinActive(com.js8call.example.service.AprsBeacon.PREF_TURN_ANGLE, "Turn angle:", 30, 5.0, 180.0, " degrees"),
+                spinActive(com.js8call.example.service.AprsBeacon.PREF_TURN_SLOPE, "Turn slope:", 255, 0.0, 1000.0, ""),
+                choiceActive(com.js8call.example.service.AprsBeacon.PREF_TURN_TIME, "Least time between turn beacons:", "120", com.js8call.example.service.AprsBeacon.TURN_TIME_CHOICES)
             ))
         )),
         Section("Frequencies", null, listOf(

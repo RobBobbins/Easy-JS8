@@ -442,6 +442,20 @@ class Js8Activity {
         heardBy.getOrPut(to) { mutableSetOf() } += from
     }
 
+    /**
+     * Heard lists again from the saved Band Activity, after a restart (Easy JS8, Rob 2026-11-17: the map's lines
+     * between stations; the PC keeps them only while running). Same rule as a live frame: "A: B ..." is A hearing B,
+     * a HEARING reply adds its callsigns.
+     */
+    fun rebuildHeard(my: String) {
+        bandActivity.values.flatten().sortedBy { it.utcMs }.forEach { d ->
+            val directed = parseDirected(d.text) ?: return@forEach
+            if (directed.from == "<....>" || directed.to == "<....>") return@forEach
+            logHeard(directed.from, directed.to, my)
+            if (directed.cmd.trim().uppercase() == "HEARING") parseHeard(directed.from, directed.extra, my)
+        }
+    }
+
     private fun parseHeard(from: String, text: String, my: String) =
         text.split(Regex("\\s+")).filter { isCallsign(it) }.forEach { logHeard(from, it, my) }
 

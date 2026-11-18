@@ -31,7 +31,10 @@ class Js8ActivityViewModel(app: Application) : AndroidViewModel(app) {
     init {
         val reset = PreferenceManager.getDefaultSharedPreferences(app).getBoolean("js8cfg_reset_activity", false)
         if (reset) store.delete()
-        else runCatching { activity.fromJson(org.json.JSONObject(store.readText())) }
+        else runCatching {
+            activity.fromJson(org.json.JSONObject(store.readText()))
+            activity.rebuildHeard(cfg().myCall) // map lines between stations survive a restart
+        }
     }
 
     override fun onCleared() {

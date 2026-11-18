@@ -496,10 +496,9 @@ class MainActivity : AppCompatActivity() {
         js8ActivityViewModel = ViewModelProvider(this)[com.js8call.example.js8ui.Js8ActivityViewModel::class.java]
         decodeViewModel.loadPersistedDecodesIfEnabled()
 
-        // PC isMessageQueuedForTransmit, for the service's Scheduled Frequency Change check
-        transmitViewModel.txState.observe(this) {
-            JS8EngineService.messageQueued = it != com.js8call.example.model.TransmitState.IDLE
-        }
+        // PC isMessageQueuedForTransmit, for the service's heartbeat, APRS beacon and Scheduled Frequency Change
+        // checks. Kept up to date with the screen off too (2026-11-17: observe(this) left it stuck at "queued")
+        transmitViewModel.txState.observeForever(txStateCopy)
 
         // Easy JS8: Station > Reporting API (and WSJT-X, N3FJP, N1MM)
         Js8Api.init(this)
@@ -594,6 +593,7 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun onDestroy() {
+        if (::transmitViewModel.isInitialized) transmitViewModel.txState.removeObserver(txStateCopy)
         txQueueUi.removeCallbacks(txQueueTicker)
         LocalBroadcastManager.getInstance(this)
             .unregisterReceiver(decodeReceiver)
@@ -605,6 +605,10 @@ class MainActivity : AppCompatActivity() {
         JS8EngineService.callHeardMs = null
         JS8EngineService.callActivityList = null
         super.onDestroy()
+    }
+
+    private val txStateCopy = androidx.lifecycle.Observer<com.js8call.example.model.TransmitState> {
+        JS8EngineService.messageQueued = it != com.js8call.example.model.TransmitState.IDLE
     }
 
     /** API commands that use the transmit queue (TX.SEND_MESSAGE, TX.GET_QUEUE_DEPTH, WINDOW.RAISE). */

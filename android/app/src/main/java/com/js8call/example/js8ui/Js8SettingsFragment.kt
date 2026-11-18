@@ -427,6 +427,13 @@ class Js8SettingsFragment : Fragment() {
             AlertDialog.Builder(ctx).setMessage(problem).setPositiveButton(android.R.string.ok, null).show()
             return
         }
+        // APRS beacon on: the GPS needs location permission first; OK runs again once it is allowed
+        val beacon = (draft.values[com.js8call.example.service.AprsBeacon.PREF_BEACON]
+            ?: prefs.getString(com.js8call.example.service.AprsBeacon.PREF_BEACON, "0")).orEmpty()
+        if (station && beacon != "0" && !com.js8call.example.service.AprsBeacon.hasPermission(ctx)) {
+            beaconPermission.launch(locationPermissions)
+            return
+        }
         val e = prefs.edit()
         val changedLayout = draft.values.containsKey(Js8MainFragment.PREF_LANDSCAPE_LAYOUT)
         for (f in allFields()) {
@@ -699,7 +706,7 @@ class Js8SettingsFragment : Fragment() {
     /** Radio page sideways: shorter labels for checkboxes beside a spin box (Rob, 2026-10-21). */
     private val SHORT_CHECK_LABELS = mapOf("js8cfg_hold_ptt" to "Hold PTT between frames")
 
-    private val WIDE_SPECIALS = setOf("frequencies_table", "schedule_table", "saved_messages", "notifications_table", "diagnostics_text")
+    private val WIDE_SPECIALS = setOf("frequencies_table", "schedule_table", "saved_messages", "notifications_table", "diagnostics_text", "aprs_status")
 
     /**
      * Sideways Station page (Rob, 2026-10-20: no tabs, use the width): each sub-tab's heading,
@@ -1311,6 +1318,13 @@ class Js8SettingsFragment : Fragment() {
         androidx.activity.result.contract.ActivityResultContracts.RequestMultiplePermissions()
     ) { granted -> if (granted.values.any { it }) acquireGps() else toast("Location permission is needed for Acquire GPS") }
 
+    private val beaconPermission = registerForActivityResult(
+        androidx.activity.result.contract.ActivityResultContracts.RequestMultiplePermissions()
+    ) { granted ->
+        if (granted[Manifest.permission.ACCESS_FINE_LOCATION] == true) onOk()
+        else toast("Precise location permission is needed for the APRS beacon")
+    }
+
     private fun acquireGps() {
         val ctx = requireContext()
         if (locationPermissions.none { ContextCompat.checkSelfPermission(ctx, it) == PackageManager.PERMISSION_GRANTED }) {
@@ -1471,7 +1485,50 @@ class Js8SettingsFragment : Fragment() {
             text = vm.diagnostics
             setTextIsSelectable(true)
         }
+        "aprs_status" -> aprsStatusWindow()
         else -> View(requireContext())
+    }
+
+    /**
+     * APRS Beacon status window (Rob 2026-11-17): the beacon's events with their UTC time, the last line counting
+     * down live; updated every second while it is on screen. Follows the newest line unless scrolled up.
+     */
+    private fun aprsStatusWindow(): View {
+        val text = styledField(TextView(requireContext())).apply {
+            id = R.id.js8_aprs_status
+            isSingleLine = false
+            gravity = Gravity.TOP or Gravity.START
+            setPadding(px(8), px(6), px(8), px(6))
+            setTextSize(TypedValue.COMPLEX_UNIT_PX, textPx * 0.9f)
+            setHorizontallyScrolling(false)
+            movementMethod = android.text.method.ScrollingMovementMethod()
+            isVerticalScrollBarEnabled = true
+            setLines(10)
+            // The page scrolls too: a drag inside the window scrolls the window
+            setOnTouchListener { v, e ->
+                if (e.action == android.view.MotionEvent.ACTION_DOWN) v.parent?.requestDisallowInterceptTouchEvent(true)
+                false
+            }
+        }
+        val tick = object : Runnable {
+            override fun run() {
+                val layout = text.layout
+                val bottom = layout == null ||
+                    text.scrollY >= layout.height - (text.height - text.totalPaddingTop - text.totalPaddingBottom) - text.lineHeight
+                val all = com.js8call.example.service.AprsBeacon.lines() + com.js8call.example.service.AprsBeacon.liveLine()
+                text.text = all.joinToString("\n")
+                if (bottom) text.post {
+                    val l = text.layout ?: return@post
+                    text.scrollTo(0, (l.height - (text.height - text.totalPaddingTop - text.totalPaddingBottom)).coerceAtLeast(0))
+                }
+                text.postDelayed(this, 1000L)
+            }
+        }
+        text.addOnAttachStateChangeListener(object : View.OnAttachStateChangeListener {
+            override fun onViewAttachedToWindow(v: View) { text.removeCallbacks(tick); tick.run() }
+            override fun onViewDetachedFromWindow(v: View) { text.removeCallbacks(tick) }
+        })
+        return text
     }
 
     private fun table(key: String, cols: List<Js8TableView.Column>, rows: List<Js8TableView.Row>, heightDp: Int) =

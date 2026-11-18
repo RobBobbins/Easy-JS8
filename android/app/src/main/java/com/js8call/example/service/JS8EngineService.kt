@@ -360,6 +360,76 @@ class JS8EngineService : Service() {
         if (key == PREF_SHOW_FT8) {
             applyFt8Setting()
         }
+        // Station > General > APRS beacon (Easy JS8): restart it, and let the notification service use location
+        // OK saves every beacon setting at once: one restart for all of them
+        if (key in AprsBeacon.KEYS) {
+            mainHandler.removeCallbacks(beaconRestart)
+            mainHandler.post(beaconRestart)
+        }
+    }
+
+    private val beaconRestart = Runnable {
+        aprsBeacon.restart()
+        if (foregroundStarted) startForegroundService()
+    }
+
+    /** APRS beacon: GPS fixes and the schedule; sends through sendAprsBeacon. */
+    private val aprsBeacon by lazy { AprsBeacon(this) { grid -> sendAprsBeacon(grid) } }
+    private var foregroundStarted = false
+    @Volatile private var pendingBeacon: String? = null
+    private var beaconWaitWhy = ""
+
+    /** "@APRSIS GRID <grid>" as typed from Saved > APRS GRID; waits for the transmitter like a heartbeat. */
+    private fun sendAprsBeacon(grid: String) {
+        val first = pendingBeacon == null
+        pendingBeacon = "@APRSIS GRID $grid" // a newer beacon replaces one still waiting
+        if (first) txHandler.post { sendPendingBeacon() }
+    }
+
+    private fun sendPendingBeacon() {
+        val text = pendingBeacon ?: return
+        val prefs = PreferenceManager.getDefaultSharedPreferences(this)
+        // Waits behind a queued message and an empty Typing Box, like a heartbeat
+        if (isTransmitActive() || messageQueued || !typingBoxEmpty || !prefs.getBoolean("js8cfg_tx_enabled", true)) {
+            val why = listOfNotNull(
+                "transmitting".takeIf { isTransmitActive() },
+                "message queued".takeIf { messageQueued },
+                "text in the Typing Box".takeIf { !typingBoxEmpty },
+                "TX off".takeIf { !prefs.getBoolean("js8cfg_tx_enabled", true) }
+            ).joinToString(", ")
+            AprsBeacon.liveTxWait = why
+            if (why != beaconWaitWhy) { beaconWaitWhy = why; AprsBeacon.note("Waiting for the transmitter: $why") }
+            mainHandler.postDelayed({ txHandler.post { sendPendingBeacon() } }, 1000L)
+            return
+        }
+        pendingBeacon = null
+        AprsBeacon.liveTxWait = null
+        beaconWaitWhy = ""
+        if (isListenOnly()) { AprsBeacon.note("Beacon not sent: listen only"); return }
+        val callsign = getConfiguredCallsign() ?: run { AprsBeacon.note("Beacon not sent: no callsign"); return }
+        val activeEngine = engine ?: run { AprsBeacon.note("APRS beacon dropped: engine not running"); return }
+        val freq = prefs.getString("js8cfg_tx_offset", null)?.toDoubleOrNull() ?: DEFAULT_AUDIO_FREQUENCY_HZ
+        if (refuseWsprBand(freq)) { AprsBeacon.note("Beacon not sent: Tx frequency in the 30m WSPR sub-band"); return }
+        val submode = getPreferredTxSubmode()
+        setTransmitMode()
+        prepareEngineForTransmit(activeEngine)
+        val ok = activeEngine.transmitMessage(
+            text = text,
+            myCall = callsign,
+            myGrid = com.js8call.example.api.Js8Api.myGrid(prefs).take(4), // PC: my_grid().left(4) before buildMessageFrames
+            selectedCall = "",
+            submode = submode,
+            audioFrequencyHz = splitAudioHz(freq),
+            txDelaySec = configuredTxDelay(),
+            forceIdentify = !avoidForcedIdentify(), // as a typed message
+            forceData = false
+        )
+        if (ok) {
+            AprsBeacon.note("APRS beacon queued: $text at ${freq.toInt()} Hz")
+            updateLastTxMessage(text, "", submode, freq)
+            broadcastTxState(TX_STATE_QUEUED)
+            startTxMonitor()
+        } else AprsBeacon.note("APRS beacon rejected: $text")
     }
 
     override fun onCreate() {
@@ -393,6 +463,7 @@ class JS8EngineService : Service() {
         initPskReporter()
         // Easy JS8: Station > Reporting API / WSJT-X / N3FJP / N1MM
         Js8Api.init(this)
+        aprsBeacon.restart()
 
         Log.i(TAG, "Service created")
     }
@@ -588,6 +659,7 @@ class JS8EngineService : Service() {
         // The timers stay on with their countdowns for the next start (Rob, 2026-10-22; the PC ends them)
         heartbeatHandler.removeCallbacksAndMessages(null)
         cqHandler.removeCallbacksAndMessages(null)
+        aprsBeacon.stop()
         messageLogger?.shutdown()
         aprsClient.shutdown()
         spotClient?.stop()
@@ -606,7 +678,20 @@ class JS8EngineService : Service() {
 
     private fun startForegroundService() {
         val notification = createNotification()
-        startForeground(NOTIFICATION_ID, notification)
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            // Microphone as before; location too while the APRS beacon is on, so GPS works with the screen off
+            val mic = android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_MICROPHONE
+            val type = if (AprsBeacon.wanted(this)) mic or android.content.pm.ServiceInfo.FOREGROUND_SERVICE_TYPE_LOCATION else mic
+            try {
+                startForeground(NOTIFICATION_ID, notification, type)
+            } catch (e: Exception) {
+                Log.w(TAG, "Foreground with location refused: ${e.message}")
+                startForeground(NOTIFICATION_ID, notification, mic)
+            }
+        } else {
+            startForeground(NOTIFICATION_ID, notification)
+        }
+        foregroundStarted = true
     }
 
     private fun createNotification(): Notification {

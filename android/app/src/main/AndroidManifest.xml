@@ -20,6 +20,8 @@
     <!-- Optional: for foreground service -->
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_MICROPHONE" />
+    <!-- APRS beacon GPS with the screen off (Easy JS8, 2026-11-17) -->
+    <uses-permission android:name="android.permission.FOREGROUND_SERVICE_LOCATION" />
     <uses-permission android:name="android.permission.POST_NOTIFICATIONS" />
 
     <!-- Optional: for USB rig control -->
@@ -64,7 +66,7 @@
             android:name=".service.JS8EngineService"
             android:enabled="true"
             android:exported="false"
-            android:foregroundServiceType="microphone" />
+            android:foregroundServiceType="microphone|location" />
 
     </application>
 

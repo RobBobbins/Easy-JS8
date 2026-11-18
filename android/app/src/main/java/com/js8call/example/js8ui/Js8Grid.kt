@@ -4,8 +4,11 @@ import java.util.Locale
 
 /** Maidenhead locator from latitude / longitude (same math as JS8Android SettingsFragment). */
 object Js8Grid {
-    /** 8 characters: field, square, subsquare, extended square (e.g. FN03HP46). */
-    fun fromLatLon(latitude: Double, longitude: Double): String {
+    /**
+     * 8 characters: field, square, subsquare, extended square (e.g. FN03HP46); [chars] 10 adds the
+     * extended subsquare, about 28 x 19 m (APRS beacon, Rob 2026-11-17).
+     */
+    fun fromLatLon(latitude: Double, longitude: Double, chars: Int = 8): String {
         var lon = -longitude
         var lat = latitude.coerceIn(-90.0, 90.0)
         if (lon < -180.0) lon += 360.0
@@ -29,6 +32,12 @@ object Js8Grid {
             append('0' + lonSquare); append('0' + latSquare)
             append('A' + lonSub); append('A' + latSub)
             append('0' + lonExt); append('0' + latExt)
+            if (chars >= 10) {
+                val lonFine = lonRem - lonSquare * 120.0 - lonSub * 5.0 - lonExt * 0.5
+                val latFine = latRem - latSquare * 60.0 - latSub * 2.5 - latExt * 0.25
+                append('A' + (lonFine / (0.5 / 24)).toInt().coerceIn(0, 23))
+                append('A' + (latFine / (0.25 / 24)).toInt().coerceIn(0, 23))
+            }
         }.uppercase(Locale.US)
     }
 

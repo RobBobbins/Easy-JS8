@@ -3,4 +3,6 @@
     <!-- APRS pages (Js8AprsFragment): fixed ids so typed text survives turning the phone -->
     <item name="js8_aprs_to" type="id" />
     <item name="js8_aprs_message" type="id" />
+    <!-- Station > APRS Beacon status window (read by the tests) -->
+    <item name="js8_aprs_status" type="id" />
 </resources>

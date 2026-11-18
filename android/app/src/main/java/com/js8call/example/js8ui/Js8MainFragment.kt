@@ -336,6 +336,7 @@ class Js8MainFragment : Fragment() {
             }
         }
 
+        setUpMap(view)
         setUpSwipe(view)
         splitters = view.findViewById<android.widget.FrameLayout?>(R.id.js8_pc_window)?.let { Js8PcSplitters(it, prefs()) }
         // Upright and Swipe: the lines between windows can be dragged (Rob, 2026-10-22)
@@ -591,6 +592,18 @@ class Js8MainFragment : Fragment() {
 
     // ---- Swipe layout ---------------------------------------------------------------------
 
+    /** Map screen: Pages layout page 5, and upright between Waterfall Controls and Inbox (Rob, 2026-11-17). */
+    private fun setUpMap(view: View) {
+        view.findViewById<Js8MapView?>(R.id.js8_map)?.let { map ->
+            map.activity = activityVm.activity
+            map.dialHz = dialHz
+            view.findViewById<View?>(R.id.js8_map_zoom_in)?.setOnClickListener { map.zoomBy(2.0) }
+            view.findViewById<View?>(R.id.js8_map_zoom_out)?.setOnClickListener { map.zoomBy(0.5) }
+            view.findViewById<View?>(R.id.js8_map_fit)?.setOnClickListener { map.fitAll() }
+            view.findViewById<View?>(R.id.js8_map_options)?.setOnClickListener { Js8MapOptions.show(it, map) }
+        }
+    }
+
     private fun setUpSwipe(view: View) {
         view.findViewById<Js8ZoomLayout?>(R.id.js8_header_page)?.apply {
             zoomable = false
@@ -601,13 +614,6 @@ class Js8MainFragment : Fragment() {
         // Page order: Header, Activity, Waterfall, Inbox, Map (js8_tab_5), Station (js8_tab_4)
         val tabs = listOf(R.id.js8_tab_0, R.id.js8_tab_1, R.id.js8_tab_2, R.id.js8_tab_3, R.id.js8_tab_5, R.id.js8_tab_4)
             .map { view.findViewById<TextView>(it) }
-        view.findViewById<Js8MapView?>(R.id.js8_map)?.let { map ->
-            map.activity = activityVm.activity
-            view.findViewById<View?>(R.id.js8_map_zoom_in)?.setOnClickListener { map.zoomBy(2.0) }
-            view.findViewById<View?>(R.id.js8_map_zoom_out)?.setOnClickListener { map.zoomBy(0.5) }
-            view.findViewById<View?>(R.id.js8_map_fit)?.setOnClickListener { map.fitAll() }
-            view.findViewById<View?>(R.id.js8_map_options)?.setOnClickListener { Js8MapOptions.show(it, map) }
-        }
         fun renderTabs(page: Int) = tabs.forEachIndexed { i, t ->
             if (i == page) t.setBackgroundResource(R.drawable.js8_shape_blue) else t.background = null
             t.setTextColor(if (i == page) Color.BLACK else ContextCompat.getColor(requireContext(), R.color.js8_frame_text))
@@ -1588,6 +1594,7 @@ class Js8MainFragment : Fragment() {
     private fun renderFrequency() {
         freqDisplay?.text = formatMhz(dialHz)
         ruler.dialHz = dialHz
+        view?.findViewById<Js8MapView?>(R.id.js8_map)?.dialHz = dialHz // map title
         waterfall.setBandText(com.js8call.example.util.BandUtils.bandLabelForFrequencyHz(dialHz))
         // Upright: the band and the mode right of the callsign, no band outside the bands (Rob, 2026-11-05)
         val upright = resources.configuration.orientation != Configuration.ORIENTATION_LANDSCAPE
