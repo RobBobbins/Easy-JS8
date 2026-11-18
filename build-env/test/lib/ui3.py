@@ -106,8 +106,15 @@ for row, bad, msg in (('M02', dict(callsign='B@D!'), 'callsign format you provid
         closebox()
 if want('M03'):
     xml = okbox(callsign='', grid='', js8cfg_swl=True)
-    time.sleep(1); ok = 'not supported' not in xml and 'not valid' not in xml
-    fix('M03', ok and 'js8_btn_settings' not in xml and 'Radio' not in x(), 'OK leaves Station with no callsign when SWL is ticked')
+    time.sleep(1); ok = 'not supported' not in xml and 'not valid' not in xml and 'android:id/message' not in xml
+    # Station OK saves and stays (Rob 2026-11-17); ← Back on the list of pages then leaves Station
+    stays = 'Radio' in xml
+    tapk('← Back', 1.5); time.sleep(.5)
+    xb = x(); left = 'Station Settings' not in xb  # the window behind may show the word Radio too
+    if not (ok and stays and left):
+        print('M03 texts after OK', re.findall(r' text="([^"]+)"', xml)[:14], flush=True)
+        print('M03 texts after Back', re.findall(r' text="([^"]+)"', xb)[:14], flush=True)
+    fix('M03', ok and stays and left, f'no refusal {ok}, stays {stays}, ← Back leaves Station {left}')
     home()
 
 

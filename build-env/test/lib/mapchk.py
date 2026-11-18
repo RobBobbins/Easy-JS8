@@ -171,6 +171,7 @@ if want('W153'):
         grab('layoutpage')
         tapk('Show grid squares', 1)
         tapk('OK', 2)
+        tapk('← Back', 1.5)  # Station OK stays on the page (Rob 2026-11-17); the Layout page also shows the word Map
         tapk('Map', 2)
         g = colours(grab('afterui'))
         saved = 'js8cfg_map_grids" value="true"' in getprefs()

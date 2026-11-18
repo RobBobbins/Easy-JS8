@@ -4,6 +4,7 @@ import android.Manifest
 import android.annotation.SuppressLint
 import android.content.Context
 import android.content.pm.PackageManager
+import android.location.GnssStatus
 import android.location.Location
 import android.location.LocationListener
 import android.location.LocationManager
@@ -22,8 +23,9 @@ import kotlin.math.abs
  * schedule, Station > General > APRS beacon. Every beacon carries a new GPS fix, 10-character grid; the fix
  * also updates My Maidenhead Grid Locator.
  *
- * Fixed interval: the fix starts before beacon time by as long as the last fix took. At beacon time the
- * beacon waits up to 30 seconds for the fix; no new fix = that beacon is skipped.
+ * Fixed interval: the fix starts before beacon time by as long as the last fix took. At beacon time with no
+ * fix yet, the GPS keeps trying until it has one; the beacon goes out at the fix and the next beacon is one
+ * interval after that (Rob 2026-11-17: the 30-second limit, then a skipped beacon, did not work).
  *
  * SmartBeaconing (HamHUD / Direwolf rules, speeds in km/h): the GPS runs the whole time. Beacon rate scales
  * with speed between the stopped rate and the highway rate; a turn of more than
@@ -42,6 +44,19 @@ class AprsBeacon(private val context: Context, private val send: (grid: String) 
         const val PREF_TURN_SLOPE = "js8cfg_sb_turn_slope"     // degrees x mph
         const val PREF_TURN_TIME = "js8cfg_sb_turn_time"       // seconds
         const val SMART = "smart"
+
+        private var startReset = false
+        /** APRS beacon: back to Off each time the app starts (Rob 2026-11-17), after an update, a reboot or a
+         *  restart by the phone too. Once per app process: the main screen and the engine service both call it. */
+        @Synchronized fun offAtAppStart(context: Context) {
+            if (startReset) return
+            startReset = true
+            val p = PreferenceManager.getDefaultSharedPreferences(context)
+            if (p.getString(PREF_BEACON, "0") != "0") {
+                p.edit().putString(PREF_BEACON, "0").commit()
+                Log.i(TAG, "App started: APRS beacon set to Off")
+            }
+        }
         val KEYS = setOf(PREF_BEACON, PREF_FAST_SPEED, PREF_FAST_RATE, PREF_SLOW_SPEED, PREF_SLOW_RATE,
             PREF_TURN_ANGLE, PREF_TURN_SLOPE, PREF_TURN_TIME)
 
@@ -54,8 +69,6 @@ class AprsBeacon(private val context: Context, private val send: (grid: String) 
         val TURN_TIME_CHOICES = listOf("30 seconds" to "30", "1 minute" to "60", "2 minutes" to "120",
             "5 minutes" to "300")
 
-        /** The beacon waits this long past beacon time for its GPS fix, then is skipped. */
-        private const val FIX_WAIT_MS = 30_000L
         private const val KMH_PER_MPH = 1.609344
 
         // ---- Status window (Station > APRS Beacon, Rob 2026-11-17) ------------------------------
@@ -85,8 +98,15 @@ class AprsBeacon(private val context: Context, private val send: (grid: String) 
         @Volatile private var liveNextAt = 0L     // elapsedRealtime: next beacon (fixed) or next by rate (smart)
         @Volatile private var liveLeadMs = 0L
         @Volatile private var liveFixing = false
-        @Volatile private var liveWaitUntil = 0L  // elapsedRealtime: end of the 30 s wait for the fix
+        @Volatile private var liveWaitSince = 0L  // elapsedRealtime: beacon time passed with no fix; 0 = not waiting
         @Volatile private var liveMoving = ""     // SmartBeaconing: "42 km/h, heading 270°"
+        /** RX on (the engine running): the beacon runs only then (Rob 2026-11-17). Set by the engine service. */
+        @Volatile var rxOn = false
+
+        /** The APRS beacon setting is on (location permission not checked). */
+        fun isWanted(context: Context) =
+            PreferenceManager.getDefaultSharedPreferences(context).getString(PREF_BEACON, "0") != "0"
+
         /** Set by the engine service while a beacon waits for the transmitter; null = not waiting. */
         @Volatile var liveTxWait: String? = null
 
@@ -96,19 +116,56 @@ class AprsBeacon(private val context: Context, private val send: (grid: String) 
         }
 
         /** The window's live last line, with the current UTC time. */
-        fun liveLine(): String {
+        fun liveLine(context: Context): String {
             val t = SystemClock.elapsedRealtime()
+            val beaconPref = PreferenceManager.getDefaultSharedPreferences(context).getString(PREF_BEACON, "0") ?: "0"
             val text = when {
                 liveNoPermission -> "No location permission: beacon not started"
+                !liveOn && !rxOn && beaconPref != "0" -> "APRS beacon waiting: RX is off"
                 !liveOn -> "APRS beacon off"
-                liveTxWait != null -> "Waiting for the transmitter: $liveTxWait"
-                liveWaitUntil > t -> "Waiting for GPS fix: ${(liveWaitUntil - t + 999) / 1000} s left"
+                liveTxWait != null -> "Beacon waiting: $liveTxWait"
+                liveWaitSince > 0L -> "Waiting for GPS fix: ${mmss(t - liveWaitSince)} so far"
                 liveSmart && liveMoving.isEmpty() -> "SmartBeaconing: waiting for the first GPS fix"
                 liveSmart -> "SmartBeaconing: $liveMoving, next by rate in ${mmss(liveNextAt - t)}"
                 liveFixing -> "Getting GPS fix… beacon in ${mmss(liveNextAt - t)}"
                 else -> "Next beacon in ${mmss(liveNextAt - t)} (GPS fix starts ${mmss(liveLeadMs)} before)"
             }
             return "${now()}  $text"
+        }
+
+        // ---- GPS status line (Station > APRS Beacon, Rob 2026-11-17) --------------------------
+        // The page never turns the GPS on: the line reports what the beacon's own fixes found.
+        @Volatile private var gpsSearching = false
+        @Volatile private var gpsUsed = -1        // satellites used in the fix / seen, while searching
+        @Volatile private var gpsSeen = -1
+        @Volatile private var fixAtMs = 0L        // wall clock of the last fix
+        @Volatile private var fixAccuracy = -1f   // metres, -1 = not reported
+        @Volatile private var fixGrid = ""
+
+        private fun hmmss(ms: Long): String {
+            val s = (ms / 1000).coerceAtLeast(0)
+            return if (s >= 3600) "%d:%02d:%02d".format(s / 3600, s / 60 % 60, s % 60) else "%d:%02d".format(s / 60, s % 60)
+        }
+
+        /** One line: permission, GPS turned off, beacon off, searching (satellites), or the last fix. */
+        fun gpsLine(context: Context): String {
+            val lm = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
+            val beaconOn = PreferenceManager.getDefaultSharedPreferences(context).getString(PREF_BEACON, "0") != "0"
+            val text = when {
+                !hasPermission(context) -> "no location permission"
+                !runCatching { lm.isProviderEnabled(LocationManager.GPS_PROVIDER) }.getOrDefault(false) -> "turned off in phone settings"
+                !beaconOn -> "off (APRS beacon off)"
+                !rxOn -> "off (RX is off)"
+                !liveOn -> "off (APRS beacon not running)"
+                gpsSearching -> if (gpsSeen >= 0) "searching, $gpsUsed of $gpsSeen satellites used" else "searching"
+                fixAtMs > 0 -> {
+                    val at = synchronized(utc) { utc.format(java.util.Date(fixAtMs)) }
+                    val acc = if (fixAccuracy >= 0) ", ±${Math.round(fixAccuracy)} m" else ""
+                    "fix $at UTC (${hmmss(System.currentTimeMillis() - fixAtMs)} ago)$acc, $fixGrid"
+                }
+                else -> "no fix yet"
+            }
+            return "GPS: $text"
         }
 
         fun hasPermission(context: Context) =
@@ -123,6 +180,7 @@ class AprsBeacon(private val context: Context, private val send: (grid: String) 
     private val handler = Handler(Looper.getMainLooper())
     private val lm = context.getSystemService(Context.LOCATION_SERVICE) as LocationManager
     private var listener: LocationListener? = null
+    private var gnss: GnssStatus.Callback? = null
 
     // Fixed interval
     private var intervalMs = 0L
@@ -167,20 +225,36 @@ class AprsBeacon(private val context: Context, private val send: (grid: String) 
         handler.removeCallbacksAndMessages(null)
         unlisten()
         fix = null; waiting = false; prevFix = null; lastCourse = null; lastBeaconAt = 0L
-        liveOn = false; liveNoPermission = false; liveSmart = false; liveFixing = false; liveWaitUntil = 0L; liveMoving = ""
+        liveOn = false; liveNoPermission = false; liveSmart = false; liveFixing = false; liveWaitSince = 0L; liveMoving = ""
     }
 
     @SuppressLint("MissingPermission")
     private fun listen(everyMs: Long, onFix: (Location) -> Unit) {
         unlisten()
         val l = object : LocationListener {
-            override fun onLocationChanged(location: Location) = onFix(location)
+            override fun onLocationChanged(location: Location) {
+                // GPS status line: the newest fix
+                fixAtMs = System.currentTimeMillis()
+                fixAccuracy = if (location.hasAccuracy()) location.accuracy else -1f
+                fixGrid = Js8Grid.fromLatLon(location.latitude, location.longitude, 10)
+                gpsSearching = false
+                onFix(location)
+            }
             override fun onProviderEnabled(provider: String) = Unit
             override fun onProviderDisabled(provider: String) = Unit
             @Deprecated("Deprecated in Java")
             override fun onStatusChanged(provider: String?, status: Int, extras: Bundle?) = Unit
         }
         listener = l
+        gpsSearching = true; gpsUsed = -1; gpsSeen = -1
+        val g = object : GnssStatus.Callback() {
+            override fun onSatelliteStatusChanged(status: GnssStatus) {
+                gpsSeen = status.satelliteCount
+                gpsUsed = (0 until status.satelliteCount).count { status.usedInFix(it) }
+            }
+        }
+        gnss = g
+        runCatching { lm.registerGnssStatusCallback(g, handler) }
         runCatching { lm.requestLocationUpdates(LocationManager.GPS_PROVIDER, everyMs, 0f, l, Looper.getMainLooper()) }
             .onFailure { note("GPS not available: ${it.message}") }
     }
@@ -188,6 +262,9 @@ class AprsBeacon(private val context: Context, private val send: (grid: String) 
     private fun unlisten() {
         listener?.let { runCatching { lm.removeUpdates(it) } }
         listener = null
+        gnss?.let { runCatching { lm.unregisterGnssStatusCallback(it) } }
+        gnss = null
+        gpsSearching = false
     }
 
     private fun gridOf(location: Location): String {
@@ -219,23 +296,19 @@ class AprsBeacon(private val context: Context, private val send: (grid: String) 
         if (fix != null) sendFixed()
         else {
             waiting = true
-            liveWaitUntil = SystemClock.elapsedRealtime() + FIX_WAIT_MS
-            note("Beacon time: waiting up to 30 seconds for the GPS fix")
-            handler.postDelayed(skip, FIX_WAIT_MS)
+            liveWaitSince = SystemClock.elapsedRealtime()
+            note("Beacon time: waiting for the GPS fix")
         }
-    }
-
-    private val skip = Runnable {
-        note("Beacon skipped: no new GPS fix")
-        finishCycle()
     }
 
     /** Fix start, then beacon time, for the next beacon. */
     private fun scheduleCycle() {
         val now = SystemClock.elapsedRealtime()
         val lead = lastFixMs.coerceAtMost(intervalMs - 1000L)
-        handler.postAtTime(startFix, (nextBeaconAt - lead).coerceAtLeast(now))
-        handler.postAtTime(beaconDue, nextBeaconAt.coerceAtLeast(now))
+        // Times are on elapsedRealtime (counts deep sleep); Handler.postAtTime takes uptimeMillis (does not), so
+        // they go in as delays. postAtTime with elapsedRealtime put the beacon days ahead on a phone (2026-11-17).
+        handler.postDelayed(startFix, (nextBeaconAt - lead - now).coerceAtLeast(0L))
+        handler.postDelayed(beaconDue, (nextBeaconAt - now).coerceAtLeast(0L))
         liveNextAt = nextBeaconAt; liveLeadMs = lead
         Log.i(TAG, "Next beacon in ${(nextBeaconAt - now) / 1000} s, GPS fix starts ${lead / 1000} s before")
     }
@@ -243,21 +316,22 @@ class AprsBeacon(private val context: Context, private val send: (grid: String) 
     private fun sendFixed() {
         val f = fix ?: return
         val grid = gridOf(f)
-        note("Beacon: @APRSIS GRID $grid")
+        note("Beacon made: @APRSIS GRID $grid")
         send(grid)
         finishCycle()
     }
 
     private fun finishCycle() {
-        handler.removeCallbacks(skip)
         handler.removeCallbacks(startFix)
         handler.removeCallbacks(beaconDue)
         unlisten()
+        val late = waiting
         waiting = false
         fix = null
-        liveFixing = false; liveWaitUntil = 0L
+        liveFixing = false; liveWaitSince = 0L
         val now = SystemClock.elapsedRealtime()
-        do nextBeaconAt += intervalMs while (nextBeaconAt <= now)
+        if (late) nextBeaconAt = now + intervalMs // sent at the late fix: the next one is an interval after it
+        else do nextBeaconAt += intervalMs while (nextBeaconAt <= now)
         scheduleCycle()
     }
 
@@ -317,7 +391,7 @@ class AprsBeacon(private val context: Context, private val send: (grid: String) 
     private fun smartSend(grid: String, now: Long, course: Float?, why: String) {
         lastBeaconAt = now
         if (course != null) lastCourse = course
-        note("Beacon ($why): @APRSIS GRID $grid")
+        note("Beacon made ($why): @APRSIS GRID $grid")
         send(grid)
     }
 }

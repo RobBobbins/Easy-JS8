@@ -5,4 +5,5 @@
     <item name="js8_aprs_message" type="id" />
     <!-- Station > APRS Beacon status window (read by the tests) -->
     <item name="js8_aprs_status" type="id" />
+    <item name="js8_aprs_gps" type="id" />
 </resources>

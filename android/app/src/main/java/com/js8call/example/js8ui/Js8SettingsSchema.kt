@@ -584,6 +584,7 @@ object Js8SettingsSchema {
             // Easy JS8 only (Rob 2026-11-17): "@APRSIS GRID" over the air with a new GPS fix, 10-character grid
             Group("APRS Beacon", listOf(
                 beaconField,
+                Special("aprs_gps"), // GPS status, one line, two if needed (Rob 2026-11-17, 2026-11-18)
                 Special("aprs_status"), // status window: the beacon's events, last line counting down (Rob 2026-11-17)
                 Note("Each beacon gets a new GPS fix first and puts its grid in My Maidenhead Grid Locator. No new fix = no beacon."),
                 spinActive(com.js8call.example.service.AprsBeacon.PREF_FAST_SPEED, "SmartBeaconing highway speed:", 100, 10.0, 300.0, " km/h"),

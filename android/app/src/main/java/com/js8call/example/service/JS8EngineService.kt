@@ -151,6 +151,9 @@ class JS8EngineService : Service() {
             val lost = removed.firstOrNull { it.id == selectedAudioDeviceId } ?: return
             val name = AudioDevices.nameFor(lost) ?: "Audio device"
             Log.w(TAG, "Selected audio device removed: $name (ID: ${lost.id}); stopping engine")
+            setRxWanted(false)
+            if (AprsBeacon.rxOn && AprsBeacon.isWanted(this@JS8EngineService))
+                AprsBeacon.note("RX off ($name unplugged): APRS beacon stopped")
             stopEngine()
             broadcastAudioDeviceLost(name)
             stopSelf()
@@ -236,6 +239,7 @@ class JS8EngineService : Service() {
                             broadcastTxState(TX_STATE_FINISHED)
                         } else {
                             broadcastError("Failed to release PTT after transmission")
+                            lastTxFailReason = "PTT did not release at the end"
                             broadcastTxState(TX_STATE_FAILED)
                         }
                     }
@@ -366,10 +370,34 @@ class JS8EngineService : Service() {
             mainHandler.removeCallbacks(beaconRestart)
             mainHandler.post(beaconRestart)
         }
+        // Station > Radio: OK saves every changed setting at once, one reconnect for all of them
+        if (key in RADIO_KEYS) {
+            mainHandler.removeCallbacks(radioReconnectRun)
+            mainHandler.postDelayed(radioReconnectRun, 300L)
+        }
     }
 
+    /**
+     * Station > Radio OK (Rob 2026-11-17, PC: OK reopens the rig): the radio is reconnected with the new settings at
+     * once, RX staying on. The engine is stopped and started as Test CAT does (sound pauses about a second). While a
+     * transmission goes out it waits for the end. RX off: nothing to do, RX on reads the settings.
+     */
+    private val radioReconnectRun: Runnable = object : Runnable {
+        override fun run() {
+            if (engine == null && !engineStartInProgress) return
+            if (isTransmitActive()) { mainHandler.postDelayed(this, 1000L); return }
+            Log.i(TAG, "Radio settings changed; reconnecting the radio")
+            radioReconnect = true
+            stopEngine()
+            updateDialFromPrefs()
+            startForegroundService()
+            startEngine()
+        }
+    }
+    @Volatile private var radioReconnect = false
+
     private val beaconRestart = Runnable {
-        aprsBeacon.restart()
+        if (AprsBeacon.rxOn) aprsBeacon.restart() else aprsBeacon.stop()
         if (foregroundStarted) startForegroundService()
     }
 
@@ -377,6 +405,9 @@ class JS8EngineService : Service() {
     private val aprsBeacon by lazy { AprsBeacon(this) { grid -> sendAprsBeacon(grid) } }
     private var foregroundStarted = false
     @Volatile private var pendingBeacon: String? = null
+    /** The beacon handed to the engine, until its transmission starts, ends or fails (status window lines). */
+    @Volatile private var beaconInFlight: String? = null
+    @Volatile private var beaconOnAir = false
     private var beaconWaitWhy = ""
 
     /** "@APRSIS GRID <grid>" as typed from Saved > APRS GRID; waits for the transmitter like a heartbeat. */
@@ -390,26 +421,28 @@ class JS8EngineService : Service() {
         val text = pendingBeacon ?: return
         val prefs = PreferenceManager.getDefaultSharedPreferences(this)
         // Waits behind a queued message and an empty Typing Box, like a heartbeat
-        if (isTransmitActive() || messageQueued || !typingBoxEmpty || !prefs.getBoolean("js8cfg_tx_enabled", true)) {
+        val reconnecting = engine == null && (engineStartInProgress || radioReconnect)
+        if (reconnecting || isTransmitActive() || messageQueued || !typingBoxEmpty || !prefs.getBoolean("js8cfg_tx_enabled", true)) {
             val why = listOfNotNull(
-                "transmitting".takeIf { isTransmitActive() },
-                "message queued".takeIf { messageQueued },
-                "text in the Typing Box".takeIf { !typingBoxEmpty },
-                "TX off".takeIf { !prefs.getBoolean("js8cfg_tx_enabled", true) }
+                "the radio is reconnecting".takeIf { reconnecting },
+                "another transmission is going out".takeIf { isTransmitActive() },
+                "a message is waiting to be sent".takeIf { messageQueued },
+                "there is text in the Typing Box".takeIf { !typingBoxEmpty },
+                "TX is off".takeIf { !prefs.getBoolean("js8cfg_tx_enabled", true) }
             ).joinToString(", ")
             AprsBeacon.liveTxWait = why
-            if (why != beaconWaitWhy) { beaconWaitWhy = why; AprsBeacon.note("Waiting for the transmitter: $why") }
+            if (why != beaconWaitWhy) { beaconWaitWhy = why; AprsBeacon.note("Beacon waiting: $why") }
             mainHandler.postDelayed({ txHandler.post { sendPendingBeacon() } }, 1000L)
             return
         }
         pendingBeacon = null
         AprsBeacon.liveTxWait = null
         beaconWaitWhy = ""
-        if (isListenOnly()) { AprsBeacon.note("Beacon not sent: listen only"); return }
-        val callsign = getConfiguredCallsign() ?: run { AprsBeacon.note("Beacon not sent: no callsign"); return }
-        val activeEngine = engine ?: run { AprsBeacon.note("APRS beacon dropped: engine not running"); return }
+        if (isListenOnly()) { AprsBeacon.note("Beacon not sent: Listening only (SWL) is checked"); return }
+        val callsign = getConfiguredCallsign() ?: run { AprsBeacon.note("Beacon not sent: no callsign on Station > General"); return }
+        val activeEngine = engine ?: run { AprsBeacon.note("Beacon not sent: RX is off"); return }
         val freq = prefs.getString("js8cfg_tx_offset", null)?.toDoubleOrNull() ?: DEFAULT_AUDIO_FREQUENCY_HZ
-        if (refuseWsprBand(freq)) { AprsBeacon.note("Beacon not sent: Tx frequency in the 30m WSPR sub-band"); return }
+        if (refuseWsprBand(freq)) { AprsBeacon.note("Beacon not sent: TX frequency is in the 30m WSPR sub-band"); return }
         val submode = getPreferredTxSubmode()
         setTransmitMode()
         prepareEngineForTransmit(activeEngine)
@@ -425,15 +458,17 @@ class JS8EngineService : Service() {
             forceData = false
         )
         if (ok) {
-            AprsBeacon.note("APRS beacon queued: $text at ${freq.toInt()} Hz")
+            AprsBeacon.note("Beacon waiting for the next transmit slot at ${freq.toInt()} Hz")
+            beaconInFlight = text; lastTxFailReason = null
             updateLastTxMessage(text, "", submode, freq)
             broadcastTxState(TX_STATE_QUEUED)
             startTxMonitor()
-        } else AprsBeacon.note("APRS beacon rejected: $text")
+        } else AprsBeacon.note("Beacon not sent: the engine refused it")
     }
 
     override fun onCreate() {
         super.onCreate()
+        AprsBeacon.offAtAppStart(this)
         if (!settingsLoaded) {
             settingsLoaded = true
             raiseIdleTimeout()
@@ -463,7 +498,7 @@ class JS8EngineService : Service() {
         initPskReporter()
         // Easy JS8: Station > Reporting API / WSJT-X / N3FJP / N1MM
         Js8Api.init(this)
-        aprsBeacon.restart()
+        // The APRS beacon runs only while RX is on (Rob 2026-11-17): started with the engine, stopped with it
 
         Log.i(TAG, "Service created")
     }
@@ -482,13 +517,17 @@ class JS8EngineService : Service() {
                 startPowerMemory()
                 updatePskReporterState()
                 startForegroundService()
+                setRxWanted(true)
                 startEngine()
             }
             ACTION_STOP -> {
                 Log.i(TAG, "Stopping engine")
+                setRxWanted(false)
+                if (AprsBeacon.rxOn && AprsBeacon.isWanted(this)) AprsBeacon.note("RX turned off: APRS beacon stopped")
                 stopEngine()
                 stopSelf()
             }
+            null -> restartRxAfterKill()
             ACTION_SWITCH_AUDIO_DEVICE -> {
                 val deviceId = intent.getIntExtra(EXTRA_AUDIO_DEVICE_ID, -1)
                 Log.i(TAG, "Switching audio device to ID: $deviceId")
@@ -622,6 +661,7 @@ class JS8EngineService : Service() {
             }
             ACTION_HALT_TX -> {
                 Log.i(TAG, "Halt requested")
+                beaconInFlight?.let { AprsBeacon.note("Beacon not sent in full: Halt pressed"); beaconInFlight = null; beaconOnAir = false }
                 endTuning()
                 txHandler.post { engine?.stopTransmit() }
             }
@@ -669,11 +709,29 @@ class JS8EngineService : Service() {
     }
 
     override fun onTaskRemoved(rootIntent: Intent?) {
-        Log.i(TAG, "Task removed; stopping engine")
-        Js8Api.closing() // PC closeEvent: swiped away counts as closing
-        stopEngine()
-        stopSelf()
+        // Closed from the phone's open-apps screen: RX, TX and the APRS beacon keep running (Rob 2026-11-17,
+        // "it shouldn't turn it off"; JS8Android stopped the engine here). RX off is the RX button only.
+        Log.i(TAG, "Task removed; engine keeps running")
         super.onTaskRemoved(rootIntent)
+    }
+
+    /** RX on as asked by the screen: kept so a restart by the phone (START_STICKY, no intent) turns RX on again. */
+    private fun setRxWanted(on: Boolean) {
+        PreferenceManager.getDefaultSharedPreferences(this).edit().putBoolean(PREF_RX_WANTED, on).apply()
+    }
+
+    /** The phone restarted the service by itself (no intent): RX on again if it was on (Rob 2026-11-17). */
+    private fun restartRxAfterKill() {
+        val prefs = PreferenceManager.getDefaultSharedPreferences(this)
+        if (!prefs.getBoolean(PREF_RX_WANTED, false) || engine != null) return
+        Log.i(TAG, "Restarted by the phone; RX was on, starting engine")
+        selectedAudioDeviceId = com.js8call.example.ui.AudioDevices.selected(this).id
+        updateDialFromPrefs()
+        monitorLastUsed()
+        startPowerMemory()
+        updatePskReporterState()
+        startForegroundService()
+        startEngine()
     }
 
     private fun startForegroundService() {
@@ -1016,6 +1074,9 @@ class JS8EngineService : Service() {
             // Start engine
             if (engine?.start() == true) {
                 Log.i(TAG, "Engine started successfully")
+                AprsBeacon.rxOn = true
+                // A radio reconnect leaves the beacon's schedule alone; RX on starts it
+                if (radioReconnect) radioReconnect = false else mainHandler.post { aprsBeacon.restart() }
                 spectrumEventCount = 0
 
                 applyTxBoostSetting()
@@ -1061,6 +1122,11 @@ class JS8EngineService : Service() {
                 engineStartInProgress = false
             } else {
                 Log.e(TAG, "Failed to start engine")
+                if (radioReconnect) { // the beacon kept running through the reconnect: RX did not come back
+                    radioReconnect = false
+                    AprsBeacon.rxOn = false
+                    mainHandler.post { aprsBeacon.stop() }
+                }
                 engine?.close()
                 engine = null
                 failEngineStart(generation, "Failed to start engine")
@@ -2020,6 +2086,10 @@ class JS8EngineService : Service() {
     )
 
     private fun stopEngine() {
+        if (AprsBeacon.rxOn && !radioReconnect) {
+            AprsBeacon.rxOn = false
+            mainHandler.post { aprsBeacon.stop() }
+        }
         try {
             engineStartGeneration++
             engineStartInProgress = false
@@ -3666,7 +3736,19 @@ class JS8EngineService : Service() {
         LocalBroadcastManager.getInstance(this).sendBroadcast(intent)
     }
 
+    /** Why the last transmission failed, for the APRS Beacon status window (Rob 2026-11-17: name the cause). */
+    @Volatile private var lastTxFailReason: String? = null
+
     private fun broadcastTxState(state: String) {
+        // APRS Beacon status window: only "Beacon sent" means it went out on the air (Rob 2026-11-17)
+        beaconInFlight?.let { b ->
+            when (state) {
+                // A beacon goes out in more than one part: "transmitting" once, at the first part
+                TX_STATE_STARTED -> if (!beaconOnAir) { beaconOnAir = true; AprsBeacon.note("Beacon transmitting: $b") }
+                TX_STATE_FINISHED -> { AprsBeacon.note("Beacon sent: $b"); beaconInFlight = null; beaconOnAir = false }
+                TX_STATE_FAILED -> { AprsBeacon.note("Beacon not sent: ${lastTxFailReason ?: "the transmission stopped"}"); beaconInFlight = null; beaconOnAir = false }
+            }
+        }
         val intent = Intent(ACTION_TX_STATE).apply {
             putExtra(EXTRA_TX_STATE, state)
             // PC m_txFrameCount for the Send button's "Ready (30s)"
@@ -4095,6 +4177,12 @@ class JS8EngineService : Service() {
         trusdxTxIntentActive = false
         engine?.setTransmitReady(false)
         broadcastError(message)
+        lastTxFailReason = when (message) {
+            "Rig control is not connected" -> "radio not connected (PTT Method is ${pttMethod().uppercase()})"
+            "Failed to enable PTT" -> "the radio did not key (PTT Method is ${pttMethod().uppercase()})"
+            "UV-Pro transmit timed out; PTT released" -> "UV-Pro transmit timed out"
+            else -> message
+        }
         broadcastTxState(TX_STATE_FAILED)
     }
 
@@ -6198,6 +6286,12 @@ class JS8EngineService : Service() {
         private const val PREF_PWR_TUNE_MEMORY = "js8cfg_pwr_band_tune_memory"
         private const val PREF_PWR_LAST_BAND = "js8cfg_pwr_last_band"
         private const val PREF_LAST_MONITORED = "js8cfg_last_monitored_hz"
+        private const val PREF_RX_WANTED = "js8_rx_wanted" // RX on as last asked by the screen (Rob 2026-11-17)
+        /** Station > Radio settings read when the radio is opened: a change reconnects it (radioReconnectRun). */
+        private val RADIO_KEYS = setOf("rig_control_enabled", "rig_type", "rig_hamlib_model", "rig_hamlib_usb_port",
+            "rig_serial_baud", "rig_serial_data_bits", "rig_serial_parity", "rig_serial_stop_bits", "rigctld_host",
+            "rigctld_port", "js8cfg_ptt_method", "js8cfg_ptt_port", "js8cfg_data_bits", "js8cfg_stop_bits",
+            "js8cfg_handshake", "js8cfg_force_dtr", "js8cfg_force_rts", "qmx_cat_baud", "qmx_serial", "qmx_band_profile")
         const val EXTRA_TX_FRAME_TEXT = "tx_frame_text"
         const val EXTRA_TX_FRAME_INDEX = "tx_frame_index"
         const val EXTRA_TX_FRAME_COUNT = "tx_frame_count"

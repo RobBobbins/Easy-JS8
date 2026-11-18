@@ -2,6 +2,88 @@
 
 ## Next session starts here (2026-11-05): audit B sections 1-12 are fixed
 
+**State 17:45, 2026-11-18: GPS line two lines if needed, old scripts fixed for Station OK staying (uncommitted, built 17:26, tested on S22-Fresh)**
+- GPS line (Rob: "two lines for the gps if needed"): `Js8SettingsFragment.aprsGpsLine` wraps at a space, at most 2 lines
+  (was one line, cut off "…, EN94MN56…" upright on the S22 Ultra). Upright on S22-Fresh: "GPS: fix 22:29:11 UTC (0:16 ago), ±5 m,"
+  then "FN03HP46AS" (seen in `build-env/test/lib/shots/gps.4.upright-fix.png`). Shorter lines stay on one line.
+  The page below moves down one line while the fix line shows.
+- New row W175 in `gpschk.py` (runs with W168): upright window, fix line in full, height at least 1.5 times its sideways
+  one-line height (126 px against 75 px). Passed run 5 (run 4 failed on the test's 1.7 threshold; padding counts once).
+  W167, W168 passed run 4; W168 again run 5.
+- Old scripts after Station OK stays: fixed `s812chk.py` W122 (no box = saved; Station staying open is expected),
+  `ui3.py` M03 (OK takes no callsign with SWL, stays; ← Back leaves: 'Station Settings' gone, since the Settings window
+  behind also shows "Radio"), `mapchk.py` W153 (← Back after OK; the Layout page shows the word Map). Passed once:
+  W122, M03 (run 92), W153. Checked unchanged, passed once: ui9 M08U M10U M23U, ui4 M14 M15, uicolchk W41.
+  Not changed and not run (their OK is a pop-up box's OK, not Station's): wside (Rename box), air13 E32 (Message Not
+  Sent box), air14 S01/S02 (first start, refused OK), s27chk W104 (Idle Timeout box).
+- Not installed on the S22 Ultra or the tablet. Emulator stopped.
+
+**State late 2026-11-17: radio reconnect on OK, GPS until fix, failure causes named (uncommitted, built, tested on S22-Fresh, installed on the S22 Ultra)**
+- Radio reconnect (Rob: "i shouldn't have to hit rx on and off"): the phone had RX started with Rig Icom IC-7300
+  (Hamlib USB), then Rig None / VOX saved; TUNE and the beacon failed "Rig control is not connected" because the engine
+  reads rig settings only in `startEngine`. Now a change to any `RADIO_KEYS` pref (rig type, model, port, serial
+  settings, PTT method/port, QMX settings) reconnects the radio 0.3 s after OK, as the PC does
+  (`radioReconnectRun` in JS8EngineService): waits while transmitting; the beacon is not restarted (`radioReconnect` flag),
+  no "RX turned off" line. A beacon due during the reconnect waits: "Beacon waiting: the radio is reconnecting".
+- GPS until fix (Rob: "the 30 secondos then quit doens't work"): no 30-second limit. At beacon time with no fix:
+  "Beacon time: waiting for the GPS fix", live line "Waiting for GPS fix: m:ss so far"; the beacon goes out at the fix,
+  the next one an interval after it. "Beacon not sent: no GPS fix in 30 seconds" is gone (`FIX_WAIT_MS`, `skip` removed).
+- Causes named: "Beacon not sent: transmission failed" replaced by `lastTxFailReason`: "radio not connected (PTT Method
+  is VOX)" / "the radio did not key (PTT Method is …)" / "UV-Pro transmit timed out" / "PTT did not release at the end".
+- Tests (once): W172, W173 (`radiochk.py`, new) passed run 2 (run 1: the test tapped the search box, test fixed);
+  W161, W162 (rewritten for GPS until fix), W166 passed run 3; W170 passed run 3. Seen on screen: the APRS Beacon
+  window with location off ("Beacon time: waiting for the GPS fix", "Waiting for GPS fix: 0:21 so far").
+- Installed on the S22 Ultra (SM-S908W). Not on the tablet. Not seen on the phone yet. GPS line cut off upright: still open.
+- APRS beacon Off at every app start (Rob: "YES" to going back to Off each start; an update kept "2 minutes" and the
+  beacon came back with RX). `AprsBeacon.offAtAppStart`, once per app process, from `MainActivity.onCreate` and
+  `JS8EngineService.onCreate`: after an update, a reboot, or a restart by the phone too. Log "App started: APRS beacon
+  set to Off". Tests now turn the beacon on from the page after start (`beacon_on` in onair2.py).
+  W174 (`rxkeep.py`, new) passed run 4; W170 run 5; W172, W173 run 3; W161, W162 run 4.
+- Seen on the phone at install: Easy JS8 was running before (pid 26351) and not after. The install stops the app;
+  Android does not restart it. Saved APRS beacon read "0" right after the install.
+
+**State at 21:55, 2026-11-17: Station OK stays on the page, APRS Beacon GPS line (uncommitted, built 21:45, tested on S22-Fresh)**
+- Station OK (Rob): saves, "Settings saved", stays on the same page and scroll place, in both layouts
+  (`Js8SettingsFragment.onOk`, `if (station)`). PC: OK closes the window. ← Back / Cancel still leave. The Settings
+  window's Save is unchanged (closes). A layout change still redraws: Pages at once, the separate window when left.
+- GPS line (Rob): Station > APRS Beacon, one line under **APRS beacon:** (`Special("aprs_gps")`, id `js8_aprs_gps`,
+  `AprsBeacon.gpsLine`, updated every second). The page never turns the GPS on (Rob: "the gps only turns on when the
+  aprs beacon is enabled"); timed beacons keep the GPS on only for each fix. Lines: `GPS: no location permission` /
+  `turned off in phone settings` / `off (APRS beacon off)` / `off (APRS beacon not running)` /
+  `searching, U of S satellites used` (GnssStatus while the beacon listens) / `fix HH:MM:SS UTC (m:ss ago), ±N m, <grid10>` / `no fix yet`.
+- W167 (OK stays, both layouts) passed runs 1, 3; W168 (GPS line) passed runs 2, 3 (`gpschk.py`); W166 passed again runs 27, 28.
+  Test provider gives no satellites; the emulator's GPS showed "0 of 6". Satellite counts on a real phone not seen.
+- Not updated: older scripts that expect OK to leave the Station page or window (s812chk Block A line 410, ui3/ui4
+  `toggle`, ui9, uicolchk, wside, air13, air14, s27chk 775, mapchk W153). They will need a ← Back after OK.
+- Installed on the S22 Ultra and tablet 21:54 (both started, no crash).
+- Beacon timer fix (found on the S22 Ultra 21:55: "Next beacon in 0 s", then nothing): `AprsBeacon.scheduleCycle`
+  passed elapsedRealtime times to `Handler.postAtTime`, which takes uptimeMillis (no deep sleep). On a phone that
+  has slept, the fix and beacon landed hours or days ahead; the emulator never sleeps, so W161 passed. Now postDelayed.
+  Built 21:57; W161, W162, W166 passed runs 29, 30. Installed on the S22 Ultra 22:09; its screen was off, the engine
+  never started and Samsung froze the app. Then on the phone (screen on, RX off, CAT red): fix 20 s, beacon 22:13:02;
+  next fix started 19 s before beacon time, fix in 8 s, beacon 22:14:42. Both "APRS beacon dropped: engine not running"
+  (RX off; the engine stopped 22:12:37 when the phone's Recents screen opened). Timer works on the phone; nothing sent.
+  Upright on the phone the GPS line is cut off ("…, EN94MN56…"); Rob to pick two lines or shorter wording. Not on the tablet.
+- RX kept on (Rob 22:20, "it shouldn't turn it off"): the phone log showed "Task removed; stopping engine" at 22:12:37
+  (Easy JS8 closed from the open-apps screen). `onTaskRemoved` now leaves RX, TX and the beacon running (PC: closing
+  quits). RX off = the RX button only. `js8_rx_wanted` (set by ACTION_START / ACTION_STOP, cleared when the audio
+  device is unplugged): a restart by the phone (START_STICKY, no intent) turns RX on again (`restartRxAfterKill`).
+- APRS beacon only while RX is on (`AprsBeacon.rxOn`, started after "Engine started successfully", stopped in stopEngine).
+  Before, Android's restart of the service brought the beacon back without RX (the 22:13 / 22:14 "dropped" lines).
+- Status window wording (Rob: "nothing vague"): Beacon made / Beacon waiting for the next transmit slot at N Hz /
+  Beacon transmitting (once per beacon) / Beacon sent / Beacon not sent: RX is off, transmission failed, the engine
+  refused it, Listening only (SWL) is checked, no callsign on Station > General, TX frequency is in the 30m WSPR
+  sub-band, no GPS fix in 30 seconds / Beacon not sent in full: Halt pressed / Beacon waiting: <reason> /
+  RX turned off: APRS beacon stopped / APRS beacon waiting: RX is off; GPS line "GPS: off (RX is off)".
+  A sent beacon shows in red in the Message Window like a heartbeat (seen on S22-Fresh).
+- Tests (once each, Rob 22:25: twice is for the audits only): W169-W171 `rxkeep.py` passed run 1 (W170 again run 3
+  after the "transmitting once" fix, built 22:37); W161, W162, W166 passed run 31 (beaconchk.py wording updated).
+  Killed in the background on S22-Fresh, RX and the microphone came back ("not silenced"). A real phone not checked.
+- Installed on the S22 Ultra 22:39 (screen off). Not on the tablet. Emulator stopped.
+- Open: the app holds no wake lock and sets no alarm; a timed beacon with the screen off relies on the phone staying
+  awake (sound capture). Not checked on a real phone.
+- Emulator stopped; no test process left.
+
 **State at 12:05, 2026-11-17: Map screen in the Pages layout (uncommitted, built 11:50, tested on S22-Fresh)**
 - Rob: map of stations and who hears who, offline map, sixth button, every station with a grid, medium detail, options in settings.
   The PC has no map; this is Easy JS8 only.

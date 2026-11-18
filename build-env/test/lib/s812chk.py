@@ -407,8 +407,8 @@ if want('W122'):  # N24: OK checks in the PC order, comma lists, letter-digit gr
                        ('space', dict(js8cfg_auto_whitelist='K1ABC K2DEF')), ('commas', dict(js8cfg_auto_whitelist='K1ABC,K2DEF')),
                        ('ptt', dict(js8cfg_ptt_method='cat'))):
             msg, xml = okbox(**bad)
-            # no box and the Station pages gone: OK went through (Station returns to the Settings window)
-            got[k] = msg if msg else ('saved' if not ('Radio' in xml and 'Audio' in xml) else 'Station still open')
+            # no box: OK went through (Station OK saves and stays on the page, Rob 2026-11-17)
+            got[k] = msg if msg else ('saved' if 'Radio' in xml and 'Audio' in xml else 'Station closed')
             print('W122', k, repr(got[k]), flush=True)
             home()
         fix('W122', got['eot_first'] == 'Please enter an end of transmission character' and got['comma'] == ' is not a valid group'

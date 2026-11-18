@@ -4,7 +4,8 @@ W160: Station has an APRS Beacon page after Reporting (its own page, Rob 2026-11
 W161: every 2 minutes: a GPS fix, then "@APRSIS GRID <10-character grid>" queued for the transmitter, the grid in
       My Maidenhead Grid Locator; the next fix starts before beacon time by as long as the last fix took; the next
       beacon goes with the screen off.
-W162: no new GPS fix (location turned off): the beacon waits 30 seconds past beacon time, then is skipped.
+W162: no new GPS fix (location turned off): at beacon time "Beacon time: waiting for the GPS fix"; the GPS keeps trying
+      (45 s, no beacon, no skip); location back on: the beacon goes out at the fix, the next one 2 minutes after it.
 W163: SmartBeaconing: a beacon on the first fix, one by rate at 100 km/h (highway rate 1 minute), one on a 90 degree
       turn (least time between turn beacons 30 seconds), none while stopped.
 W164: a scheduled heartbeat goes out with the screen off after a transmission that finished with the screen off
@@ -97,7 +98,8 @@ def setup(mode, **k):
                 'js8cfg_sb_turn_slope': None, 'js8cfg_sb_turn_time': None, **k})
     clearlog()
     adb('shell', 'input', 'keyevent', '224')  # screen on
-    start()
+    start(); time.sleep(3)
+    beacon_on(mode)
 
 
 def rotate(code):
@@ -178,17 +180,17 @@ try:
             adb('shell', 'input', 'keyevent', '4'); time.sleep(1)
 
     if want('W161') or want('W162'):
-        with part('W161/W162 every 2 minutes, screen off, no fix', 330, ['W161', 'W162'], res, mark):
+        with part('W161/W162 every 2 minutes, screen off, no fix', 400, ['W161', 'W162'], res, mark):
             setup('2')
-            b1, t1 = wait_for(r'Beacon: @APRSIS GRID', 40)
-            q1, _ = wait_for(r'APRS beacon queued', 20)
+            b1, t1 = wait_for(r'Beacon made: @APRSIS GRID', 40)
+            q1, _ = wait_for(r'Beacon waiting for the next transmit slot', 20)
             want_grid = grid10(LAT, LON)
             g1 = re.search(r'GRID (\w+)', b1 or '')
             pref1 = grid_pref()
             adb('shell', 'input', 'keyevent', '223')  # screen off
             lead = [l for l in log() if 'GPS fix starts' in l]
-            b2, t2 = wait_for(r'Beacon: @APRSIS GRID', 135, after=1)
-            q2, _ = wait_for(r'APRS beacon queued', 20, after=1)
+            b2, t2 = wait_for(r'Beacon made: @APRSIS GRID', 135, after=1)
+            q2, _ = wait_for(r'Beacon waiting for the next transmit slot', 20, after=1)
             fixes = [l for l in log() if 'GPS fix in' in l]
             screen = adb('shell', 'dumpsys', 'power').decode('utf8', 'replace')
             off = 'mWakefulness=Asleep' in screen or 'mWakefulness=Dozing' in screen
@@ -200,15 +202,22 @@ try:
             # W162: location off, no new fix
             feed.on = False; time.sleep(1.5)
             adb('shell', 'cmd', 'location', 'set-location-enabled', 'false')
-            n_wait = len([l for l in log() if 'waiting up to 30 seconds' in l])
-            w, _ = wait_for(r'waiting up to 30 seconds', 135, after=n_wait)
-            s, ts = wait_for(r'Beacon skipped: no new GPS fix', 40)
-            sent3 = len([l for l in log() if 'APRS beacon queued' in l])
+            n_wait = len([l for l in log() if 'Beacon time: waiting for the GPS fix' in l])
+            w, _ = wait_for(r'Beacon time: waiting for the GPS fix', 135, after=n_wait)
+            n_made = len([l for l in log() if 'Beacon made' in l])
+            time.sleep(45)
+            made_while_off = len([l for l in log() if 'Beacon made' in l]) - n_made
+            skipped = [l for l in log() if 'no GPS fix in' in l]
             adb('shell', 'cmd', 'location', 'set-location-enabled', 'true')
             adb('shell', 'input', 'keyevent', '224')
-            mark('W162', bool(w and s) and 27 <= ts <= 34 and sent3 == 2,
-                 f'waited {bool(w)}, skipped {ts:.0f} s later {bool(s)}, beacons queued in all {sent3}')
             feed = Feeder()
+            m, tm = wait_for(r'Beacon made: @APRSIS GRID', 30, after=n_made)
+            time.sleep(1)
+            nxt = ([l for l in log() if 'Next beacon in' in l] or [None])[-1]
+            secs = int(re.search(r'Next beacon in (\d+) s', nxt).group(1)) if nxt else -1
+            mark('W162', bool(w and m) and made_while_off == 0 and not skipped and 115 <= secs <= 120,
+                 f'waiting line {bool(w)}, beacons while no fix {made_while_off}, skip lines {len(skipped)}, '
+                 f'beacon {tm:.0f} s after location on {bool(m)}, next beacon in {secs} s')
 
     if want('W163'):
         with part('W163 SmartBeaconing', 150, ['W163'], res, mark):
@@ -217,12 +226,12 @@ try:
             adb('shell', 'cmd', 'location', 'providers', 'set-test-provider-enabled', 'gps', 'true')
             feed = Feeder(test_provider=True)
             setup('smart', js8cfg_sb_fast_rate='60', js8cfg_sb_turn_time='30')
-            b1, _ = wait_for(r'Beacon \(first GPS fix\)', 25)
+            b1, _ = wait_for(r'Beacon made \(first GPS fix\)', 25)
             feed.east = 100 / 3.6  # 100 km/h east
-            b2, t2 = wait_for(r'Beacon \(rate', 75)
+            b2, t2 = wait_for(r'Beacon made \(rate', 75)
             time.sleep(32)
             feed.east, feed.north = 0.0, 100 / 3.6  # turn north
-            b3, t3 = wait_for(r'Beacon \(turn', 12)
+            b3, t3 = wait_for(r'Beacon made \(turn', 12)
             feed.north = 0.0  # stopped
             time.sleep(15)
             all_b = [l for l in log() if 'Beacon (' in l]
@@ -275,7 +284,7 @@ try:
         with part('W166 status window', 130, ['W166'], res, mark):
             setup('2')
             rotate('L')
-            q1, _ = wait_for(r'APRS beacon queued', 40)
+            q1, _ = wait_for(r'Beacon waiting for the next transmit slot', 40)
             open_beacon_page()
             b, t1 = status_node()
             time.sleep(3)
@@ -285,21 +294,21 @@ try:
             c1, c2 = cd(t1), cd(t2)
             shot1 = adb('exec-out', 'screencap', '-p'); open(f'shots/beacon.{run}.status.png', 'wb').write(shot1)
             pick('2 minutes', 'SmartBeaconing')
-            wait_for(r'Beacon \(first GPS fix\)', 20)
-            wait_for(r'APRS beacon queued', 20, after=1)
+            wait_for(r'Beacon made \(first GPS fix\)', 20)
+            wait_for(r'Beacon waiting for the next transmit slot', 20, after=1)
             open_beacon_page()
             time.sleep(1.5)
             _, t3 = status_node()
             smart_live = t3.splitlines()[-1] if t3 else ''
             pick('SmartBeaconing', '5 minutes')
-            wait_for(r'APRS beacon queued', 25, after=2)
+            wait_for(r'Beacon waiting for the next transmit slot', 25, after=2)
             open_beacon_page()
             time.sleep(1.5)
             b4, t4 = status_node()
             lines = t4.splitlines()
-            want_order = ['Beacon every 2 minutes started', 'GPS fix in', 'Beacon: @APRSIS GRID', 'APRS beacon queued',
-                          'SmartBeaconing started', 'Beacon (first GPS fix): @APRSIS GRID', 'APRS beacon queued',
-                          'Beacon every 5 minutes started', 'GPS fix in', 'Beacon: @APRSIS GRID', 'APRS beacon queued']
+            want_order = ['Beacon every 2 minutes started', 'GPS fix in', 'Beacon made: @APRSIS GRID', 'Beacon waiting for the next transmit slot',
+                          'SmartBeaconing started', 'Beacon made (first GPS fix): @APRSIS GRID', 'Beacon waiting for the next transmit slot',
+                          'Beacon every 5 minutes started', 'GPS fix in', 'Beacon made: @APRSIS GRID', 'Beacon waiting for the next transmit slot']
             i, at = 0, []
             for n, l in enumerate(lines):
                 if i < len(want_order) and want_order[i] in l:

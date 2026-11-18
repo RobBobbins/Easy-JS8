@@ -90,3 +90,41 @@ def show_call(call):
         adb('shell', 'input', 'swipe', str(cx), str(y1 if step == 1 else y2), str(cx), str(y2 if step == 1 else y1), '700')
         time.sleep(.8)
     return None
+
+
+BEACON_LABELS = {'2': '2 minutes', '5': '5 minutes', '10': '10 minutes', '15': '15 minutes', '30': '30 minutes',
+                 '60': '1 hour', 'smart': 'SmartBeaconing'}
+
+
+def beacon_on(mode):
+    """APRS beacon: picked on Station > APRS Beacon and OK, upright (2026-11-17: the app sets it to Off at every start,
+    so a saved value before start() no longer turns it on). Returns True when the setting was saved."""
+    if mode in (None, '0'):
+        return True
+    adb('shell', 'settings', 'put', 'system', 'accelerometer_rotation', '0')
+    for _ in range(5):
+        adb('shell', 'settings', 'put', 'system', 'user_rotation', '0'); time.sleep(2)
+        m = re.search(r'cur=(\d+)x(\d+)', adb('shell', 'dumpsys', 'window', 'displays').decode('utf8', 'replace'))
+        if m and int(m.group(1)) < int(m.group(2)):
+            break
+    tapk('js8_btn_settings', 2)
+    gear = [n for n in re.findall(r'<node [^>]*>', dump()) if 'content-desc="Station"' in n]
+    if gear:
+        a, b, c, d = map(int, re.search(r'bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"', gear[0]).groups())
+        adb('shell', 'input', 'tap', str((a + c) // 2), str((b + d) // 2)); time.sleep(2)
+    tapk('APRS Beacon', 1.5)
+    tapk('Off  ▾', 1.5)
+    label = BEACON_LABELS[mode]
+    for _ in range(4):  # the list scrolls
+        if find(dump(), label):
+            break
+        adb('shell', 'input', 'swipe', '540', '1500', '540', '700', '400'); time.sleep(.8)
+    tapk(label, 1.5)
+    tapk('OK', 2)
+    ok = f'name="js8cfg_aprs_beacon">{mode}<' in getprefs()
+    for _ in range(4):  # Back until the main screen (its Settings button) shows
+        if 'js8_btn_settings' in dump():
+            break
+        adb('shell', 'input', 'keyevent', '4'); time.sleep(1.5)
+    print('BEACON ON', mode, ok, flush=True)
+    return ok

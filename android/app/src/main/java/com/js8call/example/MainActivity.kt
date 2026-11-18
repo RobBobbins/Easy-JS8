@@ -450,6 +450,7 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        com.js8call.example.service.AprsBeacon.offAtAppStart(this)
         if (savedInstanceState == null) {
             showIntro()
         } else {

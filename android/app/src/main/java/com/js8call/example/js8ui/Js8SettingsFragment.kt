@@ -457,6 +457,17 @@ class Js8SettingsFragment : Fragment() {
             it == com.js8call.example.api.Js8Api.KEY_WSJTX_INTERFACES }
             .forEach { (k, v) -> e.putString(k, v) }
         e.apply()
+        if (station) {
+            // Station OK saves and stays on the page, in both layouts (Rob 2026-11-17; the PC's OK closes the window).
+            // A layout change still redraws the screen behind (Pages: now; separate window: when it is left).
+            val page = vm.page
+            clearDraft()
+            vm.page = page
+            Toast.makeText(ctx, "Settings saved", Toast.LENGTH_SHORT).show()
+            render(keepScroll = true)
+            if (embedded && changedLayout) requireActivity().recreate()
+            return
+        }
         clearDraft()
         if (embedded) {
             Toast.makeText(ctx, "Settings saved", Toast.LENGTH_SHORT).show()
@@ -1486,7 +1497,33 @@ class Js8SettingsFragment : Fragment() {
             setTextIsSelectable(true)
         }
         "aprs_status" -> aprsStatusWindow()
+        "aprs_gps" -> aprsGpsLine()
         else -> View(requireContext())
+    }
+
+    /**
+     * APRS Beacon GPS status (Rob 2026-11-17), updated every second while on screen. One line, two when it does
+     * not fit (Rob 2026-11-18: the fix line was cut off upright on the S22 Ultra).
+     */
+    private fun aprsGpsLine(): View {
+        val text = label("").apply {
+            id = R.id.js8_aprs_gps
+            isSingleLine = false
+            maxLines = 2
+            ellipsize = android.text.TextUtils.TruncateAt.END
+            setPadding(0, px(4), 0, px(4))
+        }
+        val tick = object : Runnable {
+            override fun run() {
+                text.text = com.js8call.example.service.AprsBeacon.gpsLine(text.context)
+                text.postDelayed(this, 1000L)
+            }
+        }
+        text.addOnAttachStateChangeListener(object : View.OnAttachStateChangeListener {
+            override fun onViewAttachedToWindow(v: View) { text.removeCallbacks(tick); tick.run() }
+            override fun onViewDetachedFromWindow(v: View) { text.removeCallbacks(tick) }
+        })
+        return text
     }
 
     /**
@@ -1515,7 +1552,7 @@ class Js8SettingsFragment : Fragment() {
                 val layout = text.layout
                 val bottom = layout == null ||
                     text.scrollY >= layout.height - (text.height - text.totalPaddingTop - text.totalPaddingBottom) - text.lineHeight
-                val all = com.js8call.example.service.AprsBeacon.lines() + com.js8call.example.service.AprsBeacon.liveLine()
+                val all = com.js8call.example.service.AprsBeacon.lines() + com.js8call.example.service.AprsBeacon.liveLine(text.context)
                 text.text = all.joinToString("\n")
                 if (bottom) text.post {
                     val l = text.layout ?: return@post
