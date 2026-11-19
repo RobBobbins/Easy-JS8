@@ -2,6 +2,18 @@
 
 ## Next session starts here (2026-11-05): audit B sections 1-12 are fixed
 
+**State 19:25, 2026-11-18: version 1.0.5 (build 8), CHANGES.md (committed with this note)**
+- Version raised by hand in `android/app/build.gradle.kts` (nothing raises it automatically; it stayed 1.0.4 for 4 commits).
+- `CHANGES.md` (new, Rob): build notes per version, New / Changed / Fixed. Fixes go there, not in the README.
+  README **Added** lists features only (Rob: a fixed mistake of ours is not a feature): Station map, APRS beacon added.
+- Station > About: Features list has Station map and APRS beacon with GPS and SmartBeaconing; upright two columns of
+  seven (was six). Sideways one column, the last two below the screen (scrolls, as before). `about_chk.py` passed run 3
+  (runs 1: the check did not scroll sideways).
+- `website/index.html` (not in git): Version 1.0.5 (build 8).
+- 18:55: the 17:26 build (1.0.4) installed on the S22 Ultra, S20 (SM-G981W, paired 2026-11-18) and tablet SM-X210
+  (paired again; it does not announce its connect port; found by a port check, 43061). Rob saw the GPS line on two
+  lines on the S22 Ultra. Build 1.0.5 (19:21) not installed on the phones yet.
+
 **State 17:45, 2026-11-18: GPS line two lines if needed, old scripts fixed for Station OK staying (uncommitted, built 17:26, tested on S22-Fresh)**
 - GPS line (Rob: "two lines for the gps if needed"): `Js8SettingsFragment.aprsGpsLine` wraps at a space, at most 2 lines
   (was one line, cut off "…, EN94MN56…" upright on the S22 Ultra). Upright on S22-Fresh: "GPS: fix 22:29:11 UTC (0:16 ago), ±5 m,"
@@ -16,7 +28,7 @@
   W122, M03 (run 92), W153. Checked unchanged, passed once: ui9 M08U M10U M23U, ui4 M14 M15, uicolchk W41.
   Not changed and not run (their OK is a pop-up box's OK, not Station's): wside (Rename box), air13 E32 (Message Not
   Sent box), air14 S01/S02 (first start, refused OK), s27chk W104 (Idle Timeout box).
-- Not installed on the S22 Ultra or the tablet. Emulator stopped.
+- Installed 18:55 on the S22 Ultra, S20 and tablet; Rob saw the GPS line on two lines on the S22 Ultra.
 
 **State late 2026-11-17: radio reconnect on OK, GPS until fix, failure causes named (uncommitted, built, tested on S22-Fresh, installed on the S22 Ultra)**
 - Radio reconnect (Rob: "i shouldn't have to hit rx on and off"): the phone had RX started with Rig Icom IC-7300
@@ -33,7 +45,7 @@
 - Tests (once): W172, W173 (`radiochk.py`, new) passed run 2 (run 1: the test tapped the search box, test fixed);
   W161, W162 (rewritten for GPS until fix), W166 passed run 3; W170 passed run 3. Seen on screen: the APRS Beacon
   window with location off ("Beacon time: waiting for the GPS fix", "Waiting for GPS fix: 0:21 so far").
-- Installed on the S22 Ultra (SM-S908W). Not on the tablet. Not seen on the phone yet. GPS line cut off upright: still open.
+- Installed on the S22 Ultra (SM-S908W). Tablet and S20 2026-11-18 18:55. GPS line cut off upright: fixed 2026-11-18 (two lines).
 - APRS beacon Off at every app start (Rob: "YES" to going back to Off each start; an update kept "2 minutes" and the
   beacon came back with RX). `AprsBeacon.offAtAppStart`, once per app process, from `MainActivity.onCreate` and
   `JS8EngineService.onCreate`: after an update, a reboot, or a restart by the phone too. Log "App started: APRS beacon

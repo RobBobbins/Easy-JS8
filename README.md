@@ -4,7 +4,7 @@ Easy JS8 is a fork of JS8Android with added features and a new screen layout.
 
 ## Status
 
-Version 1.0.4. Early test version. Emulator tests are done; tests on a real phone and radio start 2026-11-06.
+Version 1.0.5. Early test version. Emulator tests are done; real phone and radio tests in progress. Changes by version: [CHANGES.md](CHANGES.md).
 
 Emulator test pass (2026-11-01 to 11-04): 1,045 checks, each run twice; all passed except one that waits for a real phone (multicast over Wi-Fi).
 
@@ -39,6 +39,8 @@ Emulator test pass (2026-11-01 to 11-04): 1,045 checks, each run twice; all pass
 - Configurations
 - Test CAT and Test PTT
 - JS8Call 3.0.3 decoder stages
+- Station map: offline map, a dot for every station with a grid, who-hears-who lines
+- APRS beacon: your grid to APRS-IS over the air, every 2 minutes to 1 hour or SmartBeaconing, a GPS fix before each beacon
 
 ## Building
 
