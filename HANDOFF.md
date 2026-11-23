@@ -19,7 +19,13 @@
 - Tests: `wflabel.py` run 8 W162-W171 PASS (emulator mic off with `adb emu avd hostmicoff`: live WebSDR audio made
   W164 and the FT8 rows pass on their own in run 7); `mapchk.py` run 13 W148-W159, W165 PASS. Busy map looked at
   with 40 injected stations T00XA-T39XD (4 per grid square), left in S22-Fresh's Call Activity.
-- Open, Rob's decision: call signs near the right edge can sit under the map's gear / + / − / Fit buttons.
+- Call signs under the map's gear / + / − / Fit buttons (16:20, Rob): Fit and the automatic fit frame the dots in the
+  area left of the button column (44 dp + 8 dp each side = 60 dp), with room for the longest call sign on the
+  right, 20 dp on the left (Rob; full call sign width there used half the upright map), a text line top and bottom,
+  and the title strip clear. After a drag or zoom, call signs (and dots) can still go under the buttons.
+- `mapchk.py` run 15 (mic off): W148-W150, W152-W154, W156, W158, W159, W165 PASS; W151 (blank screen), W155, W157
+  (timed out) failed with the emulator slow after 3.5 h (System UI 2 s frames, load 5); emulator restarted, run 16
+  W151, W155, W157 PASS (W157 49 s, est 45). Run 14 failed W154/W156 with the mic on; cause not proven.
 
 **State 13:10, 2026-11-23: dark glow behind the white waterfall text (Rob; built 13:0x, looked at on S22-Fresh)**
 - Decode labels and the cycle line's time text get `setShadowLayer(3 dp, black)` and are drawn `GLOW_PASSES` = 8

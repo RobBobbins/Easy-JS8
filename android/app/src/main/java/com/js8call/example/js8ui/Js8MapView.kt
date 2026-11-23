@@ -220,12 +220,24 @@ class Js8MapView @JvmOverloads constructor(context: Context, attrs: AttributeSet
         }
         var x0 = st.minOf { it.x }.toDouble(); var x1 = st.maxOf { it.x }.toDouble()
         var y0 = st.minOf { it.y }.toDouble(); var y1 = st.maxOf { it.y }.toDouble()
-        val padX = max(5.0, (x1 - x0) * 0.15); val padY = max(4.0, (y1 - y0) * 0.15)
-        x0 -= padX; x1 += padX; y0 -= padY; y1 += padY
-        // The title's strip is kept clear at the top, so it covers no station
-        val top = titleHeight()
-        scale = min(width / (x1 - x0), (height - top) / (y1 - y0))
-        cx = (x0 + x1) / 2; cy = (y0 + y1) / 2 + top / 2.0 / scale
+        // at least about 10 degrees across and 8 high
+        if (x1 - x0 < 10.0) { val m = (x0 + x1) / 2; x0 = m - 5.0; x1 = m + 5.0 }
+        if (y1 - y0 < 8.0) { val m = (y0 + y1) / 2; y0 = m - 4.0; y1 = m + 4.0 }
+        // Room for the call signs round the dots (Rob, 2026-11-23): call signs go right of their dot first, so the
+        // longest one on the right, 20 dp on the left (Rob), a text line top and bottom; the gear, +, - and Fit column (44 dp + 8 dp each
+        // side) kept clear on the right, the title's strip at the top, so neither covers a station or its call sign
+        val calls = boolPref(PREF_CALLS, true)
+        val longest = if (calls) st.maxOf { labelPaint.measureText(it.call) } else 0f
+        val lineH = if (calls) labelPaint.fontMetrics.let { it.descent - it.ascent } else 0f
+        val left = 20 * dp
+        val right = width - 60 * dp - longest - 10 * dp
+        val top = titleHeight() + lineH + 6 * dp
+        val bottom = height - lineH - 6 * dp
+        val aw = max(40 * dp, right - left).toDouble()
+        val ah = max(40 * dp, bottom - top).toDouble()
+        scale = min(aw / (x1 - x0), ah / (y1 - y0))
+        cx = (x0 + x1) / 2 - ((left + right) / 2.0 - width / 2.0) / scale
+        cy = (y0 + y1) / 2 + ((top + bottom) / 2.0 - height / 2.0) / scale
         fitted = true
     }
 
