@@ -7,7 +7,7 @@
     android:orientation="vertical">
 
     <LinearLayout
-        android:layout_width="wrap_content"
+        android:layout_width="match_parent"
         android:layout_height="27dp"
         android:orientation="horizontal">
 
@@ -43,6 +43,23 @@
             android:paddingEnd="12dp"
             android:singleLine="true"
             android:text="Timing" />
+
+        <View
+            android:layout_width="0dp"
+            android:layout_height="1dp"
+            android:layout_weight="1" />
+
+        <!-- Opens or closes the settings under the tabs, upright only (Rob, 2026-11-22, as the iOS app) -->
+        <ImageView
+            android:id="@+id/js8_wf_gear"
+            android:layout_width="44dp"
+            android:layout_height="match_parent"
+            android:background="?android:attr/selectableItemBackground"
+            android:contentDescription="Waterfall Controls settings"
+            android:padding="3dp"
+            android:scaleType="fitCenter"
+            android:src="@drawable/js8_map_gear"
+            app:tint="@color/js8_frame_text" />
     </LinearLayout>
 
     <!-- Control tab (WideGraph.ui, Rob's capture 2026-10-20): spin boxes with ∧ ∨, QSY, filter

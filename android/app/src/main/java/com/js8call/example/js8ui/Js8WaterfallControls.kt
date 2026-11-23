@@ -81,6 +81,18 @@ class Js8WaterfallControls(
     private var autoAfter = prefs.getInt(KEY_AUTO_DRIFT_AFTER, 1).coerceIn(1, AUTO_AFTER_MAX)
     private var driftMs = 0L
     private var autoOn = false
+
+    /**
+     * Upright (Rob, 2026-11-22, as the iOS app): the settings under the tabs open and close. A tab opens them; the
+     * tab already shown, tapped while open, closes them; the gear right of the tabs does either. Closed, only the
+     * tab line shows. Remembered, closed on a new install. PC, FT8Call and Pages sideways (js8_tabs; no room for
+     * the gear there, Rob): always open, no gear.
+     */
+    private val collapsible = root.findViewById<View?>(R.id.js8_pc_window) == null &&
+        root.findViewById<View?>(R.id.js8_tabs) == null
+    private val keyOpen = "js8_wf_settings_open"
+    private var open = !collapsible || prefs.getBoolean(keyOpen, false)
+    private var shownTab = R.id.js8_wf_tab_control
     private val autoButtonFace: Typeface? = v<TextView>(R.id.js8_wf_auto_drift)?.typeface
 
     private val centerKnob = v<Js8KnobView>(R.id.js8_wf_filter_center_knob)?.apply {
@@ -241,21 +253,39 @@ class Js8WaterfallControls(
     // ---- Tabs ---------------------------------------------------------------------------
 
     private fun setUpTabs() {
-        v<View>(R.id.js8_wf_tab_control)?.setOnClickListener { showTab(R.id.js8_wf_tab_control) }
-        v<View>(R.id.js8_wf_tab_display)?.setOnClickListener { showTab(R.id.js8_wf_tab_display) }
-        v<View>(R.id.js8_wf_tab_timing)?.setOnClickListener { showTab(R.id.js8_wf_tab_timing) }
+        listOf(R.id.js8_wf_tab_control, R.id.js8_wf_tab_display, R.id.js8_wf_tab_timing).forEach { id ->
+            v<View>(id)?.setOnClickListener { if (collapsible && open && shownTab == id) setOpen(false) else showTab(id) }
+        }
+        v<View>(R.id.js8_wf_gear)?.apply {
+            visibility = if (collapsible) View.VISIBLE else View.GONE
+            setOnClickListener { setOpen(!open) }
+        }
+        showPages()
     }
 
     /** PC View > Show Time Drift Controls...: the Timing tab. */
     fun showTiming() = showTab(R.id.js8_wf_tab_timing)
 
     private fun showTab(tabId: Int) {
+        shownTab = tabId
         listOf(R.id.js8_wf_tab_control, R.id.js8_wf_tab_display, R.id.js8_wf_tab_timing).forEach { id ->
             v<View>(id)?.setBackgroundResource(if (id == tabId) R.drawable.js8_tab_selected else 0)
         }
-        v<View>(R.id.js8_wf_control_page)?.visibility = if (tabId == R.id.js8_wf_tab_control) View.VISIBLE else View.GONE
-        v<View>(R.id.js8_wf_display_page)?.visibility = if (tabId == R.id.js8_wf_tab_display) View.VISIBLE else View.GONE
-        v<View>(R.id.js8_wf_timing_page)?.visibility = if (tabId == R.id.js8_wf_tab_timing) View.VISIBLE else View.GONE
+        if (!open) setOpen(true) else showPages()
+    }
+
+    private fun setOpen(on: Boolean) {
+        if (!collapsible) return
+        open = on
+        prefs.edit().putBoolean(keyOpen, on).apply()
+        showPages()
+    }
+
+    private fun showPages() {
+        fun show(tabId: Int) = if (open && shownTab == tabId) View.VISIBLE else View.GONE
+        v<View>(R.id.js8_wf_control_page)?.visibility = show(R.id.js8_wf_tab_control)
+        v<View>(R.id.js8_wf_display_page)?.visibility = show(R.id.js8_wf_tab_display)
+        v<View>(R.id.js8_wf_timing_page)?.visibility = show(R.id.js8_wf_tab_timing)
     }
 
     // ---- Timing tab (WideGraph.cpp) -----------------------------------------------------

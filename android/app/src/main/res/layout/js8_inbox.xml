@@ -19,6 +19,8 @@
 
     <TextView
         android:id="@+id/js8_inbox_message"
+        android:hint="TAP A MESSAGE IN THE LIST TO READ IT HERE."
+        android:textColorHint="@color/js8_typing_hint"
         style="@style/Js8Text"
         android:layout_width="match_parent"
         android:layout_height="80dp"
@@ -29,6 +31,8 @@
 
     <EditText
         android:id="@+id/js8_inbox_reply_text"
+        android:hint="TYPE YOUR REPLY HERE."
+        android:textColorHint="@color/js8_typing_hint"
         style="@style/Js8Text"
         android:layout_width="match_parent"
         android:layout_height="60dp"

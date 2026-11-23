@@ -50,6 +50,8 @@ class Js8MainFragment : Fragment() {
     companion object {
         /** Settings > View "New Band Activity line for each message" (Rob, 2026-11-07; on by default; off = the PC's line per offset). */
         const val BAND_SPLIT_KEY = "js8cfg_band_line_per_message"
+        /** Settings > View: stations with a message flag stay at the top of Call Activity (the PC always does; Rob, 2026-11-22). */
+        const val CALL_PIN_FLAGGED_KEY = "js8cfg_call_pin_flagged"
         /** A Band Activity row's offset: "o1500", or "o1500.<first frame time>" when each message has its line. */
         fun bandRowOffset(id: String) = id.removePrefix("o").substringBefore('.').toIntOrNull()
         // Call Activity press-and-hold menu
@@ -1096,6 +1098,7 @@ class Js8MainFragment : Fragment() {
             cfg.groups.sorted().forEach { add(Js8TableView.Row(it, mapOf("icon" to if (it in unreadTo) "⚑" else "", "callsign" to it),
                 center = setOf("icon"), pin = 2)) }
         }
+        val pinFlagged = boolPref(CALL_PIN_FLAGGED_KEY, true)
         val callRows = calls.sortedBy { it.call }.map { d ->
             val hasMessage = d.call in unreadFrom
             val hasCq = d.cqMs > 0 && (now - d.cqMs) / 60_000 < 5
@@ -1137,11 +1140,12 @@ class Js8MainFragment : Fragment() {
                 },
                 colors = if (isBlocked) mapOf("icon" to Color.RED) else emptyMap(),
                 center = setOf("icon", "timestamp", "submode", "log"),
-                pin = if (hasMessage) 3 else 0 // messages pinned to the top (displayCallActivity)
+                pin = if (hasMessage && pinFlagged) 3 else 0 // messages pinned to the top (displayCallActivity)
             )
         }
-        // messages pinned to the top (displayCallActivity)
-        callActivity.setRows(groupRows + callRows.sortedBy { if (it.bold) 0 else 1 })
+        // messages pinned to the top (displayCallActivity); Settings > View
+        // "Keep flagged stations at the top of Call Activity" off: one list
+        callActivity.setRows(groupRows + if (pinFlagged) callRows.sortedBy { if (it.bold) 0 else 1 } else callRows)
 
         // Message Window: received lines in the RX color, our transmissions in the TX color
         val rxFg = colorPref("js8cfg_ui_rx_fg", "#000000")

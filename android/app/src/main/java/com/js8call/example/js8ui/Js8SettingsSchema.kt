@@ -286,6 +286,9 @@ object Js8SettingsSchema {
             // Upright has no View menu to bring the labels back once they are off
             check("js8_table_${BAND_TABLE_UPRIGHT}_col_labels", "Show Column Labels in Band Activity", true),
             check("js8_table_call_col_labels", "Show Column Labels in Call Activity", true),
+            // On = the PC's list: stations with a message flag above the others. Off = one list in the chosen
+            // order, flags and bold kept (Rob, 2026-11-22, as the iOS app)
+            check(Js8MainFragment.CALL_PIN_FLAGGED_KEY, "Keep flagged stations at the top of Call Activity", true),
             // FT8 signals heard on the JS8 frequency (Rob, 2026-10-19); off = the FT8 decoder doesn't run.
             // FT8 starts off (Rob, 2026-11-05)
             check("js8cfg_show_ft8", "Show FT8 decodes in the Message Window", false),

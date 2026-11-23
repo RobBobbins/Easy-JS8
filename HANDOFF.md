@@ -2,6 +2,40 @@
 
 ## Next session starts here (2026-11-05): audit B sections 1-12 are fixed
 
+**State 21:00, 2026-11-22: Waterfall Controls open and close upright, as the iOS app (uncommitted, built 20:53, tested on S22-Fresh)**
+- Upright only (Rob): a tab opens the settings under the tabs; the tab already shown, tapped while open, closes
+  them; a gear right of Timing (`js8_wf_gear`, `js8_map_gear` drawable tinted `js8_frame_text`) does either.
+  Remembered in `js8_wf_settings_open`, closed on a new install (Rob: "Start closed"). PC, FT8Call
+  (`js8_pc_window`) and Pages sideways (`js8_tabs`): always open, gear GONE (Rob: "no gear, always on sideways
+  pages"; in Pages the three tabs filled the column, tabs end x 2137 of 2145, no room for the gear).
+  `Js8WaterfallControls.setUpTabs / showTab / setOpen / showPages`; `js8_waterfall_controls.xml` tab row now
+  match_parent with a spacer.
+- Tests (scratchpad `wfgear.py`, gear counted only when over 60 px wide): 15 of 15 passed once: upright closed at
+  start, Display opens / again closes, gear opens / closes, Control, Timing switches, open after restart; Pages,
+  PC and FT8Call open with no gear, a tab tap does not close them.
+- Test scripts that use the Waterfall Controls upright must open them first now. Emulator stopped; no test process left.
+
+**State 20:30, 2026-11-22: three changes copied from the iOS app (uncommitted, built 20:18, tested on S22-Fresh)**
+- The iOS app is a separate private repo, `RobBobbins/Easy-JS8-iOS-` (branched from cd19839f; 36 iOS commits
+  2026-11-18 to 11-22). Rob picked these three to bring over:
+- Call Activity sort: stations with a message flag (pin 3) kept callsign order whatever the sort. Now
+  `Js8TableView.applySort` sorts them by the chosen key too, then a stable sort by pin (PC mainwindow.cpp
+  10519-10545, as iOS f6dcb985). @ALLCALL and the groups (no sortValues) keep their own order.
+- Settings > View **Keep flagged stations at the top of Call Activity** (`Js8MainFragment.CALL_PIN_FLAGGED_KEY`,
+  `js8cfg_call_pin_flagged`, ticked by default = the PC). Unticked: pin 0 for flagged stations, one list in the
+  chosen order, ⚑ and bold kept. Same key as iOS. Placed under Show Column Labels in Call Activity.
+- Inbox hints, grey (`js8_typing_hint`) like the Typing Box: list "YOUR STORED MESSAGES WILL BE LISTED HERE."
+  (`Js8TableView.emptyHintText`, set in `Js8Inbox.setColumns`; shows only with no rows), message box "TAP A MESSAGE
+  IN THE LIST TO READ IT HERE.", reply box "TYPE YOUR REPLY HERE." (`android:hint` in js8_inbox.xml,
+  js8_inbox_pc.xml (not used by any code), fragment_js8_inbox.xml, fragment_js8_swipe.xml).
+- Help: `website/help/settings.html` View gains the new box's bullet (Rob's wording, 2026-11-22).
+- Tests (scratchpad scripts, not in the repo): upright, 2 new flagged + 2 plain stations injected; box on:
+  K3FLB, K1FLA, K4SPB (newest first; before the fix it was callsign order), then W4PLN, N2PLN; box off: W4PLN,
+  K3FLB, N2PLN, K1FLA, K4SPB; box on again: same as first. All passed once. Hints: message database backed up,
+  emptied, all three hints seen in upright, PC, Pages and FT8Call sideways; database put back (4 messages), list
+  hint gone with messages. All passed once. landscape_layout left `pc` as found.
+- Not done: CHANGES.md entry (no version number chosen), not on a phone or tablet. Emulator stopped; no test process left.
+
 **State 19:25, 2026-11-18: version 1.0.5 (build 8), CHANGES.md (committed with this note)**
 - Version raised by hand in `android/app/build.gradle.kts` (nothing raises it automatically; it stayed 1.0.4 for 4 commits).
 - `CHANGES.md` (new, Rob): build notes per version, New / Changed / Fixed. Fixes go there, not in the README.

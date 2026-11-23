@@ -11,15 +11,23 @@ import kotlin.math.roundToInt
 object Js8Inbox {
     private val date = SimpleDateFormat("EEE MMM d HH:mm:ss yyyy", Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC") }
 
-    fun setColumns(table: Js8TableView) = table.setColumns("inbox", listOf(
-        Js8TableView.Column("flag", "⚑", 24),
-        Js8TableView.Column("id", "ID", 40, numeric = true),
-        Js8TableView.Column("date", "Date", 120),
-        Js8TableView.Column("freq", "Frequency", 80),
-        Js8TableView.Column("from", "From", 70),
-        Js8TableView.Column("to", "To", 70),
-        Js8TableView.Column("message", "Message", 200, stretch = true)
-    ))
+    /** Grey hints while the Inbox boxes are empty, like the Typing Box (Rob, 2026-11-22, as the iOS app). */
+    const val LIST_HINT = "YOUR STORED MESSAGES WILL BE LISTED HERE."
+    const val MESSAGE_HINT = "TAP A MESSAGE IN THE LIST TO READ IT HERE."
+    const val REPLY_HINT = "TYPE YOUR REPLY HERE."
+
+    fun setColumns(table: Js8TableView) {
+        table.setColumns("inbox", listOf(
+            Js8TableView.Column("flag", "⚑", 24),
+            Js8TableView.Column("id", "ID", 40, numeric = true),
+            Js8TableView.Column("date", "Date", 120),
+            Js8TableView.Column("freq", "Frequency", 80),
+            Js8TableView.Column("from", "From", 70),
+            Js8TableView.Column("to", "To", 70),
+            Js8TableView.Column("message", "Message", 200, stretch = true)
+        ))
+        table.emptyHintText = LIST_HINT
+    }
 
     /**
      * Received messages and the ones held for other stations, not yet collected (Inbox::fetchForCall:

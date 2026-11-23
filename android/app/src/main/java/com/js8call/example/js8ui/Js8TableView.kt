@@ -171,6 +171,16 @@ class Js8TableView @JvmOverloads constructor(
     private val header = LinearLayout(context).apply { orientation = LinearLayout.HORIZONTAL }
     private val list = RecyclerView(context)
     private val adapter = RowAdapter()
+    private val emptyHint = TextView(context).apply {
+        setTextColor(ContextCompat.getColor(context, R.color.js8_typing_hint))
+        typeface = font
+        setTextSize(TypedValue.COMPLEX_UNIT_PX, textSizePx)
+        setPadding((6 * dp).toInt(), 0, (6 * dp).toInt(), 0)
+        visibility = GONE
+        // Not clickable: a press on the empty list still reaches the list (onEmptyLongClick)
+        isClickable = false
+        isFocusable = false
+    }
 
     init {
         setBackgroundResource(R.drawable.js8_panel_list)
@@ -196,6 +206,20 @@ class Js8TableView @JvmOverloads constructor(
         inner.addView(list, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
         hScroll.addView(inner, LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.MATCH_PARENT))
         addView(hScroll, LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT))
+        addView(emptyHint, LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+    }
+
+    /** Grey text shown while the table has no rows, like the Typing Box hint (Rob, 2026-11-22, as the iOS app); null = none. */
+    var emptyHintText: String? = null
+        set(value) { field = value; emptyHint.text = value; updateEmptyHint() }
+
+    private fun updateEmptyHint() {
+        emptyHint.visibility = if (sortedRows.isEmpty() && !emptyHintText.isNullOrEmpty()) VISIBLE else GONE
+        emptyHint.typeface = font
+        emptyHint.setTextSize(TypedValue.COMPLEX_UNIT_PX, textSizePx)
+        val top = (if (header.visibility == VISIBLE) header.layoutParams?.height ?: headerHeight else 0) + (5 * dp).toInt()
+        val lp = emptyHint.layoutParams as? LayoutParams ?: return
+        if (lp.topMargin != top) { lp.topMargin = top; emptyHint.layoutParams = lp }
     }
 
     fun setColumns(key: String, cols: List<Column>) {
@@ -289,6 +313,7 @@ class Js8TableView @JvmOverloads constructor(
         }, false)
         sortedRows = newSorted
         diff.dispatchUpdatesTo(adapter)
+        updateEmptyHint()
         // Put the scroll position back unless a finger is moving the list
         if (first != RecyclerView.NO_POSITION && list.scrollState == RecyclerView.SCROLL_STATE_IDLE &&
             first < newSorted.size) {
@@ -379,6 +404,7 @@ class Js8TableView @JvmOverloads constructor(
             }
             header.addView(label, LinearLayout.LayoutParams(widths[i], ViewGroup.LayoutParams.MATCH_PARENT))
         }
+        updateEmptyHint()
         rebindAll()
     }
 
@@ -392,17 +418,21 @@ class Js8TableView @JvmOverloads constructor(
     @Suppress("UNCHECKED_CAST")
     private fun applySort() {
         val key = sortKey
-        // Pinned rows (@ALLCALL, groups, messages) stay on top in their own order
-        val pinned = rows.filter { it.pin > 0 }.sortedBy { it.pin }
+        // Pinned rows (@ALLCALL, groups, stations with a message) stay on top
+        val top = rows.filter { it.pin > 0 }
         val rest = rows.filter { it.pin == 0 }
-        showRows(pinned + if (key == null) rest else {
-            val cmp = Comparator<Row> { a, b ->
-                val av = (a.sortValues[key] ?: a.values[key] ?: "") as Comparable<Any>
-                val bv = (b.sortValues[key] ?: b.values[key] ?: "") as Comparable<Any>
-                try { av.compareTo(bv) } catch (_: ClassCastException) { av.toString().compareTo(bv.toString()) }
-            }
-            if (sortAscending) rest.sortedWith(cmp) else rest.sortedWith(cmp.reversed())
-        })
+        if (key == null) { showRows(top.sortedBy { it.pin } + rest); return }
+        val cmp = Comparator<Row> { a, b ->
+            val av = (a.sortValues[key] ?: a.values[key] ?: "") as Comparable<Any>
+            val bv = (b.sortValues[key] ?: b.values[key] ?: "") as Comparable<Any>
+            try { av.compareTo(bv) } catch (_: ClassCastException) { av.toString().compareTo(bv.toString()) }
+        }
+        fun byKey(a: List<Row>) = if (sortAscending) a.sortedWith(cmp) else a.sortedWith(cmp.reversed())
+        // PC displayCallActivity (mainwindow.cpp 10519-10545): the chosen sort first, then a stable sort brings the
+        // stations with a message up, so they are in the chosen order among themselves (Rob, 2026-11-22; before,
+        // they kept callsign order whatever the sort). @ALLCALL and the groups have nothing to sort by and keep theirs.
+        val fixed = top.filter { it.sortValues.isEmpty() }
+        showRows((fixed + byKey(top.filter { it.sortValues.isNotEmpty() })).sortedBy { it.pin } + byKey(rest))
     }
 
 
