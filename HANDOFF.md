@@ -2,6 +2,16 @@
 
 ## Next session starts here (2026-11-05): audit B sections 1-12 are fixed
 
+**State 16:45, 2026-11-23: Hold PTT greyed when it can't work (Easy JS8 only, Rob; uncommitted, built 16:35, tested on S22-Fresh)**
+- Station > Radio > Rig Options > Advanced, **Hold PTT between frames**: greyed (keeps its tick) with Rig None, or a
+  Hamlib rig with PTT Method VOX (`active` on `js8cfg_hold_ptt` in `Js8SettingsSchema`). RTS PTT, truSDX, QMX and
+  UV-Pro key PTT themselves even on VOX (`setRigPtt`), so it stays usable there. The PC never greys it. Rob asked
+  after finding it had no effect on VOX.
+- `website/help/station.html` line 230: one line on when it is greyed. Rob uploads it.
+- Tests: `holdptt.py` (new) W176 PASS upright run 2, PC sideways run 3; `ui3.py` M24 now sets Rig RTS PTT, run 90
+  PASS (`ui3.90.json` may have overwritten an older run 90 file). S22-Fresh left on Rig None, VOX, Hold PTT off.
+- Emulator and adb stopped; no test process left.
+
 **State 15:05, 2026-11-23: boxes round labelled signals, map call signs spread out (Rob; tested on S22-Fresh)**
 - Waterfall, Label decoded signals on: a white 1 dp box round each decoded frame, offset to offset + width
   (FT8 +50 Hz), signal start row (slot + start delay, `signalStartMs`; FT8 slot + 0.5 s) to end row. Glow 3 dp

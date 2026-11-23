@@ -122,10 +122,10 @@ def page(p):
     open_station(); return tapk(p, 2)
 
 
-def toggle(row, p, label, key, press='OK'):
+def toggle(row, p, label, key, press='OK', **k):
     if not want(row):
         return
-    setprefs(**OK0); start(); rotate('U'); time.sleep(1)
+    setprefs(**{**OK0, **k}); start(); rotate('U'); time.sleep(1)
     a = pv_(key); page(p); seen = False
     for _ in range(10 if L == 'U' else 16):  # sideways a swipe moves the page about 340 px
         if find(x(), label):
@@ -148,8 +148,9 @@ def pv_(key):
 toggle('M46', 'General', 'Display distance in miles', 'js8cfg_miles')
 toggle('M47', 'General', 'Display distance in miles', 'js8cfg_miles', 'Cancel')
 toggle('M09', 'General', 'Allow sending standard messages without callsign', 'js8cfg_avoid_forced_identify')
-toggle('M24', 'Radio', 'Hold PTT between frames while there are more to be transmitted' if L == 'U' else 'Hold PTT between frames', 'js8cfg_hold_ptt')  # sideways the short label (Rob, 2026-10-21)
-setprefs(**OK0); start()
+toggle('M24', 'Radio', 'Hold PTT between frames while there are more to be transmitted' if L == 'U' else 'Hold PTT between frames', 'js8cfg_hold_ptt',  # sideways the short label (Rob, 2026-10-21)
+       rig_control_enabled=True, rig_type='rts_ptt', js8cfg_ptt_method='rts')  # greyed with Rig None (W176, Rob 2026-11-23)
+setprefs(**OK0, **(dict(rig_control_enabled=False, rig_type='none', js8cfg_ptt_method='vox') if want('M24') else {})); start()
 adb('shell', 'settings', 'put', 'system', 'user_rotation', '0')
 json.dump(t.res, open(f'ui3.{_run}.json', 'w'))
 print('DONE', flush=True)

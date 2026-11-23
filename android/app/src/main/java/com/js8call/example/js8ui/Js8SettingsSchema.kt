@@ -509,7 +509,10 @@ object Js8SettingsSchema {
             RadioGroup(radio("js8cfg_split", "none"), "Split Operation", listOf("Fake It" to "emulate", "Rig" to "rig", "None" to "none")),
             Group("Advanced", listOf(
                 spin("js8cfg_tx_delay", "Tx delay:", 0.2, 0.1, 0.5, step = 0.1, suffix = "  s", decimals = 1),
-                check("js8cfg_hold_ptt", "Hold PTT between frames while there are more to be transmitted", false)
+                // Easy JS8 (Rob, 2026-11-23; the PC never greys it): greyed when the app can't key the rig,
+                // VOX with a Hamlib rig or Rig None. RTS PTT, truSDX, QMX and UV-Pro key PTT even on VOX.
+                Field("js8cfg_hold_ptt", "Hold PTT between frames while there are more to be transmitted", Kind.CHECK, "false",
+                    active = { d -> !(rigIs(d, "none") || rigIs(d, "hamlib") && pttMethod(d) == "vox") })
             ))
         )),
         Section("Audio", null, listOf(
