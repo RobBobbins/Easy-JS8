@@ -2,6 +2,14 @@
 
 ## Next session starts here (2026-11-05): audit B sections 1-12 are fixed
 
+**State 13:10, 2026-11-23: dark glow behind the white waterfall text (Rob; built 13:0x, looked at on S22-Fresh)**
+- Decode labels and the cycle line's time text get `setShadowLayer(3 dp, black)` and are drawn `GLOW_PASSES` = 8
+  times (`glowText` in `WaterfallRenderer`), so the glows stack dark. One pass was too faint, 3 passes still faint
+  over yellow (Rob: "darker"); 8 passes Rob: "the glow is good now". Screenshots `shots/glow_9_crop.png` (3),
+  `shots/glow_11_crop.png` (8), live WebSDR 7.078 FT8 audio.
+- Seen, Rob: leave it: a label can sit on top of the cycle line's time text (`glow_9_crop.png`, bottom left).
+- No test script run for this; looked at by eye only.
+
 **State 11:40, 2026-11-23: labels stack downward, a redraw removes them (Rob; uncommitted, built 11:27, tested on S22-Fresh)**
 - Rob's choices: a label that would touch one already drawn moves down one text line (`fontSpacing`) until clear
   (`Label.line`, first decoded keeps its place); every waterfall redraw (`replotNow`: Start, Bins Per Pixel, Gain,

@@ -42,6 +42,8 @@ class WaterfallRenderer {
         private const val JS8_NSPS = 6192
         private val IZ = min(NSMAX, (5000f / PC_BIN_HZ).toInt())
         private const val TICK_MS = 33L
+        /** Easy JS8: how many times the white waterfall text is drawn, so its glows stack darker (Rob, 2026-11-23). */
+        private const val GLOW_PASSES = 8
         /** dataSink nch: Smooth 1..7 -> smoothing width. */
         private val NCH = intArrayOf(1, 2, 4, 9, 18, 36, 72)
 
@@ -205,8 +207,13 @@ class WaterfallRenderer {
     }
 
     private fun setLabelPaint() {
-        labelPaint.textSize = 10 * display.density.coerceAtLeast(0.1f)
+        val dp = display.density.coerceAtLeast(0.1f)
+        labelPaint.textSize = 10 * dp
+        labelPaint.setShadowLayer(3 * dp, 0f, 0f, Color.BLACK) // dark glow behind the text (Rob, 2026-11-23)
     }
+
+    /** White waterfall text drawn GLOW_PASSES times: the glows stack, so the dark behind the letters is darker (Rob: "darker"). */
+    private fun Canvas.glowText(text: String, x: Float, y: Float, p: Paint) = repeat(GLOW_PASSES) { drawText(text, x, y, p) }
 
     /** A label's left edge: 3 dp right of its signal. */
     private fun labelX(hz: Float): Float {
@@ -239,7 +246,7 @@ class WaterfallRenderer {
         if (y >= h1) return
         c.save()
         c.clipRect(0, 0, width, h1)
-        c.drawText(l.text, labelX(l.hz), y + labelPaint.textSize, labelPaint)
+        c.glowText(l.text, labelX(l.hz), y + labelPaint.textSize, labelPaint)
         c.restore()
     }
     private val replot = Runnable { replotNow() }
@@ -293,7 +300,7 @@ class WaterfallRenderer {
                 linePaint.color = Color.GREEN
                 linePaint.strokeWidth = dp
                 c.drawLine(0f, y.toFloat(), width.toFloat(), y.toFloat(), linePaint)
-                c.drawText(line.text.orEmpty(), 5 * dp, y - (textPaint.fontSpacing - textPaint.textSize), textPaint) // above its line, as drawn live
+                c.glowText(line.text.orEmpty(), 5 * dp, y - (textPaint.fontSpacing - textPaint.textSize), textPaint) // above its line, as drawn live
                 y += line.rows
             }
         }
@@ -308,7 +315,9 @@ class WaterfallRenderer {
     }
 
     private fun setTextSize() {
-        textPaint.textSize = 10 * display.density.coerceAtLeast(0.1f)
+        val dp = display.density.coerceAtLeast(0.1f)
+        textPaint.textSize = 10 * dp
+        textPaint.setShadowLayer(3 * dp, 0f, 0f, Color.BLACK) // Easy JS8: dark glow behind the text (Rob, 2026-11-23)
     }
 
     /** WideGraph::dataSink: a green line across the top when a new period starts. */
@@ -577,7 +586,7 @@ class WaterfallRenderer {
                 textRows -= rows
                 if (textRows <= 0) {
                     textRows = Int.MAX_VALUE
-                    waterfallCanvas?.drawText(cycleText, 5 * d.density, textPaint.textSize, textPaint)
+                    waterfallCanvas?.glowText(cycleText, 5 * d.density, textPaint.textSize, textPaint)
                 }
             }
         }
