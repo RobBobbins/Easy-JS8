@@ -56,6 +56,33 @@ class TransmitViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
+    /** Easy JS8: queue the "IS TYPING..." frame, unless one is already waiting or going out. */
+    fun queueTypingNotice(text: String) {
+        if (hasTypingNotice()) return
+        txQueue.add(TransmitMessage(text = text, typingNotice = true))
+        txQueue.sortByDescending { it.priority }
+        _queue.value = txQueue.toList()
+        _txState.value = TransmitState.QUEUED
+    }
+
+    /** Easy JS8: an "IS TYPING..." frame waits in the queue or is with the engine. */
+    fun hasTypingNotice(): Boolean = inFlight?.typingNotice == true || txQueue.any { it.typingNotice }
+
+    /** Easy JS8: drop "IS TYPING..." frames not handed to the engine yet. */
+    fun removePendingTypingNotices() {
+        if (txQueue.none { it.typingNotice && it !== inFlight }) return
+        txQueue.removeAll { it.typingNotice && it !== inFlight }
+        _queue.value = txQueue.toList()
+        if (txQueue.isEmpty() && inFlight == null && !engineBusy) _txState.value = TransmitState.IDLE
+    }
+
+    /** Easy JS8: when the last "IS TYPING..." frame started going out; 0 = none yet. */
+    var typingNoticeOnAirMs = 0L
+        private set
+
+    /** Easy JS8: busy for the buttons; an "IS TYPING..." frame does not grey them (the next message goes after it). */
+    fun isBusyIgnoringTypingNotice(): Boolean = if (inFlight?.typingNotice == true) false else isBusy()
+
     /**
      * Set composed message text.
      */
@@ -147,6 +174,7 @@ class TransmitViewModel(application: Application) : AndroidViewModel(application
      * Start transmitting (called when engine starts TX).
      */
     fun startTransmitting() {
+        if (inFlight?.typingNotice == true) typingNoticeOnAirMs = System.currentTimeMillis()
         engineBusy = true
         _txState.value = TransmitState.TRANSMITTING
     }

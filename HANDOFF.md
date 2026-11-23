@@ -2,6 +2,65 @@
 
 ## Next session starts here (2026-11-05): audit B sections 1-12 are fixed
 
+**State 11:40, 2026-11-23: labels stack downward, a redraw removes them (Rob; uncommitted, built 11:27, tested on S22-Fresh)**
+- Rob's choices: a label that would touch one already drawn moves down one text line (`fontSpacing`) until clear
+  (`Label.line`, first decoded keeps its place); every waterfall redraw (`replotNow`: Start, Bins Per Pixel, Gain,
+  Zero, Flatten, Palette, size) removes all labels, new decodes label again. The 23:35 notes below on "redrawn on
+  every replot" no longer hold.
+- `addLabel` clamps a signal end not reached yet (injected test decodes) to the top row's time, so the overlap check
+  matches where the label is drawn (run 3 drew an injected label over an FT8 one without it).
+- `wflabel.py` run 4: W162-W170 PASS, W171 FAIL (engine took no audio on that start, RX grey, "decoding ft8.wav"
+  with no result in 32 s; emulator slow frames); W171 alone (run 5) PASS. FT8 check now reads logcat (the Pages
+  Waterfall page has no Message Window). Screenshots: busy FT8 stacked and readable in all four layouts; injected
+  K4TYP/N1MM stack; Start up clears, the next decode labels, Start down clears.
+- Seen: labels past the right edge (not visible) still take space, so a visible label near the edge can sit several
+  lines lower with empty lines above it (Pages, `wl_G_ft8_4.png`). Rob: leave it. Labels draw over the cycle
+  line's time text.
+- Still open, Rob's decision: labels cut at the right edge.
+- Emulator and adb stopped; no test process left.
+
+**State 23:35, 2026-11-22: Label decoded signals on the waterfall (Easy JS8 only, Rob; uncommitted, built 23:29, tested on S22-Fresh)**
+- Waterfall Controls > Display > Waterfall group, under Display Decode Attempts: checkbox **Label decoded signals**
+  (`js8_wf_decode_labels`, pref `js8cfg_wf_decode_labels`, off by default; `wrap()` in `Js8WaterfallControls`
+  centres it). Unticking clears every label. Not in JS8Call.
+- Each decoded frame's own text, cut to 10 characters then "…", white, 10 dp, no box, 3 dp right of the signal's
+  right edge (JS8 offset + speed bandwidth; FT8 offset + 50 Hz), level with the row where the signal ends (decode
+  UTC slot + start delay + 79 symbols, `Js8MainFragment.signalEndMs`; FT8 slot + 13.14 s). FT8 decodes start
+  "FT8: " (Rob). Receiver `labelReceiver` in `Js8MainFragment` (ACTION_DECODE, ACTION_FT8_DECODED).
+- `WaterfallRenderer`: `Line` carries its time `t`; labels kept in `labels` (400 at most) and redrawn on every
+  replot from `rowsSince(endMs)`, dropped once older than the oldest kept line. `addLabel`, `clearLabels`, `slotMs`.
+- Tests `build-env/test/lib/wflabel.py` W162-W171 all passed (run 1: W162/W167/W168 timed out on the test, the
+  checkbox is below Scroll Speed upright and needs a page scroll; run 2 passed them). Screenshots checked: off = no
+  labels; real JS8 audio at 1500 Hz labelled level with the signal's end and scrolling with it; replot (Start up
+  and back) keeps them in place; PC, Pages, FT8Call layouts show them.
+- **Open, Rob's decision:** (1) many decodes in one slot close together overlap into unreadable text (the busy
+  FT8 WAV: about 20 labels on one row); (2) a label near the right edge is cut off (upright shows about
+  500-1750 Hz; Pages sideways about 500-1000 Hz).
+- Seen once, not repeated (`wlprobe.py`): in run 2 the upright scale changed between W164 and W165 (1000 Hz from
+  x 555 to x 620); a probe with the same steps kept Bins Per Pixel 6 and the scale. Cause not known.
+- Emulator stopped; no test process left.
+
+**State 22:00, 2026-11-22: "IS TYPING..." notice (Easy JS8 only, Rob; uncommitted, built 21:33, tested on S22-Fresh)**
+- Settings > General > Behavior, end of the Behavior group: **Send "IS TYPING..." while replying:** Off (default) /
+  Once / Every 30 / 45 / 60 seconds (`Js8SettingsSchema.TYPING_NOTICE_KEY` = `js8cfg_typing_notice`: off, once, 30,
+  45, 60). Not in JS8Call.
+- Sends `IS TYPING...` as one undirected data frame, no callsign (`EXTRA_TX_FORCE_DATA` + new
+  `EXTRA_TX_TYPING_NOTICE`; 44 JSC bits, fits every speed). Only with a callsign selected and the reply typed in
+  the Typing Box: keys, pastes and word suggestions count; text the app puts in (Saved, Directed, Reply, CQ, API,
+  Restore, Relay via) does not (`Js8MainFragment.appEdit`). First key sends one; a repeat goes that long after the
+  last one went on air, queued 2 s early (first slot at or after it: TURBO 45 = 48 s, SLOW 45 = 60 s), only if a
+  key was pressed since it went out. Send, an empty box, another or no selection, Halt, TX off, SWL end it
+  (`typingNoticeTick`, once a second). No waiting for the other station (Rob).
+- Not the last message: AGN?, Restore Previous Message and API currentMessage keep the real one; not shown in the
+  Typing Box (`txTypingNotice` in the service). It shows in the Message Window as a sent line. While it waits or
+  goes out the buttons stay usable (`TransmitViewModel.isBusyIgnoringTypingNotice`); a reply sent then goes after
+  it. Send's label shows Ready / Sending for it, as for any transmission. Receiving: a normal line (Rob).
+- Tests: `build-env/test/lib/typenote.py` W148-W161 all passed once (W161 failed first on the test: TX off has to be
+  set with **Transmitter (TX) off at startup**, startup overwrites `js8cfg_tx_enabled`). Settings drop-down and the
+  Message Window line checked on screenshots. Not tried on a phone, tablet or radio; iOS not changed (Rob: Android only).
+- **Trap:** `debug_spot_host` is no longer set on S22-Fresh (seen 2026-11-22); typenote.py turns spotting off.
+  Emulator stopped; no test process left.
+
 **State 21:00, 2026-11-22: Waterfall Controls open and close upright, as the iOS app (uncommitted, built 20:53, tested on S22-Fresh)**
 - Upright only (Rob): a tab opens the settings under the tabs; the tab already shown, tapped while open, closes
   them; a gear right of Timing (`js8_wf_gear`, `js8_map_gear` drawable tinted `js8_frame_text`) does either.

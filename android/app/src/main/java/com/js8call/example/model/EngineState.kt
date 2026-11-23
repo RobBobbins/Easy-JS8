@@ -73,7 +73,9 @@ data class TransmitMessage(
     val text: String,
     val directed: String? = null,
     val priority: Int = 0,
-    val timestamp: Long = System.currentTimeMillis()
+    val timestamp: Long = System.currentTimeMillis(),
+    /** Easy JS8: the "IS TYPING..." frame (Settings > General > Behavior), one data frame, no callsign. */
+    val typingNotice: Boolean = false
 )
 
 /**

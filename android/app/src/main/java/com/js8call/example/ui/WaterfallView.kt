@@ -121,6 +121,18 @@ class WaterfallView @JvmOverloads constructor(
         renderer?.drawHorizontalLine(color, xDp, widthDp)
     }
 
+    /** Label decoded signals: [text] right of [hz], on the row of [endMs]. */
+    fun addLabel(text: String, hz: Float, endMs: Long) {
+        renderer?.addLabel(text, hz, endMs)
+    }
+
+    fun clearLabels() {
+        renderer?.clearLabels()
+    }
+
+    /** A decode's UTC hhmmss as a time on the waterfall's clock. */
+    fun slotMs(hhmmss: Int): Long? = renderer?.slotMs(hhmmss)
+
     init {
         isClickable = true
     }

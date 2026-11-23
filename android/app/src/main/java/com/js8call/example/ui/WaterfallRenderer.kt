@@ -151,9 +151,97 @@ class WaterfallRenderer {
         pathEffect = android.graphics.DashPathEffect(floatArrayOf(2f, 2f), 0f)
     }
 
-    /** CPlotter m_replot, newest first: one drawn line, or a cycle line with its text. */
-    private class Line(val spectrum: FloatArray?, val rows: Int, val text: String?)
+    /** CPlotter m_replot, newest first: one drawn line, or a cycle line with its text; [t] = when it was drawn. */
+    private class Line(val spectrum: FloatArray?, val rows: Int, val text: String?, val t: Long = 0L)
     private val replotLines = ArrayDeque<Line>()
+
+    /**
+     * Easy JS8, Waterfall Controls > Display > Label decoded signals: [text] right of [hz], its top at [endMs],
+     * [line] text lines lower when it would touch a label already drawn (Rob 2026-11-23: stack them downward).
+     */
+    private class Label(val endMs: Long, val hz: Float, val text: String, val line: Int)
+    private val labels = ArrayDeque<Label>()
+    private val labelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE }
+
+    /** The clock the rows are stamped with (engine drift included, as the cycle line's time). */
+    private fun nowMs() = System.currentTimeMillis() + timeDriftMs
+
+    /** Rows drawn after [t]: how far down the row of that moment is now. */
+    private fun rowsSince(t: Long): Int {
+        var rows = 0
+        for (line in replotLines) {
+            if (line.t <= t) break
+            rows += line.rows
+        }
+        return rows
+    }
+
+    /** A decode's label: [text] just right of [hz] (the signal's right edge), on the row of [endMs] (its end). */
+    fun addLabel(text: String, hz: Float, end: Long) {
+        // a signal end not reached yet (a test decode stamped with the time it was sent): the label is drawn on the
+        // top row, so it counts as the top row's time, and the overlap check sees it where it is drawn
+        val endMs = replotLines.firstOrNull()?.t?.let { minOf(end, it) } ?: end
+        // the same frame decoded again (another pass): one label
+        if (labels.any { it.text == text && kotlin.math.abs(it.endMs - endMs) < 1000 && kotlin.math.abs(it.hz - hz) < 10f }) return
+        // labels older than the oldest row still kept have scrolled off the bottom
+        replotLines.lastOrNull()?.t?.let { oldest -> labels.removeAll { it.endMs < oldest } }
+        setLabelPaint()
+        val h1 = waterfallHeight()
+        val lineH = labelPaint.fontSpacing
+        val x0 = labelX(hz)
+        val x1 = x0 + labelPaint.measureText(text)
+        val top = rowsSince(endMs)
+        // the boxes of the labels already drawn: left, right, top
+        val boxes = labels.map { l -> val lx = labelX(l.hz); Triple(lx, lx + labelPaint.measureText(l.text), labelTop(l)) }
+        var line = 0
+        fun touches(y: Float) = boxes.any { (bx0, bx1, by) -> bx0 < x1 && x0 < bx1 && by < y + lineH && y < by + lineH }
+        while (top + line * lineH < h1 && touches(top + line * lineH)) line++
+        val label = Label(endMs, hz, text, line)
+        labels.addLast(label)
+        while (labels.size > 400) labels.removeFirst()
+        val c = waterfallCanvas ?: return
+        drawLabel(c, label)
+        invalidateCallback?.invoke()
+    }
+
+    private fun setLabelPaint() {
+        labelPaint.textSize = 10 * display.density.coerceAtLeast(0.1f)
+    }
+
+    /** A label's left edge: 3 dp right of its signal. */
+    private fun labelX(hz: Float): Float {
+        val dp = display.density.coerceAtLeast(0.1f)
+        return xFromFreq(hz) * dp + 3 * dp
+    }
+
+    /** A label's top: its row, then [Label.line] text lines lower. */
+    private fun labelTop(l: Label): Float = rowsSince(l.endMs) + l.line * labelPaint.fontSpacing
+
+    /** A decode's UTC hhmmss (its period's start) as a time on this clock: today, or yesterday just after midnight. */
+    fun slotMs(hhmmss: Int): Long {
+        val now = nowMs()
+        val day = 86_400_000L
+        val t = now - now % day + ((hhmmss / 10000) * 3600L + (hhmmss / 100 % 100) * 60L + hhmmss % 100) * 1000L
+        return if (t > now + 60_000L) t - day else t
+    }
+
+    /** Label decoded signals turned off: the labels go (the redraw removes them). */
+    fun clearLabels() {
+        if (labels.isEmpty()) return
+        labels.clear()
+        scheduleReplot()
+    }
+
+    private fun drawLabel(c: Canvas, l: Label) {
+        val h1 = waterfallHeight()
+        setLabelPaint()
+        val y = labelTop(l)
+        if (y >= h1) return
+        c.save()
+        c.clipRect(0, 0, width, h1)
+        c.drawText(l.text, labelX(l.hz), y + labelPaint.textSize, labelPaint)
+        c.restore()
+    }
     private val replot = Runnable { replotNow() }
 
     private fun scheduleReplot() {
@@ -210,6 +298,8 @@ class WaterfallRenderer {
             }
         }
         c.restore()
+        // Label decoded signals: a redraw removes the labels (Rob 2026-11-23); the next decodes get new ones
+        labels.clear()
         invalidateCallback?.invoke()
     }
 
@@ -242,7 +332,7 @@ class WaterfallRenderer {
                 cycleText = clock.format(java.util.Date(now)) + "    " + bandText
                 setTextSize()
                 textRows = (textPaint.fontSpacing).toInt()
-                remember(Line(null, rows, cycleText))
+                remember(Line(null, rows, cycleText, nowMs()))
             }
         }
         lastSecondInPeriod = inPeriod
@@ -386,6 +476,7 @@ class WaterfallRenderer {
         haveCommitted = false
         sAccumRuns = 0
         replotLines.clear()
+        labels.clear()
         waterfallCanvas?.drawColor(Color.BLACK)
         invalidateCallback?.invoke()
     }
@@ -480,7 +571,7 @@ class WaterfallRenderer {
             tempCanvas.drawBitmap(bitmap, Rect(0, 0, width, h1 - rows), Rect(0, rows, width, h1), null)
             waterfallCanvas?.drawBitmap(temp, Rect(0, rows, width, h1), Rect(0, rows, width, h1), null)
             for (y in 0 until rows) bitmap.setPixels(row, 0, width, 0, y, width, 1)
-            remember(Line(sCommitted.copyOf(IZ), rows, null))
+            remember(Line(sCommitted.copyOf(IZ), rows, null, nowMs()))
             // CPlotter::drawData: the text lands one font height below the green line
             if (textRows != Int.MAX_VALUE) {
                 textRows -= rows

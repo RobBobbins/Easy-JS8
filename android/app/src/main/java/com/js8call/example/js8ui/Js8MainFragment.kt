@@ -227,6 +227,7 @@ class Js8MainFragment : Fragment() {
             renderCqLabel(now)
             renderSendText(now)
             renderCallsign()
+            typingNoticeTick(now)
             ui.postDelayed(this, 1000 - now % 1000)
         }
     }
@@ -449,7 +450,7 @@ class Js8MainFragment : Fragment() {
         override fun setTypingText(text: String) {
             if (view == null || activityVm.typed.value != null) return
             activityVm.typedClearPending = false // the box was emptied already; this text stays
-            typingBox.setText(text)
+            appEdit { typingBox.setText(text) }
             typingBox.setSelection(typingBox.text.length)
         }
 
@@ -517,6 +518,10 @@ class Js8MainFragment : Fragment() {
         super.onResume()
         androidx.localbroadcastmanager.content.LocalBroadcastManager.getInstance(requireContext())
             .registerReceiver(rigErrorReceiver, android.content.IntentFilter(JS8EngineService.ACTION_RIG_ERROR))
+        androidx.localbroadcastmanager.content.LocalBroadcastManager.getInstance(requireContext())
+            .registerReceiver(labelReceiver, android.content.IntentFilter().apply {
+                addAction(JS8EngineService.ACTION_DECODE); addAction(JS8EngineService.ACTION_FT8_DECODED)
+            })
         showRigError()
         val prefs = PreferenceManager.getDefaultSharedPreferences(requireContext())
         renderCallsign()
@@ -544,6 +549,44 @@ class Js8MainFragment : Fragment() {
 
     private val rigErrorReceiver = object : android.content.BroadcastReceiver() {
         override fun onReceive(context: android.content.Context, intent: Intent) = showRigError()
+    }
+
+    /**
+     * Waterfall Controls > Display > Label decoded signals (Easy JS8, Rob 2026-11-22): each decoded frame's text,
+     * 10 characters then "…", in white right of its signal, level with the signal's end; FT8 ones start "FT8: ".
+     */
+    private val labelReceiver = object : android.content.BroadcastReceiver() {
+        override fun onReceive(context: android.content.Context, intent: Intent) {
+            if (view == null || !boolPref(Js8WaterfallDisplay.KEY_DECODE_LABELS, false)) return
+            fun short(s: String) = s.trim().let { if (it.length > 10) it.take(10).trimEnd() + "…" else it }
+            when (intent.action) {
+                JS8EngineService.ACTION_DECODE -> {
+                    val text = intent.getStringExtra(JS8EngineService.EXTRA_TEXT).orEmpty()
+                    if (text.isBlank()) return
+                    val mode = intent.getIntExtra(JS8EngineService.EXTRA_MODE, 0)
+                    val freq = intent.getFloatExtra(JS8EngineService.EXTRA_FREQ, 0f)
+                    val slot = waterfall.slotMs(intent.getIntExtra(JS8EngineService.EXTRA_UTC, 0)) ?: return
+                    waterfall.addLabel(short(text), freq + Js8Activity.bandwidthHz(mode), slot + signalEndMs(mode))
+                }
+                JS8EngineService.ACTION_FT8_DECODED -> {
+                    val text = intent.getStringExtra(JS8EngineService.EXTRA_FT8_TEXT).orEmpty()
+                    if (text.isBlank()) return
+                    val freq = intent.getFloatExtra(JS8EngineService.EXTRA_FT8_FREQ, 0f)
+                    val slot = intent.getLongExtra(JS8EngineService.EXTRA_FT8_UTC_MS, System.currentTimeMillis())
+                    // FT8: 79 symbols of 0.16 s from 0.5 s into the 15 s slot, 50 Hz wide
+                    waterfall.addLabel("FT8: " + short(text), freq + 50f, slot + 13_140L)
+                }
+            }
+        }
+    }
+
+    /** When a frame's sound ends, after its period starts: start delay + 79 symbols (commons.h). */
+    private fun signalEndMs(mode: Int): Long = when (mode) {
+        Js8Activity.SUBMODE_FAST -> 200L + 79 * 1200 * 1000L / 12000
+        Js8Activity.SUBMODE_TURBO -> 100L + 79 * 600 * 1000L / 12000
+        Js8Activity.SUBMODE_SLOW -> 500L + 79 * 3840 * 1000L / 12000
+        Js8Activity.SUBMODE_ULTRA -> 100L + 79 * 384 * 1000L / 12000
+        else -> 500L + 79 * 1920 * 1000L / 12000
     }
 
     /** PC m_rigErrorMessageBox: Retry, Configurations..., OK (Settings, radio page), Cancel (closes the program). */
@@ -587,6 +630,7 @@ class Js8MainFragment : Fragment() {
 
     override fun onPause() {
         androidx.localbroadcastmanager.content.LocalBroadcastManager.getInstance(requireContext()).unregisterReceiver(rigErrorReceiver)
+        androidx.localbroadcastmanager.content.LocalBroadcastManager.getInstance(requireContext()).unregisterReceiver(labelReceiver)
         ui.removeCallbacks(tick)
         ui.removeCallbacks(textStats)
         super.onPause()
@@ -809,7 +853,7 @@ class Js8MainFragment : Fragment() {
         // A heartbeat or reply going out while the box was empty: show its text there
         if (t != null && t.auto && typingBox.text.toString() != t.text) {
             typingBox.filters = arrayOf(pcTextFilter)
-            typingBox.setText(t.text)
+            appEdit { typingBox.setText(t.text) }
         }
         val e = typingBox.text
         e.getSpans(0, e.length, android.text.style.StrikethroughSpan::class.java).forEach { e.removeSpan(it) }
@@ -1649,15 +1693,16 @@ class Js8MainFragment : Fragment() {
     private fun addMessageText(text: String, send: Boolean, clear: Boolean = false) {
         // PC: nothing is added while a message waits or is being sent
         if (activityVm.typed.value != null) return
-        if (clear) typingBox.setText("")
-        val box = typingBox.text
-        val start = typingBox.selectionStart.coerceAtLeast(0)
-        val end = typingBox.selectionEnd.coerceAtLeast(0)
-        box.delete(minOf(start, end), maxOf(start, end))
-        val at = typingBox.selectionStart.coerceAtLeast(0)
-        val space = if (at > 0 && !box[at - 1].isWhitespace()) " " else ""
-        box.insert(at, space + text)
-        val whole = box.toString()
+        appEdit {
+            if (clear) typingBox.setText("")
+            val start = typingBox.selectionStart.coerceAtLeast(0)
+            val end = typingBox.selectionEnd.coerceAtLeast(0)
+            typingBox.text.delete(minOf(start, end), maxOf(start, end))
+            val at = typingBox.selectionStart.coerceAtLeast(0)
+            val space = if (at > 0 && !typingBox.text[at - 1].isWhitespace()) " " else ""
+            typingBox.text.insert(at, space + text)
+        }
+        val whole = typingBox.text.toString()
         val placeholder = whole.indexOf('[')
         if (clear && placeholder >= 0 && whole.indexOf(']', placeholder) > placeholder) {
             typingBox.setSelection(placeholder, whole.indexOf(']', placeholder) + 1)
@@ -1707,9 +1752,64 @@ class Js8MainFragment : Fragment() {
             return
         }
         Js8Macros.touch()
+        // "IS TYPING..." not on the air yet is dropped: the reply goes instead
+        typingNoticeReset()
         transmitVm.queueMessage(text, selectedCall?.takeIf { !text.uppercase().startsWith(it.uppercase()) })
         // PC: the message stays in the Typing Box until its last part has been sent
         activityVm.onTypedQueued(text)
+        processTxQueue()
+    }
+
+    // ---- "IS TYPING..." (Settings > General > Behavior; Easy JS8 only, Rob 2026-11-22) ----
+
+    /** Above 0 while the app itself writes into the Typing Box (menus, buttons, API): not typing. */
+    private var appTypingEdit = 0
+    private inline fun appEdit(block: () -> Unit) {
+        appTypingEdit++
+        try { block() } finally { appTypingEdit-- }
+    }
+    /** Last key, paste or word suggestion of this reply; 0 = none. */
+    private var typingKeyMs = 0L
+    /** The selected call this reply's "IS TYPING..." went to; null = none sent for this reply. */
+    private var typingNoticeCall: String? = null
+    /** When this reply's last "IS TYPING..." was queued. */
+    private var typingNoticeQueuedMs = 0L
+
+    /** The reply is over (sent, emptied, another or no call, option off, TX off): start again with the next key. */
+    private fun typingNoticeReset() {
+        typingKeyMs = 0L
+        typingNoticeCall = null
+        typingNoticeQueuedMs = 0L
+        transmitVm.removePendingTypingNotices()
+    }
+
+    /**
+     * Once a second, on each edit and on a selection change. With a callsign selected and text typed in the
+     * Typing Box: "IS TYPING..." at the first key; with Every 30 / 45 / 60 seconds, again that long after the
+     * last one went on the air, only if a key was pressed since it went out. It is queued 2 s before that time,
+     * so it goes in the first slot that starts at or after it.
+     */
+    private fun typingNoticeTick(now: Long = System.currentTimeMillis()) {
+        if (view == null) return
+        val mode = prefs().getString(Js8SettingsSchema.TYPING_NOTICE_KEY, "off") ?: "off"
+        val call = selectedCall
+        val replying = mode != "off" && call != null && activityVm.typed.value == null && typingBox.text.isNotBlank() &&
+            !listenOnly() && boolPref("js8cfg_tx_enabled", true) && prefs().getString("callsign", "").orEmpty().isNotBlank() &&
+            (typingNoticeCall == null || typingNoticeCall == call)
+        if (!replying) {
+            if (typingKeyMs != 0L || typingNoticeCall != null) typingNoticeReset()
+            return
+        }
+        if (typingKeyMs == 0L || transmitVm.hasTypingNotice()) return
+        if (typingNoticeCall != null) {
+            val every = mode.toLongOrNull() ?: return // Once
+            val onAir = transmitVm.typingNoticeOnAirMs
+            if (onAir < typingNoticeQueuedMs || typingKeyMs <= onAir) return
+            if (now < onAir + every * 1000 - 2000) return
+        }
+        typingNoticeCall = call
+        typingNoticeQueuedMs = now
+        transmitVm.queueTypingNotice(Js8SettingsSchema.TYPING_NOTICE_TEXT)
         processTxQueue()
     }
 
@@ -1869,6 +1969,9 @@ class Js8MainFragment : Fragment() {
             override fun afterTextChanged(s: android.text.Editable?) {
                 activityVm.typingBoxEmpty = s.isNullOrBlank()
                 JS8EngineService.typingBoxEmpty = s.isNullOrBlank() || activityVm.typed.value?.auto == true
+                // "IS TYPING...": keys, pastes and word suggestions count; text the app puts in does not
+                if (appTypingEdit == 0 && activityVm.typed.value == null && !s.isNullOrBlank()) typingKeyMs = System.currentTimeMillis()
+                typingNoticeTick()
                 if (activityVm.typed.value?.auto == true) return // shown by the app, not typed
                 activityVm.typed.value?.takeIf { typeaheadOpen(it) }?.let { sendTypeahead(it) }
                 Js8Macros.touch()
@@ -2163,7 +2266,7 @@ class Js8MainFragment : Fragment() {
     }
 
     private fun relayVia(call: String) {
-        if (activityVm.typed.value == null) typingBox.text.insert(0, "$call>") // PC prependMessageText
+        if (activityVm.typed.value == null) appEdit { typingBox.text.insert(0, "$call>") } // PC prependMessageText
     }
 
     /** PC Clear All Lists: asks first. */
@@ -2860,6 +2963,7 @@ class Js8MainFragment : Fragment() {
         Js8Macros.selected = heard?.let { Js8Macros.Selected(selectedCall.orEmpty(), it.snr, it.tdrift) }
         selectedCall?.let { if (it !in callSelectedTime) callSelectedTime[it] = System.currentTimeMillis() }
         requestTextStats() // the directed callsign changes the parts (PC m_txTextDirtyLastSelectedCall)
+        typingNoticeTick() // another or no selected call ends the reply
         renderModeButton() // +HB+ACK follows the selection (presentlyWantHBReplies)
         renderButtons()
     }
@@ -2872,7 +2976,8 @@ class Js8MainFragment : Fragment() {
         val v = view ?: return
         val has = selectedCall != null
         val swl = listenOnly()
-        val busy = activityVm.typed.value != null || transmitVm.isBusy()
+        // "IS TYPING..." on the air greys nothing: what is pressed goes after it
+        val busy = activityVm.typed.value != null || transmitVm.isBusyIgnoringTypingNotice()
         fun on(id: Int, enabled: Boolean) { v.findViewById<View?>(id)?.isEnabled = enabled && !swl }
         listOf(R.id.js8_btn_reply, R.id.js8_btn_snr, R.id.js8_btn_directed).forEach { on(it, has && !busy) }
         on(R.id.js8_btn_info, !busy && prefs().getString("my_info", "").orEmpty().isNotBlank())

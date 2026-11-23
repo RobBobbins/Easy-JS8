@@ -55,6 +55,8 @@ class Js8WaterfallDisplay(
         const val KEY_GAIN = "js8cfg_wf_gain"
         const val KEY_ZERO = "js8cfg_wf_zero"
         const val KEY_DECODE_ATTEMPTS = "js8cfg_wf_decode_attempts"
+        /** Easy JS8: Label decoded signals (not in JS8Call), off by default. */
+        const val KEY_DECODE_LABELS = "js8cfg_wf_decode_labels"
         const val KEY_HEIGHT = "js8cfg_wf_spec_height"
         const val KEY_GAIN2D = "js8cfg_wf_spec_gain"
         const val KEY_ZERO2D = "js8cfg_wf_spec_zero"
@@ -125,6 +127,10 @@ class Js8WaterfallDisplay(
         check(R.id.js8_wf_flatten, flatten) { flatten = it; prefs.edit().putBoolean(KEY_FLATTEN, it).apply(); apply() }
         check(R.id.js8_wf_decode_attempts, decodeAttempts) {
             decodeAttempts = it; prefs.edit().putBoolean(KEY_DECODE_ATTEMPTS, it).apply(); sendSyncStats()
+        }
+        check(R.id.js8_wf_decode_labels, prefs.getBoolean(KEY_DECODE_LABELS, false)) {
+            prefs.edit().putBoolean(KEY_DECODE_LABELS, it).apply()
+            if (!it) waterfall.clearLabels()
         }
         slider(R.id.js8_wf_gain, gain) { gain = it; save(KEY_GAIN, it) }
         slider(R.id.js8_wf_zero, zero) { zero = it; save(KEY_ZERO, it) }

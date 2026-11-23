@@ -202,6 +202,8 @@ class JS8EngineService : Service() {
     private var lastTxDirected: String = ""
     private var lastTxSubmode: Int = SUBMODE_NORMAL
     private var lastTxFrequencyHz: Double = DEFAULT_AUDIO_FREQUENCY_HZ
+    // Easy JS8: the transmission going out is the "IS TYPING..." frame (not the last message, not shown in the Typing Box)
+    private var txTypingNotice = false
     private var messageLogger: MessageLogWriter? = null
     private val heartbeatRegex = Regex("^\\s*([^:]+):\\s+@HB\\s+HEARTBEAT\\b", RegexOption.IGNORE_CASE)
     private val cqRegex = Regex("^\\s*[^:]+:\\s+(@ALLCALL\\s+)?CQ\\b", RegexOption.IGNORE_CASE)
@@ -3599,7 +3601,9 @@ class JS8EngineService : Service() {
         val txDelaySec = intent.getDoubleExtra(EXTRA_TX_DELAY_S, configuredTxDelay())
         val forceIdentify = intent.getBooleanExtra(EXTRA_TX_FORCE_IDENTIFY, false)
         val forceData = intent.getBooleanExtra(EXTRA_TX_FORCE_DATA, false)
-        val effectiveForceIdentify = (forceIdentify || callsign.isNotBlank()) && !avoidForcedIdentify()
+        // Settings > General > Behavior "IS TYPING...": a data frame, no callsign, not the last message
+        val typingNotice = intent.getBooleanExtra(EXTRA_TX_TYPING_NOTICE, false)
+        val effectiveForceIdentify = (forceIdentify || callsign.isNotBlank()) && !avoidForcedIdentify() && !typingNotice
         val payloadText = text.trim() // sent as typed, like the PC (the CQ button's CQ Message holds the grid)
 
         // Set transmit mode if configured (before queuing TX)
@@ -3614,6 +3618,7 @@ class JS8EngineService : Service() {
         )
 
         prepareEngineForTransmit(activeEngine)
+        txTypingNotice = typingNotice
         val ok = activeEngine.transmitMessage(
             text = payloadText,
             myCall = callsign,
@@ -3628,7 +3633,13 @@ class JS8EngineService : Service() {
 
         if (ok) {
             Log.i(TAG, "TX request accepted")
-            updateLastTxMessage(payloadText, directed, submode, audioFrequencyHz)
+            if (typingNotice) {
+                // AGN? and Restore Previous Message keep the last real message
+                lastTxSubmode = submode
+                lastTxFrequencyHz = audioFrequencyHz
+            } else {
+                updateLastTxMessage(payloadText, directed, submode, audioFrequencyHz)
+            }
             broadcastTxState(TX_STATE_QUEUED)
             startTxMonitor()
         } else {
@@ -3730,7 +3741,8 @@ class JS8EngineService : Service() {
             putExtra(EXTRA_TX_FRAME_TYPED_CHARS_SENT, (texts.take(index + 1).sumOf { it.length } - txTypedAdded).coerceAtLeast(0))
             // The whole message as sent, without the "CALLSIGN: ": shown in the Typing Box for messages
             // that did not come from it (heartbeats, replies; Rob, 2026-10-21: "all messages do it")
-            putExtra(EXTRA_TX_FRAME_FULL_TEXT, texts.joinToString("").drop(added).trim())
+            // "IS TYPING..." sends none: it is not put in the Typing Box or kept as the last message
+            putExtra(EXTRA_TX_FRAME_FULL_TEXT, if (txTypingNotice) "" else texts.joinToString("").drop(added).trim())
             putExtra(EXTRA_TX_OFFSET_HZ, lastTxFrequencyHz)
         }
         LocalBroadcastManager.getInstance(this).sendBroadcast(intent)
@@ -5643,6 +5655,7 @@ class JS8EngineService : Service() {
     private fun isRigPttRequired(): Boolean = rigControlMode != "none"
 
     private fun prepareEngineForTransmit(activeEngine: JS8Engine) {
+        txTypingNotice = false // set again by handleTransmitMessage for an "IS TYPING..." frame
         activeEngine.setTransmitReady(!isRigPttRequired())
     }
 
@@ -6443,6 +6456,7 @@ class JS8EngineService : Service() {
         const val EXTRA_TX_DELAY_S = "tx_delay_s"
         const val EXTRA_TX_FORCE_IDENTIFY = "tx_force_identify"
         const val EXTRA_TX_FORCE_DATA = "tx_force_data"
+        const val EXTRA_TX_TYPING_NOTICE = "tx_typing_notice"
         const val EXTRA_TX_STATE = "tx_state"
         const val EXTRA_RADIO_FREQUENCY_HZ = "radio_frequency_hz"
         const val EXTRA_MESSAGE_FROM = "message_from"

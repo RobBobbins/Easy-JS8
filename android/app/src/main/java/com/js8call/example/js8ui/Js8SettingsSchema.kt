@@ -239,6 +239,9 @@ object Js8SettingsSchema {
 
     /** Station > SWL (Listening only): no callsign needed, nothing is transmitted (Easy JS8 only). */
     const val SWL_KEY = "js8cfg_swl"
+    /** Settings > General > Behavior: "off", "once", or seconds between repeats ("30", "45", "60"). */
+    const val TYPING_NOTICE_KEY = "js8cfg_typing_notice"
+    const val TYPING_NOTICE_TEXT = "IS TYPING..."
     /** Station page holding Sideways layout, listed only sideways. */
     const val LAYOUT_PAGE = "Layout"
 
@@ -407,7 +410,11 @@ object Js8SettingsSchema {
                 check("log_messages_to_file", "Write log files (ALL.TXT, DIRECTED.TXT, etc) of decoded text", true),
                 check("js8cfg_spellcheck", "Suggest alternative word choices for more efficient message transmission", true),
                 check("js8cfg_reset_activity", "Reset the Band Activity, Call Activity, and RX history at startup", false),
-                check("js8cfg_check_updates", "Check for software updates at startup", true)
+                check("js8cfg_check_updates", "Check for software updates at startup", true),
+                // Easy JS8 only (Rob, 2026-11-22): one undirected data frame while a reply is typed to the selected call
+                choice(TYPING_NOTICE_KEY, "Send \"IS TYPING...\" while replying:", "off", listOf(
+                    "Off" to "off", "Once" to "once", "Every 30 seconds" to "30",
+                    "Every 45 seconds" to "45", "Every 60 seconds" to "60"))
             )),
             Group("Aging", listOf(
                 spin("js8cfg_callsign_aging", "Remove callsigns from call activity after:", 0, 0.0, 1440.0, suffix = " minutes", special = "Disabled"),

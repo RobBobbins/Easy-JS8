@@ -274,6 +274,10 @@
             <CheckBox android:id="@+id/js8_wf_decode_attempts" style="@style/Js8FrameText"
                 android:layout_width="wrap_content" android:layout_height="30dp"
                 android:singleLine="true" android:text="Display Decode Attempts" />
+            <!-- Easy JS8 (Rob, 2026-11-22): each decode's text, 10 characters, beside its signal -->
+            <CheckBox android:id="@+id/js8_wf_decode_labels" style="@style/Js8FrameText"
+                android:layout_width="wrap_content" android:layout_height="30dp"
+                android:singleLine="true" android:text="Label decoded signals" />
         </LinearLayout>
         <TextView style="@style/Js8GroupTitle" android:layout_width="wrap_content"
             android:layout_height="wrap_content" android:layout_marginTop="8dp" android:text="Spectrum" />

@@ -208,6 +208,7 @@ class Js8WaterfallControls(
         dropDown(R.id.js8_wf_spectrum, listOf("Current", "Cumulative", "Linear Avg"))
         field(R.id.js8_wf_smooth_box, R.id.js8_wf_smooth, "Smooth:  7")
         wrap(R.id.js8_wf_decode_attempts)
+        wrap(R.id.js8_wf_decode_labels)
         centerRow(R.id.js8_wf_height_row)
         field(R.id.js8_wf_height_box, R.id.js8_wf_height, "100 %")
         listOf(R.id.js8_wf_gain_row, R.id.js8_wf_zero_row, R.id.js8_wf_gain2d_row, R.id.js8_wf_zero2d_row).forEach { id ->

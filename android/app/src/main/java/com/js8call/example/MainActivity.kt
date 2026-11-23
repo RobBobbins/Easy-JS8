@@ -697,6 +697,11 @@ class MainActivity : AppCompatActivity() {
             action = JS8EngineService.ACTION_TRANSMIT_MESSAGE
             putExtra(JS8EngineService.EXTRA_TX_TEXT, nextMessage.text)
             nextMessage.directed?.let { putExtra(JS8EngineService.EXTRA_TX_DIRECTED, it) }
+            // "IS TYPING...": one data frame as written, no callsign added
+            if (nextMessage.typingNotice) {
+                putExtra(JS8EngineService.EXTRA_TX_FORCE_DATA, true)
+                putExtra(JS8EngineService.EXTRA_TX_TYPING_NOTICE, true)
+            }
             putExtra(JS8EngineService.EXTRA_TX_FREQ_HZ, transmitViewModel.getTxOffset().toDouble())
         }
         startService(txIntent)
