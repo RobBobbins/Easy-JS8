@@ -2,6 +2,25 @@
 
 ## Next session starts here (2026-11-05): audit B sections 1-12 are fixed
 
+**State 15:05, 2026-11-23: boxes round labelled signals, map call signs spread out (Rob; tested on S22-Fresh)**
+- Waterfall, Label decoded signals on: a white 1 dp box round each decoded frame, offset to offset + width
+  (FT8 +50 Hz), signal start row (slot + start delay, `signalStartMs`; FT8 slot + 0.5 s) to end row. Glow 3 dp
+  drawn `BOX_GLOW_PASSES` = 4 times (half the text's 8).
+- Levels, bottom to top (Rob): waterfall, cycle lines and their time, box glow, box lines, label glow, label letters.
+  A box drawn later leaves out the letters of labels already shown (`clipOutRect`, API 24-25 `Region.Op.DIFFERENCE`).
+- Found: decodes arrive with their end time ~12 s ahead of the newest row (the UTC is one period late), so `addLabel`
+  pins the end to the top row; the box start moves up by the same amount so the box keeps the frame's length
+  (the first build drew a sliver).
+- Map (`Js8MapView.drawCalls`): call signs glow 3 dp x 8 (was 2 dp once). Placed mine first, then most recently
+  heard: up-right, down-right, up-left, down-left of the dot; all taken (by a call sign, another dot, off the map,
+  under the title): the closest free spot in any direction (Rob: "spread out"), with a thin white line from the dot.
+  A dot off the map keeps its usual spot. Spot offsets cached per width (`spreadOffsets`): 49 stations draw in
+  ~3 ms (first version 97 ms).
+- Tests: `wflabel.py` run 8 W162-W171 PASS (emulator mic off with `adb emu avd hostmicoff`: live WebSDR audio made
+  W164 and the FT8 rows pass on their own in run 7); `mapchk.py` run 13 W148-W159, W165 PASS. Busy map looked at
+  with 40 injected stations T00XA-T39XD (4 per grid square), left in S22-Fresh's Call Activity.
+- Open, Rob's decision: call signs near the right edge can sit under the map's gear / + / − / Fit buttons.
+
 **State 13:10, 2026-11-23: dark glow behind the white waterfall text (Rob; built 13:0x, looked at on S22-Fresh)**
 - Decode labels and the cycle line's time text get `setShadowLayer(3 dp, black)` and are drawn `GLOW_PASSES` = 8
   times (`glowText` in `WaterfallRenderer`), so the glows stack dark. One pass was too faint, 3 passes still faint

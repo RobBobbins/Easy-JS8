@@ -121,9 +121,9 @@ class WaterfallView @JvmOverloads constructor(
         renderer?.drawHorizontalLine(color, xDp, widthDp)
     }
 
-    /** Label decoded signals: [text] right of [hz], on the row of [endMs]. */
-    fun addLabel(text: String, hz: Float, endMs: Long) {
-        renderer?.addLabel(text, hz, endMs)
+    /** Label decoded signals: [text] right of [hz], on the row of [endMs]; a box from [loHz] to [hz], [startMs] to [endMs]. */
+    fun addLabel(text: String, hz: Float, endMs: Long, loHz: Float, startMs: Long) {
+        renderer?.addLabel(text, hz, endMs, loHz, startMs)
     }
 
     fun clearLabels() {

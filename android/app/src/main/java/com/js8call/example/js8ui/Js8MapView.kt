@@ -108,8 +108,11 @@ class Js8MapView @JvmOverloads constructor(context: Context, attrs: AttributeSet
     private val dotEdge = stroke(Color.BLACK, 1.5f)
     private val myDotPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.rgb(255, 64, 64) }
     private val labelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-        color = Color.WHITE; textSize = 12 * sp; setShadowLayer(2 * dp, 0f, 0f, Color.BLACK)
+        // dark glow as on the waterfall text: 3 dp, drawn 8 times so the glows stack (Rob, 2026-11-23; was 2 dp once)
+        color = Color.WHITE; textSize = 12 * sp; setShadowLayer(3 * dp, 0f, 0f, Color.BLACK)
     }
+    /** The thin line from a dot to its call sign moved away from it (Rob, 2026-11-23). */
+    private val callLinePaint = stroke(Color.WHITE, 1f)
     private val notePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE; textSize = 13 * sp }
     // Title: white on a dark see-through strip (Rob, 2026-11-17)
     private val titlePaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -148,14 +151,16 @@ class Js8MapView @JvmOverloads constructor(context: Context, attrs: AttributeSet
 
     // ---- Stations ---------------------------------------------------------------------------
 
-    private class Station(val call: String, val grid: String, val x: Float, val y: Float, val mine: Boolean)
+    /** [heardMs]: when it was last heard (Call Activity); its call sign gets a free spot before older ones. */
+    private class Station(val call: String, val grid: String, val x: Float, val y: Float, val mine: Boolean,
+                          val heardMs: Long = Long.MAX_VALUE)
 
     private fun intPref(key: String, default: Int) = prefs.all[key]?.toString()?.toIntOrNull() ?: default
     private fun boolPref(key: String, default: Boolean) = prefs.all[key]?.toString()?.toBooleanStrictOrNull() ?: default
 
-    private fun stationAt(call: String, grid: String, mine: Boolean): Station? {
+    private fun stationAt(call: String, grid: String, mine: Boolean, heardMs: Long = Long.MAX_VALUE): Station? {
         val (lat, lon) = Js8Activity.gridToLatLon(grid) ?: return null
-        return Station(call, grid.uppercase(Locale.US), lon.toFloat(), mercY(lat).toFloat(), mine)
+        return Station(call, grid.uppercase(Locale.US), lon.toFloat(), mercY(lat).toFloat(), mine, heardMs)
     }
 
     /** My station first, then every Call Activity station with a grid inside both agings. */
@@ -173,7 +178,7 @@ class Js8MapView @JvmOverloads constructor(context: Context, attrs: AttributeSet
             if (callAging > 0 && ageMin >= callAging) return@forEach
             if (mapAging > 0 && ageMin >= mapAging) return@forEach
             if (d.call.isBlank() || d.call.uppercase(Locale.US) == myCall) return@forEach
-            stationAt(d.call.uppercase(Locale.US), d.grid, false)?.let { list += it }
+            stationAt(d.call.uppercase(Locale.US), d.grid, false, d.utcMs)?.let { list += it }
         }
         return list
     }
@@ -264,14 +269,109 @@ class Js8MapView @JvmOverloads constructor(context: Context, attrs: AttributeSet
             val x = sx(s.x); val y = sy(s.y)
             canvas.drawCircle(x, y, (if (s.mine) 5f else 4f) * dp, if (s.mine) myDotPaint else dotPaint)
             if (!s.mine) canvas.drawCircle(x, y, 4f * dp, dotEdge)
-            if (showCalls) canvas.drawText(s.call, x + 6 * dp, y - 4 * dp, labelPaint)
         }
+        if (showCalls) drawCalls(canvas, st)
         if (st.none { !it.mine }) {
             val note = if (st.isEmpty()) "No stations with a grid yet. Your grid is set in Station > General."
                 else "No stations with a grid yet."
             canvas.drawText(note, 10 * dp, height - 10 * dp, notePaint)
         }
         drawTitle(canvas)
+    }
+
+    /**
+     * Call signs that don't overlap (Rob, 2026-11-23): mine first, then the most recently heard. Each tries up-right
+     * of its dot, then down-right, up-left, down-left; a spot touching a call sign already placed or another
+     * station's dot or off the map (or under the title) is taken. All four taken: the free spot closest to the dot in
+     * any direction (Rob: "spread out"), with a thin line from the dot. Lines under the call signs.
+     */
+    private fun drawCalls(canvas: Canvas, st: List<Station>) {
+        val fm = labelPaint.fontMetrics
+        val h = fm.descent - fm.ascent
+        val gap = 2 * dp
+        val top0 = titleHeight() // under the title's strip
+        val n = st.size
+        val dx = FloatArray(n) { sx(st[it].x) }
+        val dy = FloatArray(n) { sy(st[it].y) }
+        val dotR = 5 * dp
+        // placed call signs as left, top, right, bottom
+        val placed = FloatArray(n * 4)
+        var nPlaced = 0
+        val callLeft = FloatArray(n)
+        val callTop = FloatArray(n)
+        val lines = ArrayList<FloatArray>()
+        val near = FloatArray(n * 8)
+        st.indices.sortedWith(compareByDescending<Int> { st[it].mine }.thenByDescending { st[it].heardMs }).forEach { i ->
+            val x = dx[i]; val y = dy[i]
+            val w = labelPaint.measureText(st[i].call)
+            // only what is near this dot can be in the way of its call sign: placed call signs, other dots
+            val rl = x - 170 * dp - w; val rr = x + 170 * dp + w; val rt = y - 150 * dp; val rb = y + 150 * dp
+            var nn = 0
+            for (k in 0 until nPlaced) {
+                val l = placed[k * 4]; val t = placed[k * 4 + 1]; val r = placed[k * 4 + 2]; val b = placed[k * 4 + 3]
+                if (l < rr && r > rl && t < rb && b > rt) { near[nn++] = l; near[nn++] = t; near[nn++] = r; near[nn++] = b }
+            }
+            for (k in 0 until n) {
+                if (k == i) continue
+                val l = dx[k] - dotR; val t = dy[k] - dotR; val r = dx[k] + dotR; val b = dy[k] + dotR
+                if (l < rr && r > rl && t < rb && b > rt) { near[nn++] = l; near[nn++] = t; near[nn++] = r; near[nn++] = b }
+            }
+            fun ok(l: Float, t: Float): Boolean {
+                if (l < 0 || l + w > width || t < top0 || t + h > height) return false
+                val gl = l - gap; val gt = t - gap; val gr = l + w + gap; val gb = t + h + gap
+                var k = 0
+                while (k < nn) {
+                    if (near[k] < gr && near[k + 2] > gl && near[k + 1] < gb && near[k + 3] > gt) return false
+                    k += 4
+                }
+                return true
+            }
+            val up = y - 4 * dp - h
+            val down = y + 4 * dp
+            val right = x + 6 * dp
+            val left = x - 6 * dp - w
+            val spots = floatArrayOf(right, up, right, down, left, up, left, down)
+            // a dot off the map: its call sign stays in its usual place (off the map too), not pulled onto the edge
+            val onMap = x >= 0 && x <= width && y >= 0 && y <= height
+            var cl = right; var ct = up
+            var found = !onMap
+            if (onMap) for (k in 0 until 4) if (ok(spots[k * 2], spots[k * 2 + 1])) {
+                cl = spots[k * 2]; ct = spots[k * 2 + 1]; found = true; break
+            }
+            if (!found) {
+                // spread out (Rob): the free spot closest to the dot in any direction, with a thin line to it
+                val offs = spreadOffsets(w, h)
+                var k = 0
+                while (k < offs.size) {
+                    if (ok(x + offs[k], y + offs[k + 1])) { found = true; cl = x + offs[k]; ct = y + offs[k + 1]; break }
+                    k += 2
+                }
+                if (found) lines += floatArrayOf(x, y, x.coerceIn(cl, cl + w), y.coerceIn(ct, ct + h))
+                else { cl = right; ct = up } // no free spot on the map: its usual place
+            }
+            placed[nPlaced * 4] = cl; placed[nPlaced * 4 + 1] = ct; placed[nPlaced * 4 + 2] = cl + w; placed[nPlaced * 4 + 3] = ct + h
+            nPlaced++
+            callLeft[i] = cl; callTop[i] = ct
+        }
+        lines.forEach { canvas.drawLine(it[0], it[1], it[2], it[3], callLinePaint) }
+        for (i in 0 until n) repeat(8) { canvas.drawText(st[i].call, callLeft[i], callTop[i] - fm.ascent, labelPaint) }
+    }
+
+    /** Spots round a dot for a call sign [w] wide, as left/top from the dot, closest first; worked out once per width. */
+    private val spreadCache = HashMap<Int, FloatArray>()
+    private fun spreadOffsets(w: Float, h: Float): FloatArray = spreadCache.getOrPut(w.toInt()) {
+        val stepX = 6 * dp
+        val stepY = h / 2
+        val dotR = 5 * dp
+        val list = ArrayList<FloatArray>()
+        for (j in -25..25) for (k in -16..16) {
+            val l = -w / 2 + j * stepX
+            val t = -h / 2 + k * stepY
+            if (l < dotR && l + w > -dotR && t < dotR && t + h > -dotR) continue // on its own dot
+            list += floatArrayOf(hypot(0f.coerceIn(l, l + w), 0f.coerceIn(t, t + h)), l, t)
+        }
+        list.sortBy { it[0] }
+        FloatArray(list.size * 2) { if (it % 2 == 0) list[it / 2][1] else list[it / 2][2] }
     }
 
     /**

@@ -566,7 +566,8 @@ class Js8MainFragment : Fragment() {
                     val mode = intent.getIntExtra(JS8EngineService.EXTRA_MODE, 0)
                     val freq = intent.getFloatExtra(JS8EngineService.EXTRA_FREQ, 0f)
                     val slot = waterfall.slotMs(intent.getIntExtra(JS8EngineService.EXTRA_UTC, 0)) ?: return
-                    waterfall.addLabel(short(text), freq + Js8Activity.bandwidthHz(mode), slot + signalEndMs(mode))
+                    waterfall.addLabel(short(text), freq + Js8Activity.bandwidthHz(mode), slot + signalEndMs(mode),
+                        freq, slot + signalStartMs(mode))
                 }
                 JS8EngineService.ACTION_FT8_DECODED -> {
                     val text = intent.getStringExtra(JS8EngineService.EXTRA_FT8_TEXT).orEmpty()
@@ -574,7 +575,7 @@ class Js8MainFragment : Fragment() {
                     val freq = intent.getFloatExtra(JS8EngineService.EXTRA_FT8_FREQ, 0f)
                     val slot = intent.getLongExtra(JS8EngineService.EXTRA_FT8_UTC_MS, System.currentTimeMillis())
                     // FT8: 79 symbols of 0.16 s from 0.5 s into the 15 s slot, 50 Hz wide
-                    waterfall.addLabel("FT8: " + short(text), freq + 50f, slot + 13_140L)
+                    waterfall.addLabel("FT8: " + short(text), freq + 50f, slot + 13_140L, freq, slot + 500L)
                 }
             }
         }
@@ -587,6 +588,13 @@ class Js8MainFragment : Fragment() {
         Js8Activity.SUBMODE_SLOW -> 500L + 79 * 3840 * 1000L / 12000
         Js8Activity.SUBMODE_ULTRA -> 100L + 79 * 384 * 1000L / 12000
         else -> 500L + 79 * 1920 * 1000L / 12000
+    }
+
+    /** When a frame's sound starts, after its period starts: the start delay (commons.h), as in [signalEndMs]. */
+    private fun signalStartMs(mode: Int): Long = when (mode) {
+        Js8Activity.SUBMODE_FAST -> 200L
+        Js8Activity.SUBMODE_TURBO, Js8Activity.SUBMODE_ULTRA -> 100L
+        else -> 500L
     }
 
     /** PC m_rigErrorMessageBox: Retry, Configurations..., OK (Settings, radio page), Cancel (closes the program). */

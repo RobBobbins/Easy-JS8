@@ -44,6 +44,8 @@ class WaterfallRenderer {
         private const val TICK_MS = 33L
         /** Easy JS8: how many times the white waterfall text is drawn, so its glows stack darker (Rob, 2026-11-23). */
         private const val GLOW_PASSES = 8
+        /** The box lines' glow: half the text's (Rob, 2026-11-23). */
+        private const val BOX_GLOW_PASSES = 4
         /** dataSink nch: Smooth 1..7 -> smoothing width. */
         private val NCH = intArrayOf(1, 2, 4, 9, 18, 36, 72)
 
@@ -161,9 +163,11 @@ class WaterfallRenderer {
      * Easy JS8, Waterfall Controls > Display > Label decoded signals: [text] right of [hz], its top at [endMs],
      * [line] text lines lower when it would touch a label already drawn (Rob 2026-11-23: stack them downward).
      */
-    private class Label(val endMs: Long, val hz: Float, val text: String, val line: Int)
+    private class Label(val endMs: Long, val hz: Float, val text: String, val line: Int, val loHz: Float, val startMs: Long)
     private val labels = ArrayDeque<Label>()
     private val labelPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.WHITE }
+    /** The box round a labelled signal: white, 1 dp, the text's dark glow at half strength (Rob, 2026-11-23). */
+    private val boxPaint = Paint().apply { color = Color.WHITE; style = Paint.Style.STROKE }
 
     /** The clock the rows are stamped with (engine drift included, as the cycle line's time). */
     private fun nowMs() = System.currentTimeMillis() + timeDriftMs
@@ -178,12 +182,16 @@ class WaterfallRenderer {
         return rows
     }
 
-    /** A decode's label: [text] just right of [hz] (the signal's right edge), on the row of [endMs] (its end). */
-    fun addLabel(text: String, hz: Float, end: Long) {
+    /**
+     * A decode's label: [text] just right of [hz] (the signal's right edge), on the row of [endMs] (its end); a box
+     * round the signal from [loHz] to [hz], from the row of [start] (its start) to the row of its end.
+     */
+    fun addLabel(text: String, hz: Float, end: Long, loHz: Float, start: Long) {
         // a signal end not reached yet (a test decode stamped with the time it was sent): the label is drawn on the
         // top row, so it counts as the top row's time, and the overlap check sees it where it is drawn
         val endMs = replotLines.firstOrNull()?.t?.let { minOf(end, it) } ?: end
-        // the same frame decoded again (another pass): one label
+        // the box keeps the frame's whole length: its start moves up by as much as its end did
+        val startMs = start - (end - endMs)        // the same frame decoded again (another pass): one label
         if (labels.any { it.text == text && kotlin.math.abs(it.endMs - endMs) < 1000 && kotlin.math.abs(it.hz - hz) < 10f }) return
         // labels older than the oldest row still kept have scrolled off the bottom
         replotLines.lastOrNull()?.t?.let { oldest -> labels.removeAll { it.endMs < oldest } }
@@ -198,7 +206,7 @@ class WaterfallRenderer {
         var line = 0
         fun touches(y: Float) = boxes.any { (bx0, bx1, by) -> bx0 < x1 && x0 < bx1 && by < y + lineH && y < by + lineH }
         while (top + line * lineH < h1 && touches(top + line * lineH)) line++
-        val label = Label(endMs, hz, text, line)
+        val label = Label(endMs, hz, text, line, loHz, startMs)
         labels.addLast(label)
         while (labels.size > 400) labels.removeFirst()
         val c = waterfallCanvas ?: return
@@ -242,12 +250,38 @@ class WaterfallRenderer {
     private fun drawLabel(c: Canvas, l: Label) {
         val h1 = waterfallHeight()
         setLabelPaint()
+        val dp = display.density.coerceAtLeast(0.1f)
         val y = labelTop(l)
-        if (y >= h1) return
+        val boxTop = rowsSince(l.endMs).toFloat()
+        if (boxTop >= h1) return
+        // levels, bottom to top (Rob, 2026-11-23): waterfall, cycle lines and their time, box glow, box lines, label
+        // glow, label letters
+        // the box round the signal: left edge to right edge, its end row (top) to its start row (bottom)
+        val box = android.graphics.RectF(xFromFreq(l.loHz) * dp, boxTop, xFromFreq(l.hz) * dp, rowsSince(l.startMs).toFloat())
+        val pad = 4 * dp // the line, its glow
         c.save()
         c.clipRect(0, 0, width, h1)
-        c.glowText(l.text, labelX(l.hz), y + labelPaint.textSize, labelPaint)
+        // the labels already shown stay on top: the box leaves out their letters
+        for (o in labels) {
+            if (o === l) continue
+            val ox = labelX(o.hz)
+            val oy = labelTop(o)
+            val r = android.graphics.RectF(ox, oy, ox + labelPaint.measureText(o.text), oy + labelPaint.fontSpacing)
+            if (r.intersects(box.left - pad, box.top - pad, box.right + pad, box.bottom + pad)) {
+                if (android.os.Build.VERSION.SDK_INT >= 26) c.clipOutRect(r)
+                else @Suppress("DEPRECATION") c.clipRect(r, android.graphics.Region.Op.DIFFERENCE)
+            }
+        }
+        boxPaint.strokeWidth = dp
+        boxPaint.setShadowLayer(3 * dp, 0f, 0f, Color.BLACK)
+        repeat(BOX_GLOW_PASSES) { c.drawRect(box, boxPaint) }
         c.restore()
+        if (y < h1) {
+            c.save()
+            c.clipRect(0, 0, width, h1)
+            c.glowText(l.text, labelX(l.hz), y + labelPaint.textSize, labelPaint)
+            c.restore()
+        }
     }
     private val replot = Runnable { replotNow() }
 
