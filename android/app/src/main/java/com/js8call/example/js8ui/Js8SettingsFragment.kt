@@ -522,8 +522,10 @@ class Js8SettingsFragment : Fragment() {
         val col = column().apply { setPadding(px(10), px(4), px(10), px(16)) }
         // Sideways: the list's title or the page's name in the top row, centred (Rob, 2026-10-21)
         titleView?.text = if (page == ABOUT_PAGE) "About Easy JS8" else page ?: "Station Settings"
-        // Upright About: no OK / Cancel, ← Back leaves it (Rob, 2026-11-24)
-        okBar?.visibility = if (page == ABOUT_PAGE && !sideways) View.GONE else View.VISIBLE
+        // Upright About and the sideways page list: no OK / Cancel, ← Back leaves them; the list's 5 rows then
+        // fit (Rob, 2026-11-24)
+        // Upright page list too (Rob, 2026-11-24)
+        okBar?.visibility = if ((page == ABOUT_PAGE && !sideways) || page == null) View.GONE else View.VISIBLE
         fun pageButton(name: String) = LinearLayout(requireContext()).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -540,11 +542,14 @@ class Js8SettingsFragment : Fragment() {
             }
         }
         if (page == null && sideways) {
+            // Centred list: 10 dp above, 4 dp + the last row's 6 dp below (Rob, 2026-11-24)
+            col.setPadding(px(10), px(10), px(10), px(4))
             // 3 across, so all pages show without scrolling; 180 dp each, centred (Rob, 2026-10-20)
             pages.chunked(3).forEach { three ->
                 col.addView(LinearLayout(requireContext()).apply {
                     orientation = LinearLayout.HORIZONTAL
-                    for (i in 0 until 3) addView(three.getOrNull(i)?.let { pageButton(it) } ?: View(requireContext()),
+                    // Space, not View: an empty View takes the spare height and the list can't centre
+                    for (i in 0 until 3) addView(three.getOrNull(i)?.let { pageButton(it) } ?: android.widget.Space(requireContext()),
                         LinearLayout.LayoutParams(px(180), ViewGroup.LayoutParams.WRAP_CONTENT).apply {
                             marginStart = px(if (i == 0) 0 else 4); marginEnd = px(if (i == 2) 0 else 4)
                         })
@@ -554,6 +559,8 @@ class Js8SettingsFragment : Fragment() {
                 })
             }
         } else if (page == null) {
+            // Centred list: 4 dp + the title's 10 dp above, the last row's 6 dp + 8 dp below (Rob, 2026-11-24)
+            col.setPadding(px(10), px(4), px(10), px(8))
             // Title centred over the page list (Rob, 2026-10-19)
             col.addView(label("Station Settings", size = 1.2f, bold = true).apply {
                 setPadding(0, px(10), 0, px(10))
@@ -583,7 +590,8 @@ class Js8SettingsFragment : Fragment() {
         }
         content.addView(ScrollView(requireContext()).apply {
             // About: centred top to bottom when it fits, scrolls from the top when not (Rob, 2026-10-31)
-            if (page == ABOUT_PAGE) {
+            // Page list, sideways and upright: centred top to bottom too (Rob, 2026-11-24)
+            if (page == ABOUT_PAGE || page == null) {
                 isFillViewport = true
                 col.gravity = Gravity.CENTER_VERTICAL
             }
