@@ -2,6 +2,28 @@
 
 ## Next session starts here (2026-11-05): audit B sections 1-12 are fixed
 
+**State 13:10, 2026-11-24: js8core-plus decoder in Easy JS8 (Rob; uncommitted, built 12:31, tested on S22-Fresh)**
+- Rob: replace the old decoder outright (no switch), callsign hints on, Deep as a Settings option only.
+- `core/src/decoder/legacy_decoder.cpp` is now js8core-plus (RobBobbins/JS8Core commit `6012b1e`, folder
+  `E:\new-w3bguru-websites\js8core-new`), with `ldpc.cpp`, `ldpc.hpp`, `decoder_tables.hpp`, `JS8CORE-LICENSE.txt`
+  (MIT), `vendor/pocketfft/pocketfft_hdronly.h` (BSD). Same `legacy_decode` / `legacy_encode` entry points, so the
+  engine is unchanged apart from Deep and hints. The 2026-10-31 PC 3.0.3 stages (`FrequencyTracker.*`,
+  `whitening_processor.h`, `soft_combiner.h`, `ldpc_feedback.h`) are out of the build; the files are still on disk.
+- `compat/numbers.hpp`: alias `js8core::compat::numbers` (the plus decoder's name). `decoder_state.hpp`: `params.deep`,
+  `hint_own_call`, `hint_heard_calls`. `engine.hpp/.cpp`: `set_deep_decoding`, `set_my_call`,
+  `core/src/engine/callsign_hints.hpp` (from plus) filled before each decode, fed by each decode.
+- JNI `nativeSetDeepDecoding`, `nativeSetMyCall`; `JS8Engine.setDeepDecoding / setMyCall`;
+  `JS8EngineService.applyDecoderSettings` at engine start and on `js8cfg_deep_decoding` / `callsign` changes
+  (log line "Decoder: deep=… hints call=…").
+- Settings window > Operation, under MULTI: **Enable Deep Decoding (+2% decodes, more errors, 2x decode time)**
+  (`Js8SettingsSchema.DEEP_DECODING_KEY` = `js8cfg_deep_decoding`, off). Not in the speed button menu, no +DEEP (Rob).
+  Upright the label wraps to 2 lines. `website/help/settings.html` has the measured figures; Rob uploads it.
+- Tests W177-W180 (`build-env/test/lib/decchk.py`, results `decchk.{old,new,deep}.json`): see TEST-CHECKLIST.
+  Old against new on the same made-up signals: -20 dB 4 → 23 of 24, -21 dB 1 → 4, -22 dB 0 → 5, 0 wrong; Deep
+  -21 dB 12 of 24. Longest Normal decode pass on the emulator: old 0.9 s, new 1.9 s, Deep 2.7 s. Not tried on a
+  phone, real HF audio or a radio. Hints decoding a weak frame to the own call not tested.
+- S22-Fresh left with Deep off. Emulator and adb stopped; no test process left.
+
 **State 16:45, 2026-11-23: Hold PTT greyed when it can't work (Easy JS8 only, Rob; uncommitted, built 16:35, tested on S22-Fresh)**
 - Station > Radio > Rig Options > Advanced, **Hold PTT between frames**: greyed (keeps its tick) with Rig None, or a
   Hamlib rig with PTT Method VOX (`active` on `js8cfg_hold_ptt` in `Js8SettingsSchema`). RTS PTT, truSDX, QMX and

@@ -350,6 +350,16 @@ class JS8Engine private constructor(
         withNativeHandle { nativeSetAutoSync(it, enabled) }
     }
 
+    /** Settings > Operation > Enable Deep Decoding: js8core-plus Deep mode, from the next decode. */
+    fun setDeepDecoding(enabled: Boolean) {
+        withNativeHandle { nativeSetDeepDecoding(it, enabled) }
+    }
+
+    /** The station callsign, for the decoder's callsign hints (frames to this callsign). */
+    fun setMyCall(callsign: String) {
+        withNativeHandle { nativeSetMyCall(it, callsign) }
+    }
+
     /** Decoder range in Hz and the offset whose candidates are tried first. */
     fun setDecodeRange(lowHz: Int, highHz: Int, offsetHz: Int) {
         withNativeHandle { nativeSetDecodeRange(it, lowHz, highHz, offsetHz) }
@@ -472,6 +482,8 @@ class JS8Engine private constructor(
     private external fun nativeSetTimeDriftMs(handle: Long, driftMs: Long)
     private external fun nativeGetTimeDriftMs(handle: Long): Long
     private external fun nativeSetAutoSync(handle: Long, enabled: Boolean)
+    private external fun nativeSetDeepDecoding(handle: Long, enabled: Boolean)
+    private external fun nativeSetMyCall(handle: Long, callsign: String)
     private external fun nativeSetDecodeRange(handle: Long, lowHz: Int, highHz: Int, offsetHz: Int)
     private external fun nativeSetSyncStats(handle: Long, enabled: Boolean)
 

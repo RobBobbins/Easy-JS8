@@ -161,6 +161,16 @@ public:
   // PC decoder range (mainwindow.cpp decode): filter limits, or 0-5000 Hz with the filter off;
   // candidates nearest the offset are tried first.
   virtual void set_decode_range(int /*low_hz*/, int /*high_hz*/, int /*offset_hz*/) {}
+  // Settings > Operation > Enable Deep Decoding (Easy JS8, off by default): the js8core-plus
+  // decoder steps that find more weak signals at a measured higher risk of wrong messages, and
+  // take more time. Applies from the next decode.
+  virtual void set_deep_decoding(bool /*enabled*/) {}
+  // Callsign hints (js8core-plus). A weak directed frame that fails normal decoding is tried
+  // again with its callsigns assumed: to this callsign, and from a station heard in the last
+  // kHintHeardMinutes. Heard stations are collected from decoded frames by the engine. Empty,
+  // or a compound callsign such as "VE3/N0OWN", turns the own-callsign hints off.
+  static constexpr int kHintHeardMinutes = 10;
+  virtual void set_my_call(std::string const& /*callsign*/) {}
 
   // Positive = engine clock ahead of system clock; takes effect at the next captured buffer.
   virtual void set_time_drift_ms(std::int64_t drift_ms) = 0;

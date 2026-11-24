@@ -356,6 +356,7 @@ class JS8EngineService : Service() {
             dialChanged()
         }
         if (key in DECODE_RANGE_PREFS) applyDecodeRange()
+        if (key == PREF_DEEP_DECODING || key == "callsign") applyDecoderSettings()
         if (key == PREF_OUT_ATTENUATION) onOutAttenuationChanged()
         if (key == "js8cfg_output_channel") applyTxOutput()
         if (key == "js8cfg_input_channel") restartAudioCapture()
@@ -1091,6 +1092,7 @@ class JS8EngineService : Service() {
                     .sendBroadcast(Intent(ACTION_AUTO_DRIFT).putExtra(EXTRA_AUTO_DRIFT_ON, autoDriftOn))
                 engine?.setSyncStats(syncStatsOn)
                 applyDecodeRange()
+                applyDecoderSettings()
 
                 if (rigControlMode == "trusdx_serial") {
                     Log.i(TAG, "TruSDX mode active: skipping microphone capture")
@@ -2572,6 +2574,19 @@ class JS8EngineService : Service() {
         val high = if (filter) (center + width / 2).coerceIn(0, 5000) else 5000
         val offset = prefs.getString("js8cfg_tx_offset", null)?.toFloatOrNull()?.toInt() ?: 1500
         engine?.setDecodeRange(low, high, offset)
+    }
+
+    /**
+     * js8core-plus decoder: Settings > Operation > Enable Deep Decoding, and the station callsign for
+     * the callsign hints (weak frames to this callsign are tried again with it assumed).
+     */
+    private fun applyDecoderSettings() {
+        val prefs = PreferenceManager.getDefaultSharedPreferences(this)
+        val deep = runCatching { prefs.getBoolean(PREF_DEEP_DECODING, false) }.getOrDefault(false)
+        val callsign = prefs.getString("callsign", "")?.trim().orEmpty().uppercase()
+        engine?.setDeepDecoding(deep)
+        engine?.setMyCall(callsign)
+        Log.i(TAG, "Decoder: deep=${if (deep) "on" else "off"} hints call=${callsign.ifEmpty { "(none)" }}")
     }
 
     private fun setAutoDrift(on: Boolean, stopAfter: Int) {
@@ -6477,6 +6492,7 @@ class JS8EngineService : Service() {
         const val PREF_SWL = "js8cfg_swl"
         /** Settings > Operation: MULTI (default on), HB and ACK (default off), as the PC Mode menu. */
         const val PREF_MULTI = "js8cfg_multi"
+        const val PREF_DEEP_DECODING = "js8cfg_deep_decoding"
         const val PREF_HB = "js8cfg_hb"
         const val PREF_HB_ACK = "js8cfg_hb_ack"
         const val RIG_MODE_USB = "USB"

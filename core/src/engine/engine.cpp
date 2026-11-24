@@ -32,6 +32,7 @@
 #include "js8core/protocol/varicode.hpp"
 #include "js8core/types.hpp"
 #include "js8core/tx/modulator.hpp"
+#include "callsign_hints.hpp"
 
 namespace js8core {
 
@@ -465,6 +466,8 @@ public:
   void set_sync_stats(bool enabled) override { sync_stats_.store(enabled); }
 
   void set_auto_sync(bool enabled) override { auto_sync_.store(enabled); }
+  void set_deep_decoding(bool enabled) override { deep_decoding_.store(enabled); }
+  void set_my_call(std::string const& callsign) override { hints_.set_own(callsign); }
   void set_decode_range(int low_hz, int high_hz, int offset_hz) override {
     decode_low_hz_.store(low_hz);
     decode_high_hz_.store(high_hz);
@@ -648,6 +651,7 @@ public:
       decode_state_.params.utc = utc_tm.tm_hour * 10000 + utc_tm.tm_min * 100 + utc_tm.tm_sec;
       decode_state_.params.newdat = true;
       decode_state_.params.syncStats = sync_stats_.load();
+      decode_state_.params.deep = deep_decoding_.load();
       decode_state_.params.nfa = decode_low_hz_.load();
       decode_state_.params.nfb = decode_high_hz_.load();
       decode_state_.params.nfqso = decode_offset_hz_.load();
@@ -1222,6 +1226,8 @@ public:
     bool decode_stop_{false};
     std::atomic<bool> sync_stats_{false};
     std::atomic<bool> auto_sync_{false};
+    std::atomic<bool> deep_decoding_{false};
+    CallsignHints hints_;
     std::atomic<int> decode_low_hz_{500};
     std::atomic<int> decode_high_hz_{2500};
     std::atomic<int> decode_offset_hz_{1500};
@@ -1391,8 +1397,10 @@ public:
           callbacks_.on_log(LogLevel::Info, log_msg);
         }
 
+        hints_.fill(task, std::chrono::steady_clock::now());
         std::size_t decode_count = legacy_decode(task, [this, &task](events::Variant const& ev) {
           if (auto const* d = std::get_if<events::Decoded>(&ev)) {
+            hints_.note(*d, std::chrono::steady_clock::now());
             auto out = *d;
             out.drift_ms = compute_drift_estimate(task, out);
             out.capture_drift_ms = task.drift_ms_at_capture;

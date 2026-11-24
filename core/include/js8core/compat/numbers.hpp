@@ -55,3 +55,6 @@
     inline constexpr T phi_v        = static_cast<T>(phi);
   }
 #endif
+
+// js8core-plus decoder (legacy_decoder.cpp) names the constants js8core::compat::numbers.
+namespace js8core::compat { namespace numbers = std::numbers; }

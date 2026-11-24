@@ -253,6 +253,8 @@ object Js8SettingsSchema {
         // The rest of the PC Mode menu (Rob, 2026-10-19). Same keys the engine reads.
         Section("Operation", null, listOf(
             check(MULTI_KEY, MULTI_LABEL, true),
+            // js8core-plus Deep mode (Easy JS8 only, Rob 2026-11-24); not in the PC, not in the mode menu
+            check(DEEP_DECODING_KEY, DEEP_DECODING_LABEL, false),
             check(AUTOREPLY_KEY, autoreplyLabel(confirm), false),
             check(HB_KEY, HB_LABEL, false),
             // PC prepareHeartbeatMode: enabled only with HB and AUTO
@@ -320,6 +322,9 @@ object Js8SettingsSchema {
     const val BAND_TABLE_UPRIGHT = "band_upright"
     const val MULTI_KEY = "js8cfg_multi"
     const val MULTI_LABEL = "Enable Simultaneous Decoding of All Speeds (MULTI)"
+    /** Settings > Operation (Easy JS8 only): the engine reads it (JS8EngineService.PREF_DEEP_DECODING). */
+    const val DEEP_DECODING_KEY = "js8cfg_deep_decoding"
+    const val DEEP_DECODING_LABEL = "Enable Deep Decoding (+2% decodes, more errors, 2x decode time)"
     const val AUTOREPLY_CONFIRM_KEY = "js8cfg_autoreply_confirmation"
     const val HB_LABEL = "Enable Heartbeat Networking (HB)"
     const val HB_ACK_LABEL = "Enable Heartbeat Acknowledgments (ACK)"
