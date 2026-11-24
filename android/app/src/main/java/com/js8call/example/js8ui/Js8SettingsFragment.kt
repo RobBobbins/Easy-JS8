@@ -222,6 +222,8 @@ class Js8SettingsFragment : Fragment() {
     private val font by lazy { ResourcesCompat.getFont(requireContext(), R.font.selawik) }
     /** Sideways Station: page name beside ← Back. */
     private var titleView: TextView? = null
+    /** OK / Cancel row; upright About hides it (Rob, 2026-11-24). */
+    private var okBar: View? = null
     // Settings window: 12 dp, the PC's 9 pt Segoe UI (Rob, 2026-10-20); Station keeps 14.3 dp
     private val textPx get() = resources.getDimension(R.dimen.js8_text) * (if (!station) 12f / 14.3f else 1f)
     private fun color(id: Int) = ContextCompat.getColor(requireContext(), id)
@@ -302,6 +304,7 @@ class Js8SettingsFragment : Fragment() {
         // Settings window: Save (Rob, 2026-10-19); Station keeps the PC's OK
         bar.addView(button(if (station) "OK" else "Save") { onOk() }, LinearLayout.LayoutParams(px(64), px(30)))
         bar.addView(button("Cancel") { onCancel() }, LinearLayout.LayoutParams(px(64), px(30)).apply { marginStart = px(8) })
+        okBar = bar
         if (!barOnTop) root.addView(bar)
         else if (station) header?.addView(bar, FrameLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT,
             ViewGroup.LayoutParams.WRAP_CONTENT, Gravity.END or Gravity.CENTER_VERTICAL))
@@ -519,6 +522,8 @@ class Js8SettingsFragment : Fragment() {
         val col = column().apply { setPadding(px(10), px(4), px(10), px(16)) }
         // Sideways: the list's title or the page's name in the top row, centred (Rob, 2026-10-21)
         titleView?.text = if (page == ABOUT_PAGE) "About Easy JS8" else page ?: "Station Settings"
+        // Upright About: no OK / Cancel, ← Back leaves it (Rob, 2026-11-24)
+        okBar?.visibility = if (page == ABOUT_PAGE && !sideways) View.GONE else View.VISIBLE
         fun pageButton(name: String) = LinearLayout(requireContext()).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
