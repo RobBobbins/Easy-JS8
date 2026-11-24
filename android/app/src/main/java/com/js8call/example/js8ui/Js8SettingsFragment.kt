@@ -641,6 +641,8 @@ class Js8SettingsFragment : Fragment() {
         line("JS8Call-improved team: AC9KH, W6BAZ, KJ4CTD, K0OG, DJ3EI, K4RWR, KN4CRD", top = 6)
         line("JS8Android: https://github.com/JS8Call-improved/Android-port", top = 6)
         line("ft8_lib (FT8 decodes): Kārlis Goba, MIT licence", top = 6)
+        line("js8core-plus (JS8 decoder): Kelly-Shane Fuller, VA3OSO, MIT licence", top = 6)
+        line("pocketfft: Max-Planck-Society, BSD licence", top = 6)
         line("Fonts: Selawik, Cascadia Mono (SIL Open Font Licence)", top = 6)
     }
 

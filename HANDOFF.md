@@ -2,7 +2,14 @@
 
 ## Next session starts here (2026-11-05): audit B sections 1-12 are fixed
 
-**State 13:10, 2026-11-24: js8core-plus decoder in Easy JS8 (Rob; uncommitted, built 12:31, tested on S22-Fresh)**
+**State 13:20, 2026-11-24: old decoder files deleted, About credits (Rob; uncommitted, built 13:17, tested on S22-Fresh)**
+- Deleted (git rm) `core/src/decoder/FrequencyTracker.cpp`, `FrequencyTracker.h`, `whitening_processor.h`,
+  `soft_combiner.h`, `ldpc_feedback.h`: nothing used them after eb960bd4. Old versions in git history (4d4ed6af).
+- About Credits, under ft8_lib (`Js8SettingsFragment.renderAbout`): "js8core-plus (JS8 decoder): Kelly-Shane Fuller,
+  VA3OSO, MIT licence", "pocketfft: Max-Planck-Society, BSD licence". W181 passed upright and PC sideways.
+- Emulator and adb stopped; no test process left.
+
+**State 13:10, 2026-11-24: js8core-plus decoder in Easy JS8 (commit eb960bd4, pushed) (Rob; uncommitted, built 12:31, tested on S22-Fresh)**
 - Rob: replace the old decoder outright (no switch), callsign hints on, Deep as a Settings option only.
 - `core/src/decoder/legacy_decoder.cpp` is now js8core-plus (RobBobbins/JS8Core commit `6012b1e`, folder
   `E:\new-w3bguru-websites\js8core-new`), with `ldpc.cpp`, `ldpc.hpp`, `decoder_tables.hpp`, `JS8CORE-LICENSE.txt`
