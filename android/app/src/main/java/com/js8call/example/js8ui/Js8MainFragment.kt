@@ -1340,6 +1340,8 @@ class Js8MainFragment : Fragment() {
         }
         // PC labCallsign press opens Settings; click on the frequency buildFrequencyMenu
         callsign.setOnClickListener { openStation(page = Js8SettingsFragment.GENERAL_PAGE) }
+        // Upright header band ("VA3OSO   20m   JS8"): the Settings window, Frequency is its first section (Rob, 2026-11-24)
+        view?.findViewById<View?>(R.id.js8_callsign_band)?.setOnClickListener { openSettings() }
         freqDisplay?.setOnClickListener { showFrequencyMenu(it) }
         // Settings button (Rob, 2026-10-31)
         requireView().findViewById<View>(R.id.js8_btn_settings).setOnClickListener { openSettings() }
