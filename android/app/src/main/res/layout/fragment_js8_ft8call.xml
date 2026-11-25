@@ -82,11 +82,31 @@
             android:paddingEnd="8dp"
             android:text="Control" />
         <TextView
-            android:id="@+id/js8_menubar_help"
+            android:id="@+id/js8_menubar_inbox"
             style="@style/Js8FrameText"
             android:layout_width="wrap_content"
             android:layout_height="match_parent"
             android:layout_marginStart="507dp"
+            android:gravity="center"
+            android:paddingStart="8dp"
+            android:paddingEnd="8dp"
+            android:text="Inbox" />
+        <TextView
+            android:id="@+id/js8_menubar_map"
+            style="@style/Js8FrameText"
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:layout_marginStart="583dp"
+            android:gravity="center"
+            android:paddingStart="8dp"
+            android:paddingEnd="8dp"
+            android:text="Map" />
+        <TextView
+            android:id="@+id/js8_menubar_help"
+            style="@style/Js8FrameText"
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:layout_marginStart="647dp"
             android:gravity="center"
             android:paddingStart="8dp"
             android:paddingEnd="8dp"

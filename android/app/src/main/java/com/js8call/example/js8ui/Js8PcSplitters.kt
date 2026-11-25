@@ -82,6 +82,11 @@ class Js8PcSplitters(private val window: FrameLayout, private val prefs: SharedP
         private const val MAIN_BAR_ABOVE_BUTTONS = 12f
         /** Bar drawn along each line, PC dp. */
         private const val BAR = 4f
+        /** Ruler height over the waterfall (js8_waterfall_block.xml), PC dp. */
+        private const val RULER_H = 33f
+        /** Gear tab (fragment_js8_pc.xml js8_wf_ruler_gear), PC dp: the Waterfall Controls tabs' height. */
+        private const val GEAR_W = 33f
+        private const val GEAR_H = 27f
 
         /** The saved PC and FT8Call sizes go; also Settings > Reset Frame Sizes. */
         fun clear(prefs: SharedPreferences) =
@@ -96,6 +101,9 @@ class Js8PcSplitters(private val window: FrameLayout, private val prefs: SharedP
     private var text = prefs.getFloat(KEY_TEXT, TEXT_BOTTOM)
     private var main = prefs.getFloat(KEY_MAIN, MAIN_BOTTOM)
     private var wf = prefs.getFloat(KEY_WF, CONTROLS_LEFT)
+
+    /** Waterfall top, PC dp, set by apply(); declared before init so init's apply() value stays. */
+    private var wfTopDp = 0f
 
     private val bandLine = line(true) { band += it }
     private val callLine = line(true) { call += it }
@@ -112,6 +120,10 @@ class Js8PcSplitters(private val window: FrameLayout, private val prefs: SharedP
             val x = mainDp(mainLine.left, ev.x)
             x >= typingLeft && x <= typingRight && mainDp(mainLine.top, ev.y) < typingBottom - TYPING_EDGE
         }
+        // The waterfall line's strip leaves the ruler's height to the gear at the ruler's right end (Rob, 2026-11-24)
+        wfLine.passTouch = { ev -> mainDp(wfLine.top, ev.y) < wfTopDp + RULER_H }
+        // ... and its bar starts below the gear tab, which sits across the gap
+        wfLine.skipTopPx = GEAR_H * density
         listOf(bandLine, callLine, textLine, mainLine, wfLine).forEach { window.addView(it) }
         apply()
     }
@@ -196,6 +208,7 @@ class Js8PcSplitters(private val window: FrameLayout, private val prefs: SharedP
         val buttonsTop = main + BUTTONS_GAP
         top(v(R.id.js8_pc_buttons), buttonsTop)
         val wfTop = buttonsTop + BUTTONS_H + WATERFALL_GAP
+        wfTopDp = wfTop
         listOf(R.id.js8_pc_waterfall, R.id.js8_pc_waterfall_controls, R.id.js8_gain_slider).forEach {
             val view = v(it)
             val lp = view.layoutParams as ViewGroup.MarginLayoutParams
@@ -205,6 +218,17 @@ class Js8PcSplitters(private val window: FrameLayout, private val prefs: SharedP
         }
         place(v(R.id.js8_pc_waterfall), LEFT, wfTop, wf - GAP_WF - LEFT, bottom - wfTop)
         place(v(R.id.js8_pc_waterfall_controls), wf, wfTop, CONTROLS_RIGHT - wf, bottom - wfTop)
+        // Gear tab (PC only, not FT8Call): its right edge on the Waterfall Controls' left edge; closed, on the
+        // waterfall's right edge (Rob, 2026-11-24)
+        window.findViewById<View?>(R.id.js8_wf_ruler_gear)?.let { gear ->
+            show(gear, showWaterfall)
+            val right = if (showControls) wf else wf - GAP_WF
+            place(gear, right - GEAR_W, wfTop, GEAR_W, GEAR_H)
+            // One px higher: the ruler's top edge lands half a screen pixel above the gear's and showed as a
+            // faint second line over the gear tab
+            (gear.layoutParams as ViewGroup.MarginLayoutParams).let { lp ->
+                lp.topMargin -= 1; lp.height += 1; gear.layoutParams = lp }
+        }
         // Touch strips centred on the gaps, along the whole line
         spot(bandLine, band + GAP_BAND / 2, (top + main) / 2, STRIP, main - top)
         spot(callLine, call - GAP_CALL / 2, (top + main) / 2, STRIP, main - top)

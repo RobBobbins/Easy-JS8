@@ -16,7 +16,8 @@ OUT = os.path.join(LAYOUT_DIR, "fragment_js8_pc.xml")
 OUT_FT8CALL = os.path.join(LAYOUT_DIR, "fragment_js8_ft8call.xml")
 
 MENU = [("File", 27), ("Configurations", 85), ("Mode", 218), ("Log", 296),
-        ("View", 358), ("Control", 428), ("Help", 515)]
+        ("View", 358), ("Control", 428), ("Inbox", 515), ("Map", 591),
+        ("Help", 655)]  # Inbox, Map: Rob 2026-11-24
 
 # HB (hbMacroButton) sits left of CQ and shows only while HB is on; Js8MainFragment then narrows
 # all 11 buttons to fit the row (Rob, 2026-10-20)

@@ -41,6 +41,8 @@ class Js8InboxFragment : Fragment() {
         val message = view.findViewById<TextView>(R.id.js8_inbox_message)
         val replyText = view.findViewById<EditText>(R.id.js8_inbox_reply_text)
         Js8Inbox.setColumns(table)
+        // Lines between the windows can be dragged (Rob, 2026-11-24)
+        Js8LineDividers.setUpInboxScreen(view, PreferenceManager.getDefaultSharedPreferences(requireContext()))
         val call = arguments?.getString(ARG_CALL)
         view.findViewById<View>(R.id.js8_inbox_back).setOnClickListener { findNavController().popBackStack() }
         repository.getAllMessages().observe(viewLifecycleOwner) { all ->

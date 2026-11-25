@@ -187,6 +187,8 @@ class Js8MainFragment : Fragment() {
     }
     /** PC mode: the draggable dividers (null in the other layouts). */
     private var splitters: Js8PcSplitters? = null
+    /** PC and Pages sideways: the Waterfall Controls gear tab. */
+    private var rulerGear: View? = null
     /** Something changed since the lists were last drawn (PC m_rxDisplayDirty). */
     private var activityDirty = false
     /** Lists drawn at least once since this screen's views were made. */
@@ -331,6 +333,18 @@ class Js8MainFragment : Fragment() {
         }
         waterfall = view.findViewById(R.id.js8_waterfall)
         ruler = view.findViewById(R.id.js8_ruler)
+        // PC and Pages sideways: the gear tab on the Waterfall Controls' left edge opens / closes them, the same
+        // setting as View > Show Waterfall Controls (Rob, 2026-11-24). Only those two layouts have it.
+        rulerGear = view.findViewById(R.id.js8_wf_ruler_gear)
+        rulerGear?.let { gear ->
+            gear.visibility = View.VISIBLE
+            gear.setOnClickListener {
+                val key = Js8PcSplitters.PANELS[4].first
+                prefs().edit().putBoolean(key, !prefs().getBoolean(key, true)).apply()
+                splitters?.refresh()
+                applyPanels()
+            }
+        }
         levelMeter = view.findViewById(R.id.js8_level_meter)
         // Upright: CAT + level meter column 33 % narrower, 87 -> 58 dp (Rob, 2026-10-20)
         if (resources.configuration.orientation != Configuration.ORIENTATION_LANDSCAPE) {
@@ -941,6 +955,15 @@ class Js8MainFragment : Fragment() {
             }
         }
         show(R.id.js8_waterfall_view, panel(3))
+        // Pages: the gear tab goes with the waterfall; Waterfall Controls closed, it moves in by the 8 dp gap
+        // to the ruler's right end
+        rulerGear?.let { gear ->
+            gear.visibility = if (panel(3)) View.VISIBLE else View.GONE
+            (gear.layoutParams as? ViewGroup.MarginLayoutParams)?.let { lp ->
+                lp.marginEnd = if (panel(4)) 0 else (8 * resources.displayMetrics.density).toInt()
+                gear.layoutParams = lp
+            }
+        }
         show(R.id.js8_wf_controls_view, panel(4))
         show(R.id.js8_wf_controls_scroll, panel(4))
         show(R.id.js8_statusbar_view, panel(5))
@@ -1424,6 +1447,9 @@ class Js8MainFragment : Fragment() {
             menu.show()
         }
         menubar(R.id.js8_menubar_log) { showLogMenu(it) }
+        // Inbox and Map, left of Help (PC and FT8Call, Rob 2026-11-24): open their own screens at once
+        menubar(R.id.js8_menubar_inbox) { openInbox() }
+        menubar(R.id.js8_menubar_map) { navigateFromMain(R.id.navigation_js8_map) }
         menubar(R.id.js8_menubar_help) { anchor ->
             val menu = popupMenu(anchor)
             menu.menu.add(0, 1, 1, "Copyright notice")

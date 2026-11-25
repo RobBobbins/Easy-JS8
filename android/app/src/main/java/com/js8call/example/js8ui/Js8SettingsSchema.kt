@@ -19,9 +19,15 @@ import com.js8call.example.api.Js8Api
  */
 object Js8SettingsSchema {
 
-    /** Values held while the window is open; written on OK. */
+    /**
+     * Values changed in the window. Each change calls [onChange], which saves it at once (Android style, Rob
+     * 2026-11-24: no OK / Save).
+     */
     class Draft(val prefs: SharedPreferences) {
-        val values = mutableMapOf<String, String>()
+        var onChange: (() -> Unit)? = null
+        val values: MutableMap<String, String> = object : LinkedHashMap<String, String>() {
+            override fun put(key: String, value: String): String? = super.put(key, value).also { onChange?.invoke() }
+        }
         fun get(f: Field): String = values[f.key] ?: f.load(prefs)
         fun set(f: Field, v: String) { values[f.key] = v }
         fun bool(f: Field) = get(f) == "true"

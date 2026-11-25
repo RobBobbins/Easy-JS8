@@ -373,12 +373,26 @@ class JS8EngineService : Service() {
             mainHandler.removeCallbacks(beaconRestart)
             mainHandler.post(beaconRestart)
         }
-        // Station > Radio: OK saves every changed setting at once, one reconnect for all of them
+        // Station > Radio: each change is saved at once (Rob 2026-11-24); while the Radio page is open the
+        // reconnect waits, and happens once when the page is left (or Test CAT reconnects first)
         if (key in RADIO_KEYS) {
+            if (PreferenceManager.getDefaultSharedPreferences(this).getBoolean(PREF_RADIO_HOLD, false)) {
+                radioPending = true
+            } else {
+                mainHandler.removeCallbacks(radioReconnectRun)
+                mainHandler.postDelayed(radioReconnectRun, 300L)
+            }
+        }
+        if (key == PREF_RADIO_HOLD && radioPending &&
+            !PreferenceManager.getDefaultSharedPreferences(this).getBoolean(PREF_RADIO_HOLD, false)) {
+            radioPending = false
             mainHandler.removeCallbacks(radioReconnectRun)
             mainHandler.postDelayed(radioReconnectRun, 300L)
         }
     }
+
+    /** A Radio setting changed while the Radio page was open: reconnect when it is left. */
+    private var radioPending = false
 
     /**
      * Station > Radio OK (Rob 2026-11-17, PC: OK reopens the rig): the radio is reconnected with the new settings at
@@ -471,6 +485,8 @@ class JS8EngineService : Service() {
 
     override fun onCreate() {
         super.onCreate()
+        // A hold left over from an app stopped on the Radio page would stop every later reconnect
+        PreferenceManager.getDefaultSharedPreferences(this).edit().putBoolean(PREF_RADIO_HOLD, false).apply()
         AprsBeacon.offAtAppStart(this)
         if (!settingsLoaded) {
             settingsLoaded = true
@@ -5765,6 +5781,7 @@ class JS8EngineService : Service() {
 
     /** Test CAT: connect again with the saved Radio settings (the rig is only opened at engine start). */
     private fun testCat() {
+        radioPending = false // Test CAT reconnects with the saved settings now; leaving the page won't again
         val wasRunning = engine != null || engineStartInProgress
         if (isTransmitActive()) {
             broadcastRigTest(RIG_TEST_CAT, false, false, "Can't test the rig while transmitting")
@@ -6355,6 +6372,8 @@ class JS8EngineService : Service() {
         const val EXTRA_SYNC_STATS_ON = "sync_stats_on"
         const val ACTION_RIG_STATUS = "com.js8call.example.ACTION_RIG_STATUS"
         const val ACTION_TEST_CAT = "com.js8call.example.ACTION_TEST_CAT"
+        /** True while Station > Radio is on screen: Radio changes are saved but the reconnect waits. */
+        const val PREF_RADIO_HOLD = "js8_radio_hold"
         const val ACTION_READ_RIG = "com.js8call.example.ACTION_READ_RIG"
         const val ACTION_RIG_RETRY = "com.js8call.example.ACTION_RIG_RETRY"
         const val ACTION_RIG_ERROR = "com.js8call.example.ACTION_RIG_ERROR"

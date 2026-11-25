@@ -81,11 +81,31 @@
             android:paddingEnd="8dp"
             android:text="Control" />
         <TextView
-            android:id="@+id/js8_menubar_help"
+            android:id="@+id/js8_menubar_inbox"
             style="@style/Js8FrameText"
             android:layout_width="wrap_content"
             android:layout_height="match_parent"
             android:layout_marginStart="507dp"
+            android:gravity="center"
+            android:paddingStart="8dp"
+            android:paddingEnd="8dp"
+            android:text="Inbox" />
+        <TextView
+            android:id="@+id/js8_menubar_map"
+            style="@style/Js8FrameText"
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:layout_marginStart="583dp"
+            android:gravity="center"
+            android:paddingStart="8dp"
+            android:paddingEnd="8dp"
+            android:text="Map" />
+        <TextView
+            android:id="@+id/js8_menubar_help"
+            style="@style/Js8FrameText"
+            android:layout_width="wrap_content"
+            android:layout_height="match_parent"
+            android:layout_marginStart="647dp"
             android:gravity="center"
             android:paddingStart="8dp"
             android:paddingEnd="8dp"
@@ -260,6 +280,21 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content" />
     </ScrollView>
+
+    <!-- Gear tab on the Waterfall Controls' left edge, over the ruler's right end; opens / closes them
+         (Rob, 2026-11-24). Placed by Js8PcSplitters. -->
+    <ImageView
+        android:id="@+id/js8_wf_ruler_gear"
+        android:layout_width="33dp"
+        android:layout_height="27dp"
+        android:layout_marginStart="848dp"
+        android:layout_marginTop="395dp"
+        android:background="@drawable/js8_tab_gear"
+        android:contentDescription="Waterfall Controls"
+        android:padding="4dp"
+        android:src="@drawable/js8_gear"
+        android:tint="@color/js8_frame_text"
+        android:visibility="gone" />
 
     <com.js8call.example.js8ui.Js8GainSliderView
         android:id="@+id/js8_gain_slider"

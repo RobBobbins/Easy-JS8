@@ -60,6 +60,12 @@
         android:name="com.js8call.example.js8ui.Js8InboxFragment"
         android:label="Message Inbox" />
 
+    <!-- PC and FT8Call menu bar > Map: the map as its own screen (Rob, 2026-11-24) -->
+    <fragment
+        android:id="@+id/navigation_js8_map"
+        android:name="com.js8call.example.js8ui.Js8MapFragment"
+        android:label="Map" />
+
     <fragment
         android:id="@+id/navigation_js8_menu"
         android:name="com.js8call.example.js8ui.Js8MenuFragment"

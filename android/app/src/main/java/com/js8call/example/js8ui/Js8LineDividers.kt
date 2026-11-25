@@ -28,6 +28,8 @@ class Js8LineHandle(context: Context, private val sideways: Boolean, private val
     var passTouch: (MotionEvent) -> Boolean = { false }
     /** Middle of the bar across the strip, px; null = the strip's middle. */
     var barCentrePx: Float? = null
+    /** Upright line: no bar over this many px at its top (PC waterfall line under the gear tab). */
+    var skipTopPx = 0f
     private val bar = Paint().apply { color = Color.parseColor("#8A8A8A") }
     private var last = 0f
 
@@ -52,7 +54,7 @@ class Js8LineHandle(context: Context, private val sideways: Boolean, private val
     override fun onDraw(canvas: Canvas) {
         if (sideways) {
             val l = (width - barPx) / 2f
-            canvas.drawRect(l, 0f, l + barPx, height.toFloat(), bar)
+            canvas.drawRect(l, skipTopPx, l + barPx, height.toFloat(), bar)
         } else {
             val t = (barCentrePx ?: (height / 2f)) - barPx / 2f
             canvas.drawRect(0f, t, width.toFloat(), t + barPx, bar)
@@ -75,20 +77,33 @@ object Js8LineDividers {
     private const val UP_LISTS = "js8cfg_up_split_lists" // Band / Call Activity height
     private const val UP_TEXT = "js8cfg_up_split_text"   // Message Window height
     private const val UP_WF = "js8cfg_up_split_wf"       // waterfall height
+    private const val UP_INBOX_LIST = "js8cfg_up_split_inbox_list"       // Message Inbox list height
+    private const val UP_INBOX_MESSAGE = "js8cfg_up_split_inbox_message" // message box height
+    private const val UP_INBOX_REPLY = "js8cfg_up_split_inbox_reply"     // reply box height
     // Swipe Activity screen (layout weights)
     private const val SW_BAND = "js8cfg_sw_split_band"
     private const val SW_MID = "js8cfg_sw_split_mid"
     private const val SW_CALL = "js8cfg_sw_split_call"
     private const val SW_TEXT = "js8cfg_sw_split_text"
     private const val SW_TYPING = "js8cfg_sw_split_typing"
+    // Inbox: list | message + reply (layout weights). Swipe's Inbox page and the Message Inbox screen keep their own.
+    private val SW_INBOX = InboxKeys("js8cfg_sw_split_inbox")
+    private val IB_INBOX = InboxKeys("js8cfg_ib_split")
 
-    private val KEYS = listOf(UP_CALL, UP_LISTS, UP_TEXT, UP_WF, SW_BAND, SW_MID, SW_CALL, SW_TEXT, SW_TYPING)
+    private class InboxKeys(p: String) {
+        val list = "${p}_list"; val right = "${p}_right"; val message = "${p}_message"; val reply = "${p}_reply"
+        val all = listOf(list, right, message, reply)
+    }
+
+    private val KEYS = listOf(UP_CALL, UP_LISTS, UP_TEXT, UP_WF, UP_INBOX_LIST, UP_INBOX_MESSAGE, UP_INBOX_REPLY, SW_BAND, SW_MID, SW_CALL, SW_TEXT, SW_TYPING) +
+        SW_INBOX.all + IB_INBOX.all
 
     /** Settings > View > Reset Window Sizes: upright and Swipe back to the layout's sizes. */
     fun reset(prefs: SharedPreferences) = prefs.edit().apply { KEYS.forEach { remove(it) } }.apply()
 
     /** Upright page (fragment_js8_main): four lines. */
     fun setUpUpright(root: View, prefs: SharedPreferences) {
+        setUpUprightInbox(root, prefs)
         val scroll = root.findViewById<NestedScrollView?>(R.id.js8_scroll) ?: return
         val page = scroll.getChildAt(0) as? LinearLayout ?: return
         val band = root.findViewById<View>(R.id.js8_band_activity)
@@ -129,8 +144,33 @@ object Js8LineDividers {
         }.onEnd = { prefs.edit().putFloat(UP_WF, wf.height / d).apply() }
     }
 
+    /**
+     * Upright Message Inbox (js8_inbox, Rob 2026-11-24): a line under the list, the message box and the reply box;
+     * each sets the height of the window above it, 40 dp at least, and the page below moves.
+     */
+    private fun setUpUprightInbox(root: View, prefs: SharedPreferences) {
+        val list = root.findViewById<View?>(R.id.js8_inbox_table) ?: return
+        val message = root.findViewById<View?>(R.id.js8_inbox_message) ?: return
+        val reply = root.findViewById<View?>(R.id.js8_inbox_reply_text) ?: return
+        val button = root.findViewById<View?>(R.id.js8_inbox_reply) ?: return
+        val col = list.parent as? LinearLayout ?: return
+        if (listOf(message, reply, button).any { it.parent !== col }) return
+        val d = root.resources.displayMetrics.density
+        fun px(dp: Float) = dp * d
+        listOf(list to UP_INBOX_LIST, message to UP_INBOX_MESSAGE, reply to UP_INBOX_REPLY).forEach { (v, key) ->
+            prefs.getFloat(key, -1f).takeIf { it > 0 }?.let { setHeight(v, px(it).roundToInt()) }
+        }
+        listOf(Triple(list, message, UP_INBOX_LIST), Triple(message, reply, UP_INBOX_MESSAGE),
+            Triple(reply, button, UP_INBOX_REPLY)).forEach { (above, below, key) ->
+            insertBetween(col, above, below, sideways = false) { dy ->
+                setHeight(above, (above.height + dy).coerceIn(px(40f), px(1200f)).roundToInt())
+            }.onEnd = { prefs.edit().putFloat(key, above.height / d).apply() }
+        }
+    }
+
     /** Swipe Activity screen (fragment_js8_swipe): three lines, Band | middle | Call and Message Window / Typing Box. */
     fun setUpSwipe(root: View, prefs: SharedPreferences) {
+        setUpInbox(root, prefs, SW_INBOX)
         val band = root.findViewById<View>(R.id.js8_band_activity)
         val call = root.findViewById<View>(R.id.js8_call_activity)
         val text = root.findViewById<View>(R.id.js8_message_window)
@@ -148,21 +188,49 @@ object Js8LineDividers {
         fun saveRow() = prefs.edit().putFloat(SW_BAND, weight(band)).putFloat(SW_MID, weight(mid))
             .putFloat(SW_CALL, weight(call)).apply()
 
-        // Width moves from one side of the line to the other (weights are shares of the row)
-        fun trade(a: View, b: View, deltaPx: Float, along: Int) {
-            val total = weight(a) + weight(b)
-            val size = (if (along == 0) a.width + b.width else a.height + b.height).toFloat()
-            if (size <= 0f) return
-            val min = 60f * d
-            val aSize = ((if (along == 0) a.width else a.height) + deltaPx).coerceIn(min, size - min)
-            setWeight(a, total * aSize / size)
-            setWeight(b, total - weight(a))
-        }
-        insertBetween(row, band, mid, sideways = true) { dx -> trade(band, mid, dx, 0) }.onEnd = { saveRow() }
-        insertBetween(row, mid, call, sideways = true) { dx -> trade(mid, call, dx, 0) }.onEnd = { saveRow() }
-        insertBetween(mid, text, typing, sideways = false) { dy -> trade(text, typing, dy, 1) }.onEnd = {
+        insertBetween(row, band, mid, sideways = true) { dx -> trade(band, mid, dx, 0, d) }.onEnd = { saveRow() }
+        insertBetween(row, mid, call, sideways = true) { dx -> trade(mid, call, dx, 0, d) }.onEnd = { saveRow() }
+        insertBetween(mid, text, typing, sideways = false) { dy -> trade(text, typing, dy, 1, d) }.onEnd = {
             prefs.edit().putFloat(SW_TEXT, weight(text)).putFloat(SW_TYPING, weight(typing)).apply()
         }
+    }
+
+    /** Message Inbox screen (fragment_js8_inbox: PC View > Inbox, FT8Call, Call Activity's inbox for one call). */
+    fun setUpInboxScreen(root: View, prefs: SharedPreferences) = setUpInbox(root, prefs, IB_INBOX)
+
+    /**
+     * Inbox, Swipe's Inbox page and the Message Inbox screen (Rob, 2026-11-24): a line between the list and the
+     * message + reply column, and one between the message and the reply.
+     */
+    private fun setUpInbox(root: View, prefs: SharedPreferences, k: InboxKeys) {
+        val list = root.findViewById<View?>(R.id.js8_inbox_table) ?: return
+        val message = root.findViewById<View?>(R.id.js8_inbox_message) ?: return
+        val reply = root.findViewById<View?>(R.id.js8_inbox_reply_text) ?: return
+        val row = list.parent as? LinearLayout ?: return
+        val right = message.parent as? LinearLayout ?: return
+        if (row.indexOfChild(right) < 0 || right.indexOfChild(reply) < 0) return
+        prefs.getFloat(k.list, -1f).takeIf { it > 0 }?.let { setWeight(list, it) }
+        prefs.getFloat(k.right, -1f).takeIf { it > 0 }?.let { setWeight(right, it) }
+        prefs.getFloat(k.message, -1f).takeIf { it > 0 }?.let { setWeight(message, it) }
+        prefs.getFloat(k.reply, -1f).takeIf { it > 0 }?.let { setWeight(reply, it) }
+        val d = root.resources.displayMetrics.density
+        insertBetween(row, list, right, sideways = true) { dx -> trade(list, right, dx, 0, d) }.onEnd = {
+            prefs.edit().putFloat(k.list, weight(list)).putFloat(k.right, weight(right)).apply()
+        }
+        insertBetween(right, message, reply, sideways = false) { dy -> trade(message, reply, dy, 1, d) }.onEnd = {
+            prefs.edit().putFloat(k.message, weight(message)).putFloat(k.reply, weight(reply)).apply()
+        }
+    }
+
+    /** Size moves from one side of the line to the other (weights are shares of the row); 60 dp at least each. */
+    private fun trade(a: View, b: View, deltaPx: Float, along: Int, d: Float) {
+        val total = weight(a) + weight(b)
+        val size = (if (along == 0) a.width + b.width else a.height + b.height).toFloat()
+        if (size <= 0f) return
+        val min = 60f * d
+        val aSize = ((if (along == 0) a.width else a.height) + deltaPx).coerceIn(min, size - min)
+        setWeight(a, total * aSize / size)
+        setWeight(b, total - weight(a))
     }
 
     /**

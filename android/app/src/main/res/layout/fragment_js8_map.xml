@@ -1,0 +1,101 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Map screen (PC and FT8Call menu bar > Map, Rob 2026-11-24). Map and buttons as the Pages Map page. -->
+<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="@color/js8_frame_bg"
+    android:orientation="vertical"
+    android:padding="6dp">
+
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="40dp"
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
+
+        <TextView
+            android:id="@+id/js8_map_back"
+            style="@style/Js8FrameText"
+            android:layout_width="72dp"
+            android:layout_height="match_parent"
+            android:gravity="center_vertical"
+            android:paddingStart="6dp"
+            android:text="← Back"
+            android:textStyle="bold" />
+
+        <TextView
+            style="@style/Js8FrameText"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:gravity="center"
+            android:text="Map"
+            android:textStyle="bold" />
+
+        <!-- Same width as ← Back, so the title is centred -->
+        <View
+            android:layout_width="72dp"
+            android:layout_height="1dp" />
+    </LinearLayout>
+
+    <FrameLayout
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1">
+
+        <com.js8call.example.js8ui.Js8MapView
+            android:id="@+id/js8_map"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent" />
+
+        <LinearLayout
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="bottom|end"
+            android:layout_margin="8dp"
+            android:orientation="vertical">
+
+            <ImageView
+                android:id="@+id/js8_map_options"
+                android:layout_width="44dp"
+                android:layout_height="44dp"
+                android:layout_marginBottom="6dp"
+                android:background="@drawable/js8_shape_blue"
+                android:contentDescription="Map options"
+                android:padding="9dp"
+                android:src="@drawable/js8_map_gear" />
+
+            <TextView
+                android:id="@+id/js8_map_zoom_in"
+                android:layout_width="44dp"
+                android:layout_height="44dp"
+                android:layout_marginBottom="6dp"
+                android:background="@drawable/js8_shape_blue"
+                android:gravity="center"
+                android:text="+"
+                android:textColor="#000000"
+                android:textSize="26sp" />
+
+            <TextView
+                android:id="@+id/js8_map_zoom_out"
+                android:layout_width="44dp"
+                android:layout_height="44dp"
+                android:layout_marginBottom="6dp"
+                android:background="@drawable/js8_shape_blue"
+                android:gravity="center"
+                android:text="−"
+                android:textColor="#000000"
+                android:textSize="26sp" />
+
+            <TextView
+                android:id="@+id/js8_map_fit"
+                android:layout_width="44dp"
+                android:layout_height="44dp"
+                android:background="@drawable/js8_shape_blue"
+                android:gravity="center"
+                android:text="Fit"
+                android:textColor="#000000"
+                android:textSize="16sp" />
+        </LinearLayout>
+    </FrameLayout>
+</LinearLayout>

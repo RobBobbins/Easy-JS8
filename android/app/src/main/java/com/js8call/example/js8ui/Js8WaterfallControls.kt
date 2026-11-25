@@ -90,6 +90,9 @@ class Js8WaterfallControls(
      */
     private val collapsible = root.findViewById<View?>(R.id.js8_pc_window) == null &&
         root.findViewById<View?>(R.id.js8_tabs) == null
+    /** PC and Pages sideways: the gear tab sits left of Control, so Control's and the window box's top-left
+     *  corners are square there (Rob, 2026-11-24). */
+    private val gearTab = root.findViewById<View?>(R.id.js8_wf_ruler_gear) != null
     private val keyOpen = "js8_wf_settings_open"
     private var open = !collapsible || prefs.getBoolean(keyOpen, false)
     private var shownTab = R.id.js8_wf_tab_control
@@ -257,6 +260,14 @@ class Js8WaterfallControls(
         listOf(R.id.js8_wf_tab_control, R.id.js8_wf_tab_display, R.id.js8_wf_tab_timing).forEach { id ->
             v<View>(id)?.setOnClickListener { if (collapsible && open && shownTab == id) setOpen(false) else showTab(id) }
         }
+        if (gearTab) {
+            listOf(R.id.js8_wf_control_page, R.id.js8_wf_display_page, R.id.js8_wf_timing_page).forEach {
+                v<View>(it)?.setBackgroundResource(R.drawable.js8_groupbox_square_tl)
+            }
+            // Control tab square beside the gear tab from the start, not only after a tab is tapped
+            if (shownTab == R.id.js8_wf_tab_control)
+                v<View>(R.id.js8_wf_tab_control)?.setBackgroundResource(R.drawable.js8_tab_selected_square)
+        }
         v<View>(R.id.js8_wf_gear)?.apply {
             visibility = if (collapsible) View.VISIBLE else View.GONE
             setOnClickListener { setOpen(!open) }
@@ -270,7 +281,11 @@ class Js8WaterfallControls(
     private fun showTab(tabId: Int) {
         shownTab = tabId
         listOf(R.id.js8_wf_tab_control, R.id.js8_wf_tab_display, R.id.js8_wf_tab_timing).forEach { id ->
-            v<View>(id)?.setBackgroundResource(if (id == tabId) R.drawable.js8_tab_selected else 0)
+            v<View>(id)?.setBackgroundResource(when {
+                id != tabId -> 0
+                gearTab && id == R.id.js8_wf_tab_control -> R.drawable.js8_tab_selected_square
+                else -> R.drawable.js8_tab_selected
+            })
         }
         if (!open) setOpen(true) else showPages()
     }

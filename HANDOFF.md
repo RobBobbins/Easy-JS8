@@ -2,6 +2,73 @@
 
 ## Next session starts here (2026-11-05): audit B sections 1-12 are fixed
 
+**State 19:30, 2026-11-24: Inbox and Map in the PC and FT8Call menu bar (Rob; uncommitted, built 19:23, tested on S22-Fresh)**
+- Menu bar now "File Configurations Mode Log View Control Inbox Map Help" in `fragment_js8_pc.xml` and
+  `fragment_js8_ft8call.xml` (ids `js8_menubar_inbox`, `js8_menubar_map`; Help moved to 655). Added by hand:
+  `build-env/gen_pc_layout.py` no longer matches the layouts (running it drops the waterfall gear tab, `js8_pc_header`
+  and `js8_pc_statusbar` ids); only its `MENU` list was updated.
+- Inbox → `openInbox()` (Message Inbox screen, as View > Show Message Inbox..., which stays). Map → new screen
+  `navigation_js8_map` (`Js8MapFragment.kt`, `fragment_js8_map.xml`): ← Back, title Map, the map with ⚙ + − Fit,
+  shared map options, own zoom, dial frequency from `last_frequency`; tab bar hidden (`MainActivity`).
+- W198-W200 passed (`build-env/test/lib/menuinmap.py` run 2). The emulator ignores the sideways lock after a fresh
+  boot; the script now also calls `d.set_orientation('left')`.
+- Installed 19:29 on the S22 Ultra (SM-S908W) and the tablet SM-X210 (10.0.0.105:35099): both start, no crash.
+  Emulator and test processes stopped.
+
+**State 18:45, 2026-11-24: Station and Settings windows look and work like Android settings (Rob; uncommitted, built 18:31, tested on S22-Fresh)**
+- Rob: both windows, both layouts, saving instant like Android, checks on the fly; Radio changes save at once but the
+  radio reconnects only when the Radio page is left; **Test CAT** / **Test PTT** try them earlier. No OK / Cancel /
+  Save anywhere now (replaces the 17:40 `barOnTop` bar and the About change).
+- `Js8SettingsFragment.kt` rewritten above `diagnostics()`: top bar (← title, gear on the Settings window opens
+  Station); Station = page list with icons and summaries (`PAGE_ICONS`, `pageSummary`), upright list then page,
+  sideways 2 panes (list 34 %, page right); Settings window = one scrolling page, a coloured heading per section,
+  Frequency first. Rows 56 dp: switch rows, text / number / choice popups (MaterialAlertDialog, outline box), OK
+  greyed while the PC check fails (`problem()`: callsign, grid, EOT, groups, auto whitelist, CQ message). Field names
+  lose their trailing colon. Removed: `renderThreeAcross`, `renderSidewaysPage`, `okBar`, `onOk`, `onCancel` and the
+  old sideways layout code.
+- Saving: `Js8SettingsSchema.Draft.values.put` → `onChange` → `scheduleCommit()` → `commit()` (also in `onPause`).
+  The first change on a fresh install writes the PC defaults for fields never stored, as OK used to.
+- Radio hold: pref `js8_radio_hold` (`JS8EngineService.PREF_RADIO_HOLD`) is true while the Station Radio page is
+  open; the engine marks `radioPending` and reconnects once when the hold clears. Cleared in the engine's `onCreate`.
+- Sideways, the keyboard is full screen (Android's normal on a short screen): the red message and greyed OK show
+  after **DONE**. `IME_FLAG_NO_EXTRACT_UI` was tried and dropped (the popup shrank to its title).
+- 13 new drawables `res/drawable/js8_pref_*.xml` (Material icons).
+- Tests: `build-env/test/lib/droidset.py` (`U`, `P`, `D`), W183-W193, W195-W197 passed (TEST-CHECKLIST.md). Out of
+  date, they tap OK / Cancel: `settop.py`, `ui3.py` and the older settings scripts.
+- Not done: `website/help/settings.html` and `station.html` describe OK / Cancel and old names; they need new text
+  and Rob's screenshots.
+- Installed 18:39 on the S22 Ultra (SM-S908W): starts, no crash. Installed 19:07 on the tablet
+  SM-X210 (10.0.0.105:35099, same port as before): process running, no crash; its screen was asleep, not looked at. Emulator, adb test
+  processes and the build container stopped.
+
+**State 17:40, 2026-11-24: gear tab, About, inbox lines, sideways buttons on top (Rob; uncommitted, built 17:20)**
+- Last commit 53b01d88 (Station Settings list centred). Everything below is uncommitted on `easy-js8`. Installed 17:23
+  (1.0.5) on the S22 Ultra (10.0.0.35:35107) and the tablet SM-X210 (10.0.0.105:35099). The tablet does not announce
+  wireless debugging over mdns: find its port by scanning 10.0.0.105 ports 30000-50000, then `adb connect`.
+- **Waterfall gear tab** (PC and Pages sideways): `js8_wf_ruler_gear` (`fragment_js8_pc.xml`, `fragment_js8_swipe.xml`)
+  left of the Control tab, over the ruler's right end; tap = `js8cfg_show_waterfall_controls` (View > Show Waterfall
+  Controls). Drawables `js8_tab_gear.xml` (line top and left, open bottom, square corners), `js8_tab_selected_square.xml`,
+  `js8_groupbox_square_tl.xml`; `Js8WaterfallControls.gearTab`; `Js8PcSplitters` places it (`GEAR_W/H`, 1 px higher);
+  `Js8LineHandle.skipTopPx`. **Rob: "don't touch it"** — the gear tab's own square top-left corner and the PC 1 px
+  shift were done without his asking (his screenshot only showed the Control tab's top-left corner); leave both as
+  they are. Control tab top-right corner still round (not asked). `wfgear.py` passed (runs 7-10, light and dark).
+- **About:** no OK / Cancel in any layout (`renderStationPage`, `okBar`). OK there used to save other pages' unsaved
+  changes; OK on any other page still does. `aboutpages.py` run 2 passed.
+- **Inbox lines** (`Js8LineDividers`): Pages Inbox page and the Message Inbox screen (`Js8InboxFragment` →
+  `setUpInboxScreen`): list | right column and message / reply, weights, 60 dp min, own prefs
+  (`js8cfg_sw_split_inbox_*`, `js8cfg_ib_split_*`). Upright Message Inbox (`setUpUprightInbox`): a line under the list,
+  message box and reply box, dp heights 40-1200 (`js8cfg_up_split_inbox_*`). All reset by Settings > View > Reset
+  Window Sizes, not by PC View > Reset Frame Sizes. A page-scroll swipe starting on an upright line moves the line.
+  `inboxlines.py` run 7, `inboxup.py` run 3 passed.
+- **Sideways Settings and Station windows:** Save/OK and Cancel at the right of the ← Back row (`barOnTop`).
+  `settop.py` run 1 passed.
+- **Proposed to Rob, not started:** PC menu bar "… Control  Inbox  Map  Help" (FT8Call unchanged).
+  Inbox opens the Message Inbox screen; Map opens a new full-screen map screen (`fragment_js8_map.xml`,
+  `Js8MapFragment.kt`, nav destination, bottom bar hidden in `MainActivity`): ← Back, title Map, ⚙ + − Fit, own zoom,
+  shared map options, `activityVm` for stations. Rob then asked how Android settings usually save (answered: instantly,
+  no Save button; Material full-screen forms put Save top right); no change decided.
+- Emulator, adb and the build container stopped.
+
 **State 13:40, 2026-11-24: upright header band opens Settings (Rob; uncommitted, built 13:32, tested on S22-Fresh)**
 - Tap on the band in "VA3OSO   20m   JS8" (`js8_callsign_band`) opens the Settings window (`openSettings`), Frequency
   first; the callsign already opened Station > General. JS8 still does nothing. W182 passed.
