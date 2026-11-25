@@ -2505,9 +2505,9 @@ class Js8MainFragment : Fragment() {
     /** PC JS8::Submode::name for the Jump to ... speed item. */
     private fun speedName(submode: Int) = when (submode) {
         Js8Activity.SUBMODE_FAST -> "Fast"
-        Js8Activity.SUBMODE_TURBO -> "JS8 40"
+        Js8Activity.SUBMODE_TURBO -> "JS8 40 wpm"
         Js8Activity.SUBMODE_SLOW -> "Slow"
-        Js8Activity.SUBMODE_ULTRA -> "JS8 60"
+        Js8Activity.SUBMODE_ULTRA -> "JS8 60 wpm"
         else -> "Normal"
     }
 

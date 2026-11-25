@@ -252,11 +252,11 @@ object Js8SettingsSchema {
      */
     const val TX_SUBMODE_KEY = "tx_submode"
     val SPEEDS = listOf(
-        "JS8 Slow (~8 wpm, best decoder sensitivity)" to "4",
-        "JS8 Normal (~16 wpm, best for most conditions)" to "0",
-        "JS8 Fast (~24 wpm, reduced decoder sensitivity)" to "1",
-        "JS8 40 (~40 wpm, only use in good conditions)" to "2",
-        "JS8 60 (~60 wpm, fast but experimental mode)" to "8"
+        "JS8 Slow" to "4",
+        "JS8 Normal" to "0",
+        "JS8 Fast" to "1",
+        "JS8 40 wpm" to "2",
+        "JS8 60 wpm" to "8"
     )
 
     /** Station > SWL (Listening only): no callsign needed, nothing is transmitted (Easy JS8 only). */

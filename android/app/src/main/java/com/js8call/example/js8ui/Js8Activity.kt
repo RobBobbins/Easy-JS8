@@ -104,9 +104,9 @@ class Js8Activity {
         /** Mode Speed column: N / F / S, or 40 / 60 (displayBandActivity.cpp). */
         fun submodeLetter(submode: Int) = when (submode) {
             SUBMODE_FAST -> "F"
-            SUBMODE_TURBO -> "40"
+            SUBMODE_TURBO -> "JS8 40 wpm"
             SUBMODE_SLOW -> "S"
-            SUBMODE_ULTRA -> "60"
+            SUBMODE_ULTRA -> "JS8 60 wpm"
             else -> "N"
         }
 
@@ -134,9 +134,9 @@ class Js8Activity {
         /** Status bar mode label (updateModeButtonText). */
         fun modeLabel(submode: Int) = when (submode) {
             SUBMODE_FAST -> "JS8 Fast"
-            SUBMODE_TURBO -> "JS8 40"
+            SUBMODE_TURBO -> "JS8 40 wpm"
             SUBMODE_SLOW -> "JS8 Slow"
-            SUBMODE_ULTRA -> "JS8 60"
+            SUBMODE_ULTRA -> "JS8 60 wpm"
             else -> "JS8 Normal"
         }
 
