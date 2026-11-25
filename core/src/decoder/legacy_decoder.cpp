@@ -25,6 +25,7 @@
 #include "js8core/compat/numbers.hpp"
 #include "js8core/protocol/constants.hpp"
 #include "js8core/protocol/costas.hpp"
+#include "js8core/protocol/varicode.hpp"
 
 #include "decoder_tables.hpp"
 #include "ldpc.hpp"
@@ -82,6 +83,53 @@ constexpr float kOsdMinRunnerUpGap = 0.0025f;
 // (Deep 231,257).
 constexpr float kLastTryNearHz = 3.0f;
 constexpr float kLastTryNearSeconds = 0.05f;
+// A frame that passes the CRC check is still refused, at every pass and for
+// callsign hints, when no unpacker reads it: fast data when type bit 4 is
+// set, else data, heartbeat, compound or directed (JS8Call-improved's order).
+// Such a frame would be shown as its 12 raw characters. Measured 2026-11-24
+// and 2026-11-25 (research note, S142 and S143): 0 of 18,500 live frames that
+// 2 or more decoders agreed on and 0 of 23,004 right test-set frames are
+// unreadable; 33.5% of random frames are. On the 48 real-style sets wrong
+// frames 13 to 9 (Deep 25 to 12), no right frame lost, Deep 1 right frame
+// gained where a refused wrong frame had stood.
+bool frame_readable(std::array<std::int8_t, 87> const& payload) {
+  namespace vc = js8core::protocol::varicode;
+  std::string const frame = decoder::decode_message(payload);
+  int const type = (payload[72] << 2) | (payload[73] << 1) | payload[74];
+  if (type & 4) return !vc::unpack_fast_data_message(frame).empty();
+  if (!vc::unpack_data_message(frame).empty()) return true;
+  std::uint8_t kind = 0;
+  std::uint8_t bits3 = 0;
+  bool alt = false;
+  if (vc::unpack_heartbeat_message(frame, &kind, &alt, &bits3).size() >= 2) return true;
+  kind = 0;
+  bits3 = 0;
+  std::uint16_t num = 0;
+  if (vc::unpack_compound_message(frame, &kind, &num, &bits3).size() >= 2) return true;
+  kind = 0;
+  return !vc::unpack_directed_message(frame, &kind).empty();
+}
+// Second start time per frequency (2026-11-24). The candidate search keeps
+// each frequency bin's best-scoring start time; on a fading frame that one can
+// be wrong and the right one comes second. Each bin therefore also offers its
+// best local peak at least kSecondStartMinSteps steps (1 symbol) from its best
+// start time. These are picked after the ordinary candidates, with the same
+// sync minimum and candidate limit, and dropped where a picked candidate
+// within az Hz already starts within kSecondStartMinSteps steps. On the four
+// Fast-speed fading sets of real-style traffic, all 467 frames it gained came
+// from a second start time within 0.03 s of the true start, while the best
+// start time was 0.3 to 5 s off.
+constexpr int kSecondStartMinSteps = kStepsPerSymbol;
+// Leftover pass (2026-11-24): after the ordinary passes, one more candidate
+// search on the audio left after subtraction, taking only candidates that
+// score from kLeftoverSyncShare x kMinSync up to (not including) kMinSync, no
+// subtraction, and no last try (passes 8 to 11): on real-style traffic the
+// last try there made 24 wrong frames for 792 right ones, every other pass 0
+// wrong for 2,561 right. With the second start time, 48 real-style sets:
+// whole messages 138,380 to 140,624 of 268,800 (+1.6%), wrong frames 12 to
+// 13; decode time +13% to +129%. Research note, section 14, "Lead 3 tested"
+// (S140).
+constexpr float kLeftoverSyncShare = 0.8f;
 // The last try orders its search by a short, damped re-run of belief
 // propagation on the same evidence instead of the evidence alone (Zhang, Yue,
 // Li, Vucetic, arXiv 2306.00443, 2023): floor(girth / 4) + 1 = 3 rounds for
@@ -350,6 +398,13 @@ class ChannelDecoder {
 
   // Deep decoding (DecodeParams::deep) for the current decode.
   bool deep_ = false;
+  // Candidate score range find_candidates takes: [min_sync_, max_sync_).
+  // The ordinary passes take kMinSync and up; the leftover pass narrows it
+  // (see kLeftoverSyncShare).
+  float min_sync_ = kMinSync;
+  float max_sync_ = std::numeric_limits<float>::infinity();
+  // True during the leftover pass: the last try is skipped there.
+  bool leftover_pass_ = false;
 
   // --- Buffers --------------------------------------------------------------
 
@@ -703,6 +758,11 @@ std::vector<Candidate> ChannelDecoder<Mode>::find_candidates(int low_hz,
 
   std::vector<Candidate> entries;
   entries.reserve(static_cast<std::size_t>(last - first + 1));
+  // Each bin's second start time (see kSecondStartMinSteps), and the score of
+  // every start time tried in the current bin.
+  std::vector<Candidate> seconds;
+  seconds.reserve(static_cast<std::size_t>(last - first + 1));
+  std::vector<float> delta_scores(static_cast<std::size_t>(2 * Mode::search_radius + 1));
 
   for (int bin = first; bin <= last; ++bin) {
     float best = -std::numeric_limits<float>::infinity();
@@ -740,6 +800,8 @@ std::vector<Candidate> ChannelDecoder<Mode>::find_candidates(int low_hz,
       };
 
       float const score = std::max({ratio(0, 2), ratio(0, 1), ratio(1, 2)});
+      delta_scores[static_cast<std::size_t>(delta + Mode::search_radius)] =
+          std::isfinite(score) ? score : -std::numeric_limits<float>::infinity();
       if (std::isfinite(score) && score > best) {
         best = score;
         best_offset = delta;
@@ -755,6 +817,28 @@ std::vector<Candidate> ChannelDecoder<Mode>::find_candidates(int low_hz,
         Mode::bin_hz * bin,
         (best_offset + Mode::start_step + 2) * Mode::step_seconds - Mode::start_seconds,
         best});
+
+    // The bin's best local peak at least kSecondStartMinSteps from best_offset.
+    float second = -std::numeric_limits<float>::infinity();
+    int second_offset = 0;
+    int const tried = 2 * Mode::search_radius + 1;
+    for (int i = 0; i < tried; ++i) {
+      int const delta = i - Mode::search_radius;
+      if (std::abs(delta - best_offset) < kSecondStartMinSteps) continue;
+      float const value = delta_scores[static_cast<std::size_t>(i)];
+      if (i > 0 && delta_scores[static_cast<std::size_t>(i - 1)] > value) continue;
+      if (i + 1 < tried && delta_scores[static_cast<std::size_t>(i + 1)] > value) continue;
+      if (value > second) {
+        second = value;
+        second_offset = delta;
+      }
+    }
+    if (std::isfinite(second)) {
+      seconds.push_back(Candidate{
+          Mode::bin_hz * bin,
+          (second_offset + Mode::start_step + 2) * Mode::step_seconds - Mode::start_seconds,
+          second});
+    }
   }
 
   if (entries.empty()) return {};
@@ -770,6 +854,7 @@ std::vector<Candidate> ChannelDecoder<Mode>::find_candidates(int low_hz,
   if (!std::isfinite(reference) || reference <= 1.0e-12f) return {};
 
   for (auto& entry : entries) entry.score /= reference;
+  for (auto& entry : seconds) entry.score /= reference;
 
   std::vector<std::size_t> order(entries.size());
   std::iota(order.begin(), order.end(), 0);
@@ -784,9 +869,11 @@ std::vector<Candidate> ChannelDecoder<Mode>::find_candidates(int low_hz,
     if (removed[index]) continue;
 
     Candidate const& candidate = entries[index];
-    if (!std::isfinite(candidate.score) || candidate.score < kMinSync) break;
+    if (!std::isfinite(candidate.score) || candidate.score < min_sync_) break;
 
-    selected.push_back(candidate);
+    // A candidate scoring max_sync_ or more is not taken (the leftover pass),
+    // but still clears its neighbours, as it would in an ordinary pass.
+    if (candidate.score < max_sync_) selected.push_back(candidate);
     if (selected.size() >= kMaxCandidates) break;
 
     for (std::size_t other = 0; other < entries.size(); ++other) {
@@ -794,6 +881,35 @@ std::vector<Candidate> ChannelDecoder<Mode>::find_candidates(int low_hz,
           std::abs(entries[other].frequency - candidate.frequency) <= Mode::az) {
         removed[other] = 1;
       }
+    }
+  }
+
+  // Second start times, best first, after the ordinary candidates.
+  if (!seconds.empty() && selected.size() < kMaxCandidates) {
+    float const min_apart = kSecondStartMinSteps * Mode::step_seconds;
+    std::stable_sort(seconds.begin(), seconds.end(),
+                     [](Candidate const& a, Candidate const& b) { return a.score > b.score; });
+    std::vector<char> gone(seconds.size(), 0);
+    std::size_t const ordinary = selected.size();
+    for (std::size_t i = 0; i < seconds.size(); ++i) {
+      if (gone[i]) continue;
+      Candidate const& candidate = seconds[i];
+      if (!std::isfinite(candidate.score) || candidate.score < min_sync_) break;
+      for (std::size_t j = i + 1; j < seconds.size(); ++j) {
+        if (std::abs(seconds[j].frequency - candidate.frequency) <= Mode::az) gone[j] = 1;
+      }
+      if (candidate.score >= max_sync_) continue;
+      bool same_start = false;
+      for (std::size_t k = 0; k < ordinary; ++k) {
+        if (std::abs(selected[k].frequency - candidate.frequency) <= Mode::az &&
+            std::abs(selected[k].offset - candidate.offset) < min_apart) {
+          same_start = true;
+          break;
+        }
+      }
+      if (same_start) continue;
+      selected.push_back(candidate);
+      if (selected.size() >= kMaxCandidates) break;
     }
   }
 
@@ -1345,6 +1461,8 @@ std::optional<Frame> ChannelDecoder<Mode>::attempt_decode(
   for (int pass = 1; pass <= 11; ++pass) {
     std::array<float, 3 * kDataSymbols> rescue_llr{};
     if (pass == 9 && !deep_) continue;
+    // No last try in the leftover pass (see kLeftoverSyncShare).
+    if (pass >= 8 && leftover_pass_) continue;
     if (pass >= 8) {
       // Ordered statistics decoding always returns its closest codeword, so
       // accept it only with good Costas sync and a small discrepancy
@@ -1441,6 +1559,7 @@ std::optional<Frame> ChannelDecoder<Mode>::attempt_decode(
     }
 
     if (!decoder::crc_ok(payload)) continue;
+    if (!frame_readable(payload)) continue;
     if (pass >= 8 && different_frame_near(frequency, offset, decoder::decode_message(payload))) {
       continue;
     }
@@ -1512,7 +1631,7 @@ std::optional<Frame> ChannelDecoder<Mode>::attempt_decode(
             : decoder::ordered_statistics_decode(hinted_llr, payload, codeword,
                                                  kOsdOrder, &unused);
         if (result < 0 || !keeps_hint() || !decoder::crc_ok(payload) ||
-            !within_limit()) {
+            !frame_readable(payload) || !within_limit()) {
           continue;
         }
         return finish();
@@ -1676,9 +1795,25 @@ std::size_t ChannelDecoder<Mode>::operator()(dec_data const& data, int position,
   build_hints(data);
   deep_ = data.params.deep;
 
-  for (int pass = 1; pass <= 3; ++pass) {
+  // Passes 1 to 3 as before; pass 4 is the leftover pass (see
+  // kLeftoverSyncShare). When the ordinary passes stop early (no candidates,
+  // or a pass that decoded nothing new), the leftover pass still runs.
+  for (int pass = 1; pass <= 4; ++pass) {
+    leftover_pass_ = pass == 4;
+    if (leftover_pass_) {
+      min_sync_ = kMinSync * kLeftoverSyncShare;
+      max_sync_ = kMinSync;
+    }
     auto candidates = find_candidates(data.params.nfa, data.params.nfb);
-    if (candidates.empty()) break;
+    min_sync_ = kMinSync;
+    max_sync_ = std::numeric_limits<float>::infinity();
+    if (candidates.empty()) {
+      if (!leftover_pass_) {
+        pass = 3;
+        continue;
+      }
+      break;
+    }
 
     int const preferred = data.params.nfqso;
     std::sort(candidates.begin(), candidates.end(),
@@ -1735,8 +1870,15 @@ std::size_t ChannelDecoder<Mode>::operator()(dec_data const& data, int position,
       reported_.push_back({frequency, offset, slot->first.text});
     }
 
-    if (!improved) break;
+    if (!improved) {
+      if (!leftover_pass_) {
+        pass = 3;
+        continue;
+      }
+      break;
+    }
   }
+  leftover_pass_ = false;
 
   return decoded.size();
 }
