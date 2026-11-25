@@ -882,7 +882,7 @@ class Js8SettingsFragment : Fragment() {
                 android.text.util.Linkify.addLinks(this, android.text.util.Linkify.WEB_URLS) // tap opens the browser
             }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         line("Easy JS8", size = 1.2f, bold = true, top = 10)
-        line("by VA3OSO")
+        line("by Carson VA3OSO")
         line("Version ${BuildConfig.VERSION_NAME} (build ${BuildConfig.VERSION_CODE})")
         line("Built ${BuildConfig.BUILD_DATE}")
         line("Easy JS8 is a fork of JS8Android.", top = 12)
@@ -909,7 +909,7 @@ class Js8SettingsFragment : Fragment() {
         line("JS8Call-improved team: AC9KH, W6BAZ, KJ4CTD, K0OG, DJ3EI, K4RWR, KN4CRD", top = 6)
         line("JS8Android: https://github.com/JS8Call-improved/Android-port", top = 6)
         line("ft8_lib (FT8 decodes): Kārlis Goba, MIT licence", top = 6)
-        line("js8core-plus (JS8 decoder): Kelly-Shane Fuller, VA3OSO, MIT licence", top = 6)
+        line("js8core-plus (JS8 decoder): Kelly-Shane Fuller, Carson VA3OSO, MIT licence", top = 6)
         line("pocketfft: Max-Planck-Society, BSD licence", top = 6)
         line("Fonts: Selawik, Cascadia Mono (SIL Open Font Licence)", top = 6)
     }
