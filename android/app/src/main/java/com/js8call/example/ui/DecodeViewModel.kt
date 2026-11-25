@@ -71,7 +71,7 @@ class DecodeViewModel(application: Application) : AndroidViewModel(application) 
 
         val app = getApplication<Application>()
         val prefs = PreferenceManager.getDefaultSharedPreferences(app)
-        if (!prefs.getBoolean(PREF_PERSIST_DECODES, false)) return
+        if (!com.js8call.example.js8ui.Js8SettingsSchema.activityKept(prefs)) return
 
         val file = File(app.filesDir, PERSISTED_DECODE_FILE)
         if (!file.exists()) return
@@ -349,7 +349,7 @@ class DecodeViewModel(application: Application) : AndroidViewModel(application) 
         val app = getApplication<Application>()
         val prefs = PreferenceManager.getDefaultSharedPreferences(app)
         val file = File(app.filesDir, PERSISTED_DECODE_FILE)
-        if (!prefs.getBoolean(PREF_PERSIST_DECODES, false)) {
+        if (!com.js8call.example.js8ui.Js8SettingsSchema.activityKept(prefs)) {
             if (file.exists() && !file.delete()) {
                 Log.w(TAG, "Failed to delete persisted decodes")
             }

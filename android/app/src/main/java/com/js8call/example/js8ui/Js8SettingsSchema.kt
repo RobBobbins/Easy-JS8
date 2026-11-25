@@ -100,6 +100,22 @@ object Js8SettingsSchema {
         maxLength: Int = 0, required: Boolean = false
     ) = Field(key, label, Kind.TEXT, default, hint = hint, upper = upper, maxLength = maxLength, required = required)
 
+    /**
+     * Reset the Band Activity, Call Activity, and RX history at startup (General) and Keep decoded messages after
+     * restart (Phone) are one setting shown twice, opposite ways round (Rob, 2026-11-24): kept by default. The stored
+     * value is js8cfg_reset_activity; each switch writes both keys so they always agree.
+     */
+    const val RESET_ACTIVITY_KEY = "js8cfg_reset_activity"
+    const val KEEP_ACTIVITY_KEY = "persist_decodes"
+    fun activityKept(p: SharedPreferences) = !p.getBoolean(RESET_ACTIVITY_KEY, false)
+    private fun saveActivityKept(e: SharedPreferences.Editor, kept: Boolean) {
+        e.putBoolean(RESET_ACTIVITY_KEY, !kept).putBoolean(KEEP_ACTIVITY_KEY, kept)
+    }
+    private fun resetActivity() = Field(RESET_ACTIVITY_KEY, "Reset the Band Activity, Call Activity, and RX history at startup",
+        Kind.CHECK, "false", load = { p -> (!activityKept(p)).toString() }, save = { e, v, _ -> saveActivityKept(e, v != "true") })
+    private fun keepActivity() = Field(KEEP_ACTIVITY_KEY, "Keep decoded messages after restart",
+        Kind.CHECK, "true", load = { p -> activityKept(p).toString() }, save = { e, v, _ -> saveActivityKept(e, v == "true") })
+
     private fun check(key: String, label: String, default: Boolean) =
         Field(key, label, Kind.CHECK, default.toString())
 
@@ -420,7 +436,7 @@ object Js8SettingsSchema {
                 check("js8cfg_transmit_directed", "Immediately transmit CQ, Reply, Info, Saved, and Directed messages from the menu", true),
                 check("log_messages_to_file", "Write log files (ALL.TXT, DIRECTED.TXT, etc) of decoded text", true),
                 check("js8cfg_spellcheck", "Suggest alternative word choices for more efficient message transmission", true),
-                check("js8cfg_reset_activity", "Reset the Band Activity, Call Activity, and RX history at startup", false),
+                resetActivity(),
                 check("js8cfg_check_updates", "Check for software updates at startup", true),
                 // Easy JS8 only (Rob, 2026-11-22): one undirected data frame while a reply is typed to the selected call
                 choice(TYPING_NOTICE_KEY, "Send \"IS TYPING...\" while replying:", "off", listOf(
@@ -652,7 +668,7 @@ object Js8SettingsSchema {
             Group("Easy JS8", listOf(
                 check("tx_boost_enabled", "Transmit audio boost", false),
                 check("keep_screen_on", "Keep screen on", false),
-                check("persist_decodes", "Keep decoded messages after restart", false),
+                keepActivity(),
                 check("time_sync_auto", "Automatic time sync", false)
             ))
         ))

@@ -2,6 +2,16 @@
 
 ## Next session starts here (2026-11-05): audit B sections 1-12 are fixed
 
+**State 20:45, 2026-11-24: Keep decoded messages after restart tied to Reset ... at startup (Rob; uncommitted, built 20:36, tested on S22-Fresh)**
+- Rob: Band Activity, Call Activity and the Message Window are either kept on restart or cleared; kept by default.
+  Station > Phone > Keep decoded messages after restart and General > Reset the Band Activity, Call Activity, and RX
+  history at startup are one setting shown both ways round (`Js8SettingsSchema.resetActivity` / `keepActivity`,
+  `activityKept`): the stored value is `js8cfg_reset_activity`; each switch writes both keys. `DecodeViewModel` (the
+  old JS8Android decode list, no Easy JS8 screen) follows `activityKept`. `Js8ActivityViewModel` unchanged.
+- `website/help/station.html` rewritten for the Android-style windows (Rob uploads it with `settings.html`).
+- W201-W203 passed (`build-env/test/lib/keepreset.py` run 1). The restart itself (activity kept or cleared) was not
+  retested: that code did not change.
+
 **State 19:30, 2026-11-24: Inbox and Map in the PC and FT8Call menu bar (Rob; uncommitted, built 19:23, tested on S22-Fresh)**
 - Menu bar now "File Configurations Mode Log View Control Inbox Map Help" in `fragment_js8_pc.xml` and
   `fragment_js8_ft8call.xml` (ids `js8_menubar_inbox`, `js8_menubar_map`; Help moved to 655). Added by hand:
