@@ -25,4 +25,7 @@ RUN yes | sdkmanager --licenses > /dev/null \
     && sdkmanager --install "platform-tools" "platforms;android-34" "build-tools;34.0.0" \
        "ndk;${ANDROID_NDK_VERSION}" "cmake;3.22.1"
 
+# Google Play: target Android 16 (API 36) from 31 Aug 2026 (Easy JS8, 2026-11-25)
+RUN sdkmanager --install "platforms;android-36" "build-tools;35.0.0" "build-tools;36.0.0"
+
 WORKDIR /src

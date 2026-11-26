@@ -2,7 +2,53 @@
 
 ## Next session starts here (2026-11-05): audit B sections 1-12 are fixed
 
-**State 20:45, 2026-11-24: Keep decoded messages after restart tied to Reset ... at startup (Rob; uncommitted, built 20:36, tested on S22-Fresh)**
+**State 18:15, 2026-11-25: Google Play build: Android 16 target, 16 KB engine files, screen-edge padding (Rob; uncommitted, built 18:05, tested on S22-Fresh and S22-A16)**
+- Play Console: app record created on Rob's personal account "Carson VA3OSO" (package `com.easyjs8.app`, free); its
+  Dashboard requires a closed test (12 testers opted in 14 days) before production. Rob keeps the website APK too.
+  Not done: release signing key (Rob makes it; Play and the website APK share it), Play Console forms, version number.
+- Build: AGP 8.2.2 → 8.10.1, Gradle 8.2 → 8.11.1, compileSdk/targetSdk 34 → 36, Docker image gains platform 36 and
+  build-tools 35/36 (`build-env/Dockerfile`; rebuild the image once). Kotlin 1.9.22 kept.
+- Engine for 16 KB memory pages (Play rule; 1.0.5 crashes at start on a 16 KB phone: "program alignment (4096)
+  cannot be smaller than system page size (16384)", seen on S22-A16): `ndkVersion` 27.3.13750724 in both modules,
+  `-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON`, oboe 1.8.0 → 1.9.3. All three arm64 `.so` LOAD-aligned 16384 in the
+  APK and the AAB. NDK r28 (28.2.13676358) was tried first: same decodes, but about 3 times slower decode passes on
+  S22-Fresh (3.4-3.6 s against 1.0-1.3 s for 1.0.5 run back to back; r27 1.4-2.0 s). Emulator only (ARM code
+  translated). S22 Ultra, 18:31-18:42 (median decode pass, 2 min each, JS8 Tactical also running): Normal 242 ms
+  1.0.5 website APK against 378 ms r27; Fast 148/160, Turbo 80/82, Slow 550/714, 0x10 49/53. NDK 25 and 26 can't
+  be used: their libc++_shared.so is 4 KB aligned (0x1000). Second r27 sample lost (phone left Wi-Fi). Rob, 2026-11-25: the slower
+  decode is fine, keep r27. Second r27 sample 19:01: Normal 400 ms, Slow 704 ms (same as the first).
+  S22 Ultra screen edges, 19:04 (`shots/edge.phone.{up,up_kb,side}.png`): upright clear of status and navigation
+  bars, keyboard pushes the Typing Box up, sideways PC layout clear of the camera side and navigation bar. Phone's
+  auto-rotate put back (1, 0); no Easy JS8 setting changed. The app module needs `ndkVersion` too, or the engine ships with
+  debug symbols ("Unable to strip").
+- Screen edges: `MainActivity.keepClearOfSystemBars()` (decor no longer fits system windows; `android.R.id.content`
+  padded by status bar + navigation bar + cutout, bottom = max(bars, keyboard)); manifest `adjustResize`.
+  Before/after screenshots (`shots/edge.{before,after,a16}.*.png`, side-by-sides `edge.cmp.*.png`): S22-Fresh
+  before/after within 0.5 % of pixels (clock text); keyboard pushes the Typing Box up as before. Android 16 difference:
+  the camera-cutout strip (sideways left, Fullscreen top) shows the light window background where Android 14 shows black.
+- Release build: lint stopped it on `js8_intro.png` (only -port/-land copies, MissingDefaultResource); added
+  `res/drawable-nodpi/js8_intro.png` (copy of the upright one, 87 KB). Release APK and `app-release.aab` build;
+  test copy signed with the debug key (`build-env/test/out/release-test.apk`) passes install / engine start / Settings /
+  sideways Map on both emulators (scratchpad `relsmoke.py`).
+- New AVD **S22-A16** (port 5602): Android 16, 16 KB pages (`system-images;android-36.1;google_apis_ps16k;x86_64`),
+  same 1080×2340 480 dpi screen. Its home screen is locked upright: open the app first, then turn the screen.
+- S22 Ultra: Android 16, 4 KB pages; build installed 18:09; not checked yet (screen was locked).
+
+**Next session starts here (2026-11-24, 21:00)**
+- All app work below is committed and pushed to fork/easy-js8: 826bcb78 (Android-style settings, Inbox and Map in the
+  PC and FT8Call menu bar, waterfall gear tab, inbox lines) and 4c6b0d86 (Keep / Reset tied). Working tree: only
+  untracked test scripts, `website/`, `screenshots/`, `GPL-FREE-ROADMAP.md`, a screen recording.
+- Installed: tablet SM-X210 has 4c6b0d86 (20:40). The S22 Ultra has 826bcb78's build (19:29), not 4c6b0d86: its
+  wireless debugging port was closed (no port open 30000-50000); Rob: "just the tablet is fine for now".
+- Rob's to-do: upload `website/help/station.html` and `settings.html` (rewritten for the new windows) and take new
+  Station / Settings screenshots (he does all screenshots; never ask about them).
+- Open, not decided: help bullets still bare (@ALLCALL, Operator Callsign, Hide messages, Enable Notifications,
+  Automatically switch bands); N3FJP / N1MM help bullets list starting values; app row text "Find this phone's grid"
+  (Acquire GPS) says "phone" where Rob's help rule says "device"; `build-env/gen_pc_layout.py` is out of date with the
+  hand-edited PC / FT8Call layouts; old settings test scripts (`settop.py`, `ui3.py`, ...) tap OK / Cancel.
+- Emulator, adb test processes, build container and the test web server are stopped.
+
+**State 20:45, 2026-11-24: Keep decoded messages after restart tied to Reset ... at startup (Rob; committed 4c6b0d86, built 20:36, tested on S22-Fresh)**
 - Rob: Band Activity, Call Activity and the Message Window are either kept on restart or cleared; kept by default.
   Station > Phone > Keep decoded messages after restart and General > Reset the Band Activity, Call Activity, and RX
   history at startup are one setting shown both ways round (`Js8SettingsSchema.resetActivity` / `keepActivity`,
@@ -12,7 +58,7 @@
 - W201-W203 passed (`build-env/test/lib/keepreset.py` run 1). The restart itself (activity kept or cleared) was not
   retested: that code did not change.
 
-**State 19:30, 2026-11-24: Inbox and Map in the PC and FT8Call menu bar (Rob; uncommitted, built 19:23, tested on S22-Fresh)**
+**State 19:30, 2026-11-24: Inbox and Map in the PC and FT8Call menu bar (Rob; committed 826bcb78, built 19:23, tested on S22-Fresh)**
 - Menu bar now "File Configurations Mode Log View Control Inbox Map Help" in `fragment_js8_pc.xml` and
   `fragment_js8_ft8call.xml` (ids `js8_menubar_inbox`, `js8_menubar_map`; Help moved to 655). Added by hand:
   `build-env/gen_pc_layout.py` no longer matches the layouts (running it drops the waterfall gear tab, `js8_pc_header`
@@ -25,7 +71,7 @@
 - Installed 19:29 on the S22 Ultra (SM-S908W) and the tablet SM-X210 (10.0.0.105:35099): both start, no crash.
   Emulator and test processes stopped.
 
-**State 18:45, 2026-11-24: Station and Settings windows look and work like Android settings (Rob; uncommitted, built 18:31, tested on S22-Fresh)**
+**State 18:45, 2026-11-24: Station and Settings windows look and work like Android settings (Rob; committed 826bcb78, built 18:31, tested on S22-Fresh)**
 - Rob: both windows, both layouts, saving instant like Android, checks on the fly; Radio changes save at once but the
   radio reconnects only when the Radio page is left; **Test CAT** / **Test PTT** try them earlier. No OK / Cancel /
   Save anywhere now (replaces the 17:40 `barOnTop` bar and the About change).

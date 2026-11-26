@@ -5,5 +5,6 @@ MSYS_NO_PATHCONV=1 docker run --rm -v "E:/new-w3bguru-websites/easy js8:/src" -v
 
 The easyjs8-android volume keeps the debug signing key, so each build installs over the last one.
 Output: E:\new-w3bguru-websites\easy js8\android\app\build\outputs\apk\debug\app-debug.apk
-The easyjs8-ndk volume keeps the Android NDKs. The build plugin also downloads NDK 25.1.8937393
-(its default); without the volume that 600 MB download happens on every build.
+The easyjs8-ndk volume keeps the Android NDKs. The build plugin downloads NDK 27.3.13750724 (set as
+ndkVersion in both modules, 2026-11-25, for 16 KB memory pages); without the volume that 700 MB download
+happens on every build.

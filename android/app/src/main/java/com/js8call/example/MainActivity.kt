@@ -450,12 +450,31 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
+        keepClearOfSystemBars()
         com.js8call.example.service.AprsBeacon.offAtAppStart(this)
         if (savedInstanceState == null) {
             showIntro()
         } else {
             setContentView(R.layout.activity_main)
             setUpMain()
+        }
+    }
+
+    /**
+     * Android 15+ draws apps that target API 35+ under the status bar and the navigation bar, with no way to turn
+     * that off at API 36, which Google Play requires (2026-11-25). The screens get padding the size of the bars,
+     * the camera cutout and the open keyboard, so they sit where they did before, on every Android version.
+     * View > Show Fullscreen hides the bars, so their padding drops to 0 there.
+     */
+    private fun keepClearOfSystemBars() {
+        androidx.core.view.WindowCompat.setDecorFitsSystemWindows(window, false)
+        val content = findViewById<android.view.View>(android.R.id.content)
+        androidx.core.view.ViewCompat.setOnApplyWindowInsetsListener(content) { v, insets ->
+            val bars = insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.systemBars() or
+                androidx.core.view.WindowInsetsCompat.Type.displayCutout())
+            val ime = insets.getInsets(androidx.core.view.WindowInsetsCompat.Type.ime())
+            v.setPadding(bars.left, bars.top, bars.right, maxOf(bars.bottom, ime.bottom))
+            androidx.core.view.WindowInsetsCompat.CONSUMED
         }
     }
 

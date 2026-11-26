@@ -13,12 +13,14 @@ plugins {
 
 android {
     namespace = "com.js8call.example"
-    compileSdk = 34
+    compileSdk = 36
+    // Same NDK as js8core-lib: the app module strips the engine files' debug symbols with it (2026-11-25)
+    ndkVersion = "27.3.13750724"
 
     defaultConfig {
         applicationId = "com.easyjs8.app"
         minSdk = 24 // Android 7.0: Galaxy S6 active (Rob, 2026-10-22); was 26
-        targetSdk = 34
+        targetSdk = 36 // Google Play requires Android 16 (API 36) from 31 Aug 2026 (2026-11-25; was 34)
         versionCode = 8
         versionName = "1.0.5"
         // About page: the day this APK was built, UTC, in the clock's style (e.g. 2026 Oct 20)

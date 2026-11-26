@@ -5,7 +5,11 @@ plugins {
 
 android {
     namespace = "com.js8call.core"
-    compileSdk = 34
+    compileSdk = 36
+    // NDK r27 with ANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES builds the engine for phones with 16 KB memory
+    // pages, which Google Play requires. r28 decoded about 3x slower on the emulator, so r27
+    // (Easy JS8, 2026-11-25; was the build plugin's default NDK 25)
+    ndkVersion = "27.3.13750724"
 
     defaultConfig {
         minSdk = 24  // Android 7.0: Galaxy S6 active (Rob, 2026-10-22); Oboe runs on 4.1+
@@ -25,7 +29,9 @@ android {
                 )
                 arguments += listOf(
                     "-DANDROID_STL=c++_shared",
-                    "-DANDROID_PLATFORM=android-26"
+                    "-DANDROID_PLATFORM=android-26",
+                    // 16 KB page alignment (r27 needs this; r28 does it by default)
+                    "-DANDROID_SUPPORT_FLEXIBLE_PAGE_SIZES=ON"
                 )
             }
         }
@@ -123,7 +129,8 @@ android {
 
 dependencies {
     // Oboe for audio
-    implementation("com.google.oboe:oboe:1.8.0")
+    // 1.9.0+ is built for 16 KB memory pages (Easy JS8, 2026-11-25; was 1.8.0)
+    implementation("com.google.oboe:oboe:1.9.3")
 
     // AndroidX core
     implementation("androidx.core:core-ktx:1.12.0")
