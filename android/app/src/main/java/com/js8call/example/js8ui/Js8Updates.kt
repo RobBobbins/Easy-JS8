@@ -2,6 +2,7 @@ package com.js8call.example.js8ui
 
 import android.app.Activity
 import android.app.AlertDialog
+import android.os.Build
 import android.os.Handler
 import android.os.Looper
 import android.text.util.Linkify
@@ -24,6 +25,13 @@ object Js8Updates {
     private const val CLOSE_AFTER_MS = 60_000L
 
     fun check(activity: Activity, alertOnUpToDate: Boolean) {
+        // Installed from Google Play: Play does the updating. Play policy allows no updates from elsewhere, and
+        // Google re-signs Play copies, so a GitHub APK can't install over them (Rob, 2026-11-25)
+        if (fromPlay(activity)) {
+            Log.d(TAG, "Checking for Updates skipped: installed from Google Play")
+            if (alertOnUpToDate) show(activity, "Updates", "Google Play updates Easy JS8.")
+            return
+        }
         // debug_update_url: debug builds test against a local server
         val url = PreferenceManager.getDefaultSharedPreferences(activity).getString("debug_update_url", null)
             ?.takeIf { BuildConfig.DEBUG } ?: VERSION_URL
@@ -52,6 +60,19 @@ object Js8Updates {
                 }
             }
         }
+    }
+
+    /** True when the Google Play Store installed this copy (an internal or closed test too). */
+    private fun fromPlay(activity: Activity): Boolean = try {
+        val pm = activity.packageManager
+        val installer = if (Build.VERSION.SDK_INT >= 30) {
+            pm.getInstallSourceInfo(activity.packageName).installingPackageName
+        } else {
+            @Suppress("DEPRECATION") pm.getInstallerPackageName(activity.packageName)
+        }
+        installer == "com.android.vending"
+    } catch (e: Exception) {
+        false
     }
 
     /** QVersionNumber: compared number by number, the leading numbers of each. */
