@@ -21,8 +21,8 @@ android {
         applicationId = "com.easyjs8.app"
         minSdk = 24 // Android 7.0: Galaxy S6 active (Rob, 2026-10-22); was 26
         targetSdk = 36 // Google Play requires Android 16 (API 36) from 31 Aug 2026 (2026-11-25; was 34)
-        versionCode = 8
-        versionName = "1.0.5"
+        versionCode = 10 // 1.1.0, first Google Play release (Rob, 2026-11-25; 9 not used)
+        versionName = "1.1.0"
         // About page: the day this APK was built, UTC, in the clock's style (e.g. 2026 Oct 20)
         val buildDate = SimpleDateFormat("yyyy MMM dd", Locale.US)
             .apply { timeZone = TimeZone.getTimeZone("UTC") }.format(Date())
