@@ -1091,6 +1091,8 @@ class Js8SettingsFragment : Fragment() {
                 requireContext().startService(Intent(requireContext(), JS8EngineService::class.java).setAction(JS8EngineService.ACTION_TEST_CAT))
             }
             "test_ptt" -> sendTestPtt(!vm.testPtt)
+            // Settings > Log > Open Log Directory...: as the menu bar's Log menu
+            "open_log_dir" -> Js8MainFragment.openLogDirectory(requireContext())
             // Settings > Log > Export Log...: the Export Options page
             "export_log" -> findNavController().navigate(R.id.navigation_js8_export)
             // PC Log menu

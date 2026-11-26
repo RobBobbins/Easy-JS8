@@ -333,9 +333,10 @@ object Js8SettingsSchema {
             ButtonRow(listOf("Copyright notice" to "copyright", "Check for Updates" to "check_updates")),
             ButtonRow(listOf("JS8Call User Guide" to "user_guide"))
         )),
-        // From the PC's Log menu (Rob, 2026-10-20): Export Log... opens Export Options
+        // From the PC's Log menu (Rob, 2026-10-20): Export Log... opens Export Options;
+        // Open Log Directory... first, the menu bar's order (Rob, 2026-11-26)
         Section("Log", null, listOf(
-            ButtonRow(listOf("Export Log..." to "export_log")),
+            ButtonRow(listOf("Open Log Directory..." to "open_log_dir", "Export Log..." to "export_log")),
             ButtonRow(listOf("Erase ALL.TXT" to "erase_all_txt", "Erase js8call_log.adi" to "erase_adi"))
         ))
     )

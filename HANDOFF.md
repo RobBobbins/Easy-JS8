@@ -2,6 +2,17 @@
 
 ## Next session starts here (2026-11-05): audit B sections 1-12 are fixed
 
+**State 15:45, 2026-11-26: Settings > Log > Open Log Directory... (Rob; uncommitted, built 15:35)**
+- Settings > Log: Open Log Directory... first, then Export Log... (`open_log_dir`, Js8SettingsSchema / Fragment).
+- `openLogDirectory` moved to `Js8MainFragment` companion so the menu bar and Settings share it.
+- Crash found and fixed: the old code added FLAG_GRANT_READ_URI_PERMISSION for the Download/JS8CallLogs document
+  the app doesn't own; Android 14 threw SecurityException and the app stopped (menu bar Log > Open Log Directory...
+  too, since before today). The flag is gone; any RuntimeException (no file app, no access) shows the where-message.
+- If the file app is already open, it may come up at the place it was left (seen once on the emulator at Download);
+  with it closed first, both buttons open JS8CallLogs.
+- Test: `build-env/test/lib/logdirchk.py` (W246-W248) passed on S22-Fresh and the tablet (Samsung's file app).
+- Installed 15:41 on the tablet. S22 Ultra still offline over adb.
+
 **State 15:05, 2026-11-26: menu bar Log > Export Log... (Rob; uncommitted, built 14:56)**
 - `showLogMenu`: Export Log... third, under Open Log Directory..., opens the Export Options page
   (`navigation_js8_export`), as Settings > Log > Export Log... does. PC and FT8Call layouts (both have the menu bar).

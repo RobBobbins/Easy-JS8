@@ -48,6 +48,22 @@ import kotlinx.coroutines.launch
 class Js8MainFragment : Fragment() {
 
     companion object {
+        /**
+         * Log > Open Log Directory... (menu bar, and Settings > Log, Rob 2026-11-26): Download/JS8CallLogs in the
+         * device's file app; with no app for folders, or no way in, a message saying where the files are.
+         * No FLAG_GRANT_READ_URI_PERMISSION: the folder is not the app's to grant, and Android 14 stopped the app
+         * with a SecurityException (found 2026-11-26).
+         */
+        fun openLogDirectory(context: android.content.Context) {
+            val uri = android.provider.DocumentsContract.buildDocumentUri("com.android.externalstorage.documents", "primary:Download/JS8CallLogs")
+            try {
+                context.startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(uri, android.provider.DocumentsContract.Document.MIME_TYPE_DIR))
+            } catch (e: RuntimeException) { // ActivityNotFoundException, SecurityException
+                AlertDialog.Builder(context).setMessage("The log files are in Download/JS8CallLogs.")
+                    .setPositiveButton(android.R.string.ok, null).show()
+            }
+        }
+
         /** Settings > View "New Band Activity line for each message" (Rob, 2026-11-07; on by default; off = the PC's line per offset). */
         const val BAND_SPLIT_KEY = "js8cfg_band_line_per_message"
         /** Settings > View: stations with a message flag stay at the top of Call Activity (the PC always does; Rob, 2026-11-22). */
@@ -1481,7 +1497,7 @@ class Js8MainFragment : Fragment() {
         menu.setOnMenuItemClickListener { item ->
             when (item.itemId) {
                 1 -> openLog(selectedCall)
-                2 -> openLogDirectory()
+                2 -> openLogDirectory(requireContext())
                 5 -> navigateFromMain(R.id.navigation_js8_export) // the Export Options page
                 3 -> confirmErase("Are you sure you want to erase file ALL.TXT?") {
                     requireContext().startService(Intent(requireContext(), JS8EngineService::class.java).setAction(JS8EngineService.ACTION_ERASE_LOG))
@@ -1502,16 +1518,6 @@ class Js8MainFragment : Fragment() {
     }
 
     /** PC on_actionOpen_log_directory_triggered: the Download/JS8CallLogs folder in the phone's Files app. */
-    private fun openLogDirectory() {
-        val uri = android.provider.DocumentsContract.buildDocumentUri("com.android.externalstorage.documents", "primary:Download/JS8CallLogs")
-        try {
-            startActivity(Intent(Intent.ACTION_VIEW).setDataAndType(uri, android.provider.DocumentsContract.Document.MIME_TYPE_DIR)
-                .addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION))
-        } catch (e: android.content.ActivityNotFoundException) {
-            showMessage("The log files are in Download/JS8CallLogs.")
-        }
-    }
-
     /** PC Control menu (mainwindow.ui menuControl). */
     private fun showControlMenu(anchor: View) {
         val v = requireView()
