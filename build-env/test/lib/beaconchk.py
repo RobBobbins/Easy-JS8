@@ -264,20 +264,26 @@ try:
 
 
     def open_beacon_page():
+        """Pages sideways: Station, then APRS Beacon in the page list (2026-11-24 Android list: swipe it up until shown)."""
         tapk('Station', 2)
+        for _ in range(4):
+            if find(dump(), 'APRS Beacon'):
+                break
+            adb('shell', 'input', 'swipe', '500', '800', '500', '350', '400'); time.sleep(1)
         tapk('APRS Beacon', 1.5)
 
 
     def pick(now, choice):
-        """On the APRS Beacon page: opens the APRS beacon: list, picks [choice], OK."""
-        tapk(f'{now}  ▾', 1.5) or tapk(now, 1.5)
+        """On the APRS Beacon page: the APRS beacon row opens its choice box; the pick saves at once (no OK since
+        the 2026-11-24 Android settings)."""
+        tapk('APRS beacon', 1.5)
         for k in range(8):  # the list opens at the current choice: down first, then back up
             if find(dump(), choice):
                 break
-            y0, y1 = ('700', '300') if k < 4 else ('300', '700')
+            # inside the box's list (sideways it runs about y 340-700; a swipe from its edge did not scroll it)
+            y0, y1 = ('640', '400') if k < 4 else ('400', '640')
             adb('shell', 'input', 'swipe', '1170', y0, '1170', y1, '400'); time.sleep(.8)
-        tapk(choice, 1.5)
-        tapk('OK', 2)
+        tapk(choice, 2)
 
 
     if want('W166'):
@@ -318,6 +324,13 @@ try:
             once = [sum(k in l for l in lines) for k in ('minutes started', 'SmartBeaconing started')] == [2, 1]
             # a drag inside the window scrolls it (finger down = earlier lines), the page stays
             crop = lambda png, bb: Image.open(io.BytesIO(png)).convert('RGB').crop(bb)
+            # 2026-11-26: the GPS row and the Status label put the box lower; sideways it starts near the screen's
+            # bottom, so scroll the page (above the box) until the box is in view first
+            for _ in range(3):
+                if b4 and b4[3] - b4[1] >= 400:
+                    break
+                adb('shell', 'input', 'swipe', '1600', '700', '1600', '300', '600'); time.sleep(1.5)
+                b4, _ = status_node()
             before = adb('exec-out', 'screencap', '-p')
             cx, cy = (b4[0] + b4[2]) // 2, (b4[1] + b4[3]) // 2
             adb('shell', 'input', 'swipe', str(cx), str(cy - 120), str(cx), str(cy + 200), '500'); time.sleep(1.5)

@@ -131,7 +131,7 @@ try:
             off, _ = wait_for(r'RX turned off: APRS beacon stopped', 10)
             n0 = len([l for l in log() if 'GPS fix started' in l or 'Beacon made' in l])
             open_beacon_page()
-            g = node_text('js8_aprs_gps')
+            g = node_text('js8_aprs_gps'); g = 'GPS: ' + g[0].lower() + g[1:] if g else g  # row since 2026-11-26
             st = node_text('js8_aprs_status') or ''
             live = st.splitlines()[-1] if st else ''
             open(f'shots/rxkeep.{run}.rxoff.png', 'wb').write(adb('exec-out', 'screencap', '-p'))

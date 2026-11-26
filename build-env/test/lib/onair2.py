@@ -108,19 +108,28 @@ def beacon_on(mode):
         if m and int(m.group(1)) < int(m.group(2)):
             break
     tapk('js8_btn_settings', 2)
-    gear = [n for n in re.findall(r'<node [^>]*>', dump()) if 'content-desc="Station"' in n]
-    if gear:
-        a, b, c, d = map(int, re.search(r'bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"', gear[0]).groups())
-        adb('shell', 'input', 'tap', str((a + c) // 2), str((b + d) // 2)); time.sleep(2)
+    for _ in range(4):  # the Settings window's gear can take a moment to show (W166 run 202 missed it)
+        gear = [n for n in re.findall(r'<node [^>]*>', dump()) if 'content-desc="Station"' in n]
+        if gear:
+            a, b, c, d = map(int, re.search(r'bounds="\[(\d+),(\d+)\]\[(\d+),(\d+)\]"', gear[0]).groups())
+            adb('shell', 'input', 'tap', str((a + c) // 2), str((b + d) // 2)); time.sleep(2)
+            break
+        time.sleep(1)
+    # Station can open on a page (the one last shown sideways in Pages): ← once for the page list
+    if not find(dump(), 'APRS Beacon') and not find(dump(), 'Radio'):
+        adb('shell', 'input', 'keyevent', '4'); time.sleep(1.5)
+    for _ in range(3):  # Station's page list: APRS Beacon may be below the screen
+        if find(dump(), 'APRS Beacon'):
+            break
+        adb('shell', 'input', 'swipe', '540', '1500', '540', '800', '400'); time.sleep(1)
     tapk('APRS Beacon', 1.5)
-    tapk('Off  ▾', 1.5)
+    tapk('APRS beacon', 1.5)  # the row (2026-11-24 Android settings: a choice box, saved on the pick, no OK)
     label = BEACON_LABELS[mode]
     for _ in range(4):  # the list scrolls
         if find(dump(), label):
             break
         adb('shell', 'input', 'swipe', '540', '1500', '540', '700', '400'); time.sleep(.8)
-    tapk(label, 1.5)
-    tapk('OK', 2)
+    tapk(label, 2)
     ok = f'name="js8cfg_aprs_beacon">{mode}<' in getprefs()
     for _ in range(4):  # Back until the main screen (its Settings button) shows
         if 'js8_btn_settings' in dump():

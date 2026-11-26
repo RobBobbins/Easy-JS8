@@ -608,6 +608,10 @@ class Js8SettingsFragment : Fragment() {
             is Special -> col.addView(when (item.id) {
                 "grid_gps" -> gpsRow()
                 "power_slider" -> powerSlider()
+                // Android rows, not a table (Rob, 2026-11-26)
+                "notifications_table" -> notifications()
+                "aprs_gps" -> aprsGpsLine()
+                "aprs_status" -> aprsStatusWindow()
                 // Tables and lists keep their own look (Rob, 2026-11-24), inside the page's margins
                 else -> FrameLayout(requireContext()).apply {
                     setPadding(px(16), px(8), px(16), px(8))
@@ -1206,20 +1210,26 @@ class Js8SettingsFragment : Fragment() {
     }
 
     /**
-     * APRS Beacon GPS status (Rob 2026-11-17), updated every second while on screen. One line, two when it does
-     * not fit (Rob 2026-11-18: the fix line was cut off upright on the S22 Ultra).
+     * APRS Beacon GPS status (Rob 2026-11-17), updated every second while on screen. An Android row (Rob
+     * 2026-11-26): GPS, the status under it without its "GPS: " start; two lines when it does not fit (Rob
+     * 2026-11-18: the fix line was cut off upright on the S22 Ultra). Not tappable.
      */
     private fun aprsGpsLine(): View {
-        val text = label("").apply {
+        val box = texts("GPS", " ")
+        val text = (box.getChildAt(1) as TextView).apply {
             id = R.id.js8_aprs_gps
-            isSingleLine = false
             maxLines = 2
-            ellipsize = android.text.TextUtils.TruncateAt.END
-            setPadding(0, px(4), 0, px(4))
+        }
+        val row = LinearLayout(requireContext()).apply {
+            minimumHeight = px(56)
+            gravity = Gravity.CENTER_VERTICAL
+            setPadding(px(16), px(12), px(16), px(12))
+            addView(box, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
         }
         val tick = object : Runnable {
             override fun run() {
                 text.text = com.js8call.example.service.AprsBeacon.gpsLine(text.context)
+                    .removePrefix("GPS: ").replaceFirstChar { it.uppercase() }
                 text.postDelayed(this, 1000L)
             }
         }
@@ -1227,20 +1237,33 @@ class Js8SettingsFragment : Fragment() {
             override fun onViewAttachedToWindow(v: View) { text.removeCallbacks(tick); tick.run() }
             override fun onViewDetachedFromWindow(v: View) { text.removeCallbacks(tick) }
         })
-        return text
+        return row
     }
 
     /**
      * APRS Beacon status window (Rob 2026-11-17): the beacon's events with their UTC time, the last line counting
      * down live; updated every second while it is on screen. Follows the newest line unless scrolled up.
+     * Android look (Rob 2026-11-26): "Status" above a rounded box in the page's colours, Android's font at 14 sp.
      */
     private fun aprsStatusWindow(): View {
-        val text = styledField(TextView(requireContext())).apply {
+        val col = column().apply { setPadding(px(16), px(8), px(16), px(8)) }
+        col.addView(TextView(requireContext()).apply {
+            text = "Status"
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
+            setTextColor(onSurfaceVariant)
+            setPadding(0, 0, 0, px(6))
+        })
+        val text = TextView(requireContext()).apply {
             id = R.id.js8_aprs_status
+            background = android.graphics.drawable.GradientDrawable().apply {
+                cornerRadius = px(12).toFloat()
+                setColor(attr(com.google.android.material.R.attr.colorSurfaceContainerHighest))
+            }
+            setTextColor(onSurface)
             isSingleLine = false
             gravity = Gravity.TOP or Gravity.START
-            setPadding(px(8), px(6), px(8), px(6))
-            setTextSize(TypedValue.COMPLEX_UNIT_PX, textPx * 0.9f)
+            setPadding(px(12), px(10), px(12), px(10))
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
             setHorizontallyScrolling(false)
             movementMethod = android.text.method.ScrollingMovementMethod()
             isVerticalScrollBarEnabled = true
@@ -1269,7 +1292,8 @@ class Js8SettingsFragment : Fragment() {
             override fun onViewAttachedToWindow(v: View) { text.removeCallbacks(tick); tick.run() }
             override fun onViewDetachedFromWindow(v: View) { text.removeCallbacks(tick) }
         })
-        return text
+        col.addView(text, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        return col
     }
 
     private fun table(key: String, cols: List<Js8TableView.Column>, rows: List<Js8TableView.Row>, heightDp: Int) =
@@ -1637,38 +1661,53 @@ class Js8SettingsFragment : Fragment() {
         return col
     }
 
+    /**
+     * Station > Notifications, one Android row per event (Rob, 2026-11-26; was the PC table with Select / Test /
+     * Clear at the far right): the event's name, its sound under it, a switch at the right. Tapping the name opens
+     * Phone's notification sound (was Clear, now leaves the switch alone) / Choose a sound file… (Select) / Play
+     * sound (Test). No file = the phone's notification sound.
+     */
     private fun notifications(): View {
-        val col = column().apply { setPadding(0, px(4), 0, 0) }
+        val col = column()
         Js8SettingsSchema.NOTIFY_EVENTS.forEach { (k, name) ->
             val key = "js8cfg_notify_$k"
             val fileKey = Js8SettingsSchema.NOTIFY_FILE_PREFIX + k
             val file = (draft.values[fileKey] ?: draft.prefs.getString(fileKey, "")).orEmpty()
-            col.addView(CheckBox(requireContext()).apply {
-                text = name
-                typeface = font
-                setTextSize(TypedValue.COMPLEX_UNIT_PX, textPx)
-                setTextColor(color(R.color.js8_frame_text))
-                CompoundButtonCompat.setButtonTintList(this, android.content.res.ColorStateList.valueOf(color(R.color.js8_cfg_group_border)))
+            val sw = MaterialSwitch(requireContext()).apply {
                 isChecked = (draft.values[key] ?: draft.prefs.getString(key, "false")) == "true"
+                contentDescription = name
                 setOnCheckedChangeListener { _, c -> draft.values[key] = c.toString() }
-            })
-            // PC notifications table: Sound File, Select, Test, Clear. No file = the phone's notification sound
-            val row = LinearLayout(requireContext()).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
-            row.addView(label(if (file.isEmpty()) "Phone's notification sound" else soundFileName(file)).apply {
-                isSingleLine = true
-                ellipsize = android.text.TextUtils.TruncateAt.MIDDLE
-            }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-            fun small(name: String, click: () -> Unit) = row.addView(button(name, click),
-                LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, px(26)).apply { marginStart = px(4) })
-            small("Select") { notifyPicking = fileKey; pickNotifySound.launch(arrayOf("audio/*")) }
-            small("Test") {
-                val uri = if (file.isEmpty()) android.media.RingtoneManager.getDefaultUri(android.media.RingtoneManager.TYPE_NOTIFICATION) else Uri.parse(file)
-                android.media.RingtoneManager.getRingtone(requireContext(), uri)?.play()
             }
-            small("Clear") { draft.values[fileKey] = ""; draft.values[key] = "false"; render() }
-            col.addView(row, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin = px(6) })
+            // Android's split row: a thin line between the tappable name and the switch
+            val end = LinearLayout(requireContext()).apply {
+                orientation = LinearLayout.HORIZONTAL
+                gravity = Gravity.CENTER_VERTICAL
+                addView(View(requireContext()).apply { setBackgroundColor(attr(com.google.android.material.R.attr.colorOutlineVariant)) },
+                    LinearLayout.LayoutParams(px(1), px(32)).apply { marginEnd = px(16) })
+                addView(sw)
+            }
+            col.addView(row(name, if (file.isEmpty()) "Phone's notification sound" else soundFileName(file), end = end) {
+                soundChoices(name, fileKey, file)
+            })
         }
         return col
+    }
+
+    /** A notification event's sound: the phone's, a file, or play the one set. */
+    private fun soundChoices(name: String, fileKey: String, file: String) {
+        MaterialAlertDialogBuilder(requireContext()).setTitle(name)
+            .setItems(arrayOf("Phone's notification sound", "Choose a sound file…", "Play sound")) { _, which ->
+                when (which) {
+                    0 -> { draft.values[fileKey] = ""; render(keepScroll = true) }
+                    1 -> { notifyPicking = fileKey; pickNotifySound.launch(arrayOf("audio/*")) }
+                    else -> {
+                        val uri = if (file.isEmpty()) android.media.RingtoneManager.getDefaultUri(android.media.RingtoneManager.TYPE_NOTIFICATION) else Uri.parse(file)
+                        android.media.RingtoneManager.getRingtone(requireContext(), uri)?.play()
+                    }
+                }
+            }
+            // No Cancel: sideways on a phone it pushed Play sound below the box's edge; outside / back close it
+            .show()
     }
 
     /** The file's own name; the picker's address alone reads like "msf:1000000024". */
@@ -1684,7 +1723,7 @@ class Js8SettingsFragment : Fragment() {
         if (uri != null && key != null) {
             runCatching { requireContext().contentResolver.takePersistableUriPermission(uri, Intent.FLAG_GRANT_READ_URI_PERMISSION) }
             draft.values[key] = uri.toString()
-            render()
+            render(keepScroll = true)
         }
     }
 

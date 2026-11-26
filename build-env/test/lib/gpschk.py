@@ -1,7 +1,7 @@
 """W167-W168 (2026-11-17), Station OK and the APRS Beacon GPS line (Easy JS8 only). gpschk.py <run> [ID,ID]
 W167: Station OK saves and stays on the page (Rob 2026-11-17): sideways Pages (Station in the screen) and the upright
       Station window. The value is saved; ← Back still leaves (page -> list -> window closed).
-W175 (2026-11-18, runs with W168): upright Station window with a fix, the GPS line shows in full on two lines.
+W175 (2026-11-18, runs with W168): upright Station window with a fix, the GPS line shows in full (two lines if needed).
 W168: Station > APRS Beacon GPS line, one line (two upright if needed), never turns the GPS on itself:
       beacon off -> "GPS: off (APRS beacon off)"; location off -> "GPS: turned off in phone settings";
       beacon on, no position yet -> "GPS: searching..."; a fix -> "GPS: fix HH:MM:SS UTC (m:ss ago), ±N m, <10-char grid>",
@@ -76,6 +76,17 @@ def rotate(code):
     return False
 
 
+def beacon_page(wait=1.5):
+    """Station page list > APRS Beacon. Since the 2026-11-24 Android list it can sit below the screen: swipe the
+    list up (left pane sideways) until it shows."""
+    for _ in range(4):
+        if find(dump(), 'APRS Beacon'):
+            break
+        x = '500' if rotate_state[0] == 'L' else '540'
+        adb('shell', 'input', 'swipe', x, '800', x, '350', '400'); time.sleep(1)
+    return tapk('APRS Beacon', wait)
+
+
 def node_text(rid):
     for n in re.findall(r'<node [^>]*>', dump()):
         if re.search(r'resource-id="[^"]*/%s"' % rid, n):
@@ -85,7 +96,10 @@ def node_text(rid):
 
 
 def gps():
-    return node_text('js8_aprs_gps')
+    """The GPS row's status read back as the old line: since 2026-11-26 the row shows "Off (APRS beacon off)" under
+    the name GPS, the app's "GPS: off (APRS beacon off)" without its start, first letter upper case."""
+    t = node_text('js8_aprs_gps')
+    return 'GPS: ' + t[0].lower() + t[1:] if t else t
 
 
 def gps_height():
@@ -137,7 +151,7 @@ try:
             setup('0')
             rotate('L'); rotate_state[0] = 'L'
             tapk('Station', 2)
-            tapk('APRS Beacon', 1.5)
+            beacon_page(1.5)
             pick('Off', '5 minutes')
             tapk('OK', 2.5)
             st = texts()
@@ -148,7 +162,7 @@ try:
             setprefs(js8cfg_aprs_beacon='0'); start()
             rotate('U'); rotate_state[0] = 'U'
             opened = open_station_window()
-            tapk('APRS Beacon', 1.5)
+            beacon_page(1.5)
             pick('Off', '10 minutes')
             tapk('OK', 2.5)
             st = texts()
@@ -170,7 +184,7 @@ try:
         with part('W168 beacon off, location off', 50, ['W168'], res, mark):
             setup('0')
             rotate('L'); rotate_state[0] = 'L'
-            tapk('Station', 2); tapk('APRS Beacon', 1.5)
+            tapk('Station', 2); beacon_page(1.5)
             got['off'] = gps()
             adb('shell', 'cmd', 'location', 'set-location-enabled', 'false'); time.sleep(2.5)
             got['locoff'] = gps()
@@ -182,7 +196,7 @@ try:
             adb('shell', 'cmd', 'location', 'providers', 'set-test-provider-enabled', 'gps', 'true')
             setup('2')  # the first fix is wanted at once
             rotate('L')
-            tapk('Station', 2); tapk('APRS Beacon', 1.5)
+            tapk('Station', 2); beacon_page(1.5)
             time.sleep(2)
             got['search'] = gps()
             open(f'shots/gps.{run}.searching.png', 'wb').write(adb('exec-out', 'screencap', '-p'))
@@ -204,15 +218,17 @@ try:
                 # Rob 2026-11-18: the fix line was cut off upright on the S22 Ultra; two lines when it does not fit
                 rotate('U'); rotate_state[0] = 'U'
                 opened = open_station_window()
-                tapk('APRS Beacon', 1.5); time.sleep(1.5)
+                beacon_page(1.5); time.sleep(1.5)
                 t_up, h_up = gps(), gps_height()
                 open(f'shots/gps.{run}.upright-fix.png', 'wb').write(adb('exec-out', 'screencap', '-p'))
                 fixre_ = r'GPS: fix \d\d:\d\d:\d\d UTC \(\d+:\d\d ago\), ±\d+ m, ' + grid10(LAT, LON) + '$'
                 # two lines: upright the line is at least 1.5 times its one-line height sideways (same text size; the
                 # 8 dp padding counts once, so two lines measured 126 px against 75 px for one on S22-Fresh)
-                mark('W175', opened and bool(re.match(fixre_, t_up or '')) and bool(h_up) and bool(h_side) and h_up >= 1.5 * h_side,
+                # 2026-11-26: the GPS row drops "GPS: " and uses Android's font, so on S22-Fresh the fix line fits on one line;
+                # the row still allows two. Full text, and upright never shorter than sideways (checked by eye too).
+                mark('W175', opened and bool(re.match(fixre_, t_up or '')) and bool(h_up) and bool(h_side) and h_up >= h_side,
                      f'window {opened}; text {t_up!r}; height upright {h_up} px, sideways {h_side} px')
-                tapk('← Back', 1.5); tapk('← Back', 2)
+                adb('shell', 'input', 'keyevent', '4'); time.sleep(1.5); adb('shell', 'input', 'keyevent', '4'); time.sleep(2)
                 rotate('L'); rotate_state[0] = 'L'
         adb('shell', 'cmd', 'location', 'providers', 'remove-test-provider', 'gps')
         with part('W168 no permission', 40, ['W168'], res, mark):
@@ -220,7 +236,7 @@ try:
             adb('shell', 'pm', 'revoke', PKG, 'android.permission.ACCESS_COARSE_LOCATION')
             setup('0', grant=False)
             rotate('L')
-            tapk('Station', 2); tapk('APRS Beacon', 1.5)
+            tapk('Station', 2); beacon_page(1.5)
             open(f'shots/gps.{run}.noperm.png', 'wb').write(adb('exec-out', 'screencap', '-p'))
             got['noperm'] = gps()
             adb('shell', 'pm', 'grant', PKG, 'android.permission.ACCESS_FINE_LOCATION')

@@ -2,6 +2,33 @@
 
 ## Next session starts here (2026-11-05): audit B sections 1-12 are fixed
 
+**State 10:50, 2026-11-26: APRS Beacon GPS row and Status box in the Android look (Rob; uncommitted, built 10:14, tested on S22-Fresh)**
+- `aprsGpsLine`: an Android row, GPS over the status (AprsBeacon.gpsLine without "GPS: ", first letter upper case;
+  id `js8_aprs_gps` on the status text, 2 lines at most). `aprsStatusWindow`: "Status" 14 sp over a rounded box
+  (colorSurfaceContainerHighest, 12 dp corners), Android font 14 sp, 10 lines, scrolls as before. Both no longer in
+  the tables' padded frame. On S22-Fresh upright the fix line now fits on one line.
+- Test scripts brought up to the 2026-11-24 settings (they still used the drop-down and OK): `onair2.beacon_on` (row +
+  choice box, gear retry, ← to the list when Station opens on a page, list scroll), `gpschk.py` (`beacon_page`
+  scrolls the list; `gps()` turns the row text back into "GPS: ..."; W175 now: full text, upright not shorter than
+  sideways; ← Back text replaced by the back key), `rxkeep.py` (same GPS text), `beaconchk.py` (row + choice box,
+  swipes inside the box's list, page scrolled so the Status box is in view before the drag).
+- Passed: W166 (beaconchk run 206), W168 + W175 (gpschk run 205), W170 (rxkeep run 202), W216 by eye.
+- Seen, not changed: upright Station opens on the page last shown sideways in Pages (e.g. General), not the list.
+- `website/help/station.html` APRS Beacon bullet: GPS row and Status box (Rob uploads it).
+- Installed 10:46 on the tablet and the S22 Ultra: both start, no crash. Tablet left on Station > APRS Beacon
+  (upright). Emulator and adb stopped.
+
+**State 10:05, 2026-11-26: Station > Notifications as Android rows (Rob; uncommitted, built 09:55, tested on S22-Fresh)**
+- Rob (tablet sideways): not Android-like, Select / Test / Clear too far from their events. Now one row per event
+  (`Js8SettingsFragment.notifications`, no longer inside the tables' padded frame): name, sound under it, a thin line,
+  a switch at the right. Tapping the name opens `soundChoices`: Phone's notification sound (was Clear; now leaves the
+  switch as it is, Rob took the proposal) / Choose a sound file… (Select) / Play sound (Test). The box has no Cancel:
+  sideways on a phone it pushed Play sound below the box's edge. Same keys as before.
+- Tests: `build-env/test/lib/notifchk.py` W210-W215 passed run 3. Looked at on the tablet sideways (dark): rows right.
+- Installed 10:00 on the tablet SM-X210 (paired again 09:40, connect port 35099; it had 1.0.5) and the S22 Ultra: both
+  start, no crash. Tablet left open on Station > Notifications. Emulator and adb stopped.
+- `website/help/station.html` Notifications bullets rewritten for the rows (not in git); Rob uploads it.
+
 **State 09:30, 2026-11-26: APRS EMAIL / TXT / MSG forms in the Android look (Rob; uncommitted, built 09:13, tested on S22-Fresh)**
 - Rob: like the other settings windows. `Js8AprsFragment.kt` rewritten: top bar ← (`js8_pref_back`) + title 22 sp + **Insert**
   (text button, id `js8_aprs_insert`, Rob picked the word and the top bar) greyed until the form is valid. Insert
