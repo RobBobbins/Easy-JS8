@@ -103,6 +103,7 @@ class Js8MainFragment : Fragment() {
         private const val ID_SAVED_FIRST = 1000
         private const val ID_DIRECTED_FIRST = 2000
         private const val ID_RELAY_FIRST = 3000
+        private const val ID_APRS_FIRST = 4000
         private const val ID_RESTORE = 5
         private const val ID_CUT = 33
         private const val ID_COPY = 34
@@ -2085,25 +2086,31 @@ class Js8MainFragment : Fragment() {
         menu.menu.add(0, 9999, 9999, "Edit Saved Messages")
         menu.menu.add(0, 9998, 9999, "Save Current Message").isEnabled = typingBox.text.isNotBlank()
         // APRS pages, in every layout: menus have the same items everywhere (Rob, 2026-10-20)
-        val aprs = listOf(
-            "APRS EMAIL" to Js8AprsFragment.FORM_EMAIL,
-            "APRS TXT" to Js8AprsFragment.FORM_TXT,
-            "APRS GRID" to Js8AprsFragment.FORM_GRID,
-            "APRS MSG" to Js8AprsFragment.FORM_MSG
-        )
-        aprs.forEachIndexed { i, (label, _) -> menu.menu.add(0, 10000 + i, 10000 + i, label) }
+        APRS_ITEMS.forEachIndexed { i, (label, _) -> menu.menu.add(0, 10000 + i, 10000 + i, label) }
         menu.setOnMenuItemClickListener { item ->
             when {
                 item.itemId == 9999 -> openStation(page = Js8SettingsSchema.SAVED_PAGE) // Saved Messages are in Station
                 item.itemId == 9998 -> saveCurrentMessage()
-                // APRS GRID sends at once like a saved message, with the grid from Station (Rob, 2026-10-21)
-                aprs.getOrNull(item.itemId - 10000)?.second == Js8AprsFragment.FORM_GRID -> sendAprsGrid()
-                item.itemId >= 10000 -> openAprs(aprs[item.itemId - 10000].second)
+                item.itemId >= 10000 -> aprsItem(item.itemId - 10000)
                 else -> addMessageText(macro(saved[item.itemId]), send = true)
             }
             true
         }
         menu.show()
+    }
+
+    /** Saved > APRS EMAIL / TXT / GRID / MSG, in the Saved button's menu and the long-press Saved Messages... menus. */
+    private val APRS_ITEMS = listOf(
+        "APRS EMAIL" to Js8AprsFragment.FORM_EMAIL,
+        "APRS TXT" to Js8AprsFragment.FORM_TXT,
+        "APRS GRID" to Js8AprsFragment.FORM_GRID,
+        "APRS MSG" to Js8AprsFragment.FORM_MSG
+    )
+
+    /** APRS GRID sends at once like a saved message, with the grid from Station (Rob, 2026-10-21); the others open their page. */
+    private fun aprsItem(i: Int) {
+        val form = APRS_ITEMS[i].second
+        if (form == Js8AprsFragment.FORM_GRID) sendAprsGrid() else openAprs(form)
     }
 
     /** Saved > APRS GRID: "@APRSIS GRID" + My Maidenhead Grid Locator, sent like a saved message. */
@@ -2233,6 +2240,8 @@ class Js8MainFragment : Fragment() {
         saved.forEachIndexed { i, text -> savedMenu.add(0, ID_SAVED_FIRST + i, i, macro(text)) }
         savedMenu.add(0, ID_SAVED_EDIT, saved.size, "Edit Saved Messages")
         savedMenu.add(0, ID_SAVED_CURRENT, saved.size + 1, "Save Current Message").isEnabled = typingBox.text.isNotBlank()
+        // The Saved button's APRS items here too (Rob, 2026-11-26)
+        APRS_ITEMS.forEachIndexed { i, (label, _) -> savedMenu.add(0, ID_APRS_FIRST + i, saved.size + 2 + i, label) }
         val directedMenu = m.addSubMenu(3, ID_DIRECTED, 21, "Directed to ${call.orEmpty()}...")
         directedMenu.item.isEnabled = call != null
         androidx.core.view.MenuCompat.setGroupDividerEnabled(directedMenu, true)
@@ -2264,6 +2273,7 @@ class Js8MainFragment : Fragment() {
                 id == ID_STORE -> call?.let { storeMessage(it) }
                 id == ID_SAVED_EDIT -> openStation(page = Js8SettingsSchema.SAVED_PAGE)
                 id == ID_SAVED_CURRENT -> saveCurrentMessage()
+                id in ID_APRS_FIRST until ID_APRS_FIRST + APRS_ITEMS.size -> aprsItem(id - ID_APRS_FIRST)
                 id in ID_SAVED_FIRST until ID_SAVED_FIRST + saved.size ->
                     addMessageText(macro(saved[id - ID_SAVED_FIRST]), send = true)
                 id in ID_DIRECTED_FIRST until ID_DIRECTED_FIRST + directed.size ->
@@ -2300,6 +2310,11 @@ class Js8MainFragment : Fragment() {
         actions[ID_SAVED_EDIT] = { openStation(page = Js8SettingsSchema.SAVED_PAGE) }
         savedMenu.add(0, ID_SAVED_CURRENT, saved.size + 1, "Save Current Message").isEnabled = typingBox.text.isNotBlank()
         actions[ID_SAVED_CURRENT] = { saveCurrentMessage() }
+        // The Saved button's APRS items here too (Rob, 2026-11-26)
+        APRS_ITEMS.forEachIndexed { i, (label, _) ->
+            savedMenu.add(0, ID_APRS_FIRST + i, saved.size + 2 + i, label)
+            actions[ID_APRS_FIRST + i] = { aprsItem(i) }
+        }
         val directedMenu = m.addSubMenu(3, ID_DIRECTED, 21, "Directed to ${call.orEmpty()}...")
         directedMenu.item.isEnabled = call != null
         androidx.core.view.MenuCompat.setGroupDividerEnabled(directedMenu, true)

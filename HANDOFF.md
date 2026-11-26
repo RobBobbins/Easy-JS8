@@ -2,6 +2,27 @@
 
 ## Next session starts here (2026-11-05): audit B sections 1-12 are fixed
 
+**State 18:10, 2026-11-26: grey bar under the lists, sideways PC and FT8Call (Rob; uncommitted)**
+- The bar under the lists was drawn 3 dp above the lists' bottom, over them, with 1 dp of list showing below it.
+  Now it starts `MAIN_BAR_BELOW_LISTS` = 2 dp below them, the same frame colour as each side of the Band Activity bar
+  ((GAP_BAND - BAR) / 2), then 3 dp to the buttons. The Band Activity and Call Activity bars reach down to the
+  middle of it, so they meet it flush (Js8PcSplitters.apply). Touch strips unchanged.
+- Test: `build-env/test/lib/barchk.py` (W255-W256) passed on S22-Fresh, the tablet and the S22 Ultra (installed 18:12). The tablet rounds the scaled
+  window: 3 px above the bar, 1 and 2 px either side of the Band Activity bar; the emulator shows 2 px everywhere.
+- Not changed: the Call Activity bar has no frame colour on its Message Window side (GAP_CALL 6 dp).
+
+**State 17:20, 2026-11-26: APRS items in the long-press Saved Messages... menus (Rob; uncommitted)**
+- Rob found the long-press Saved Messages... menus lacked the Saved button's APRS EMAIL / TXT / GRID / MSG. Now all
+  three have them after Save Current Message: Typing Box, Band Activity (both via `addSavedAndDirected`) and Call
+  Activity (`showCallMenu`). Shared `APRS_ITEMS` and `aprsItem()` in Js8MainFragment; APRS GRID still sends at once.
+- Help: upright.html, the three Saved Messages... mentions say "(the same items as the Saved button)".
+- Test: `build-env/test/lib/aprsmenuchk.py` (W251-W254) passed on S22-Fresh, the tablet and the S22 Ultra. APRS GRID is not tapped.
+  On the S22 Ultra the first run, just after unlocking, opened no menu on the Typing Box long press
+  (shots/aprsmenu.s22.email_hold.png); the next run passed every row.
+- Seen, not changed: on the emulator sideways PC, the Call Activity long-press menu on an empty list opens as a two-row
+  box above the list and must be scrolled (anchored to the whole list). The S22 Ultra sideways shows the same
+  (three rows); the tablet shows it full height. Rob asked about it 2026-11-26.
+
 **State 16:10, 2026-11-26: Settings gear 32 dp (Rob; uncommitted)**
 - Settings top bar gear (opens Station) was Android's standard 24 dp icon; now 32 dp inside the same 48 dp button
   (`iconButton(..., iconDp = 32)` in Js8SettingsFragment). The back arrow stays 24 dp. Bar height unchanged.

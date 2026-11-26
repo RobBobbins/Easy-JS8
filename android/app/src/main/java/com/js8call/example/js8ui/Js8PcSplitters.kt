@@ -78,10 +78,13 @@ class Js8PcSplitters(private val window: FrameLayout, private val prefs: SharedP
         private const val STRIP = 48f
         /** The two strips over the Typing Box cover all of it: they keep only this much of each edge, PC dp. */
         private const val TYPING_EDGE = 10f
-        /** The bar under the lists, PC dp above the buttons. */
-        private const val MAIN_BAR_ABOVE_BUTTONS = 12f
         /** Bar drawn along each line, PC dp. */
         private const val BAR = 4f
+        /** Black between the lists and the bar under them: the same as each side of the Band Activity bar,
+         *  (GAP_BAND - BAR) / 2 (Rob, 2026-11-26: the bar sat over the lists' bottom edge). */
+        private const val MAIN_BAR_BELOW_LISTS = 2f
+        /** The bar under the lists: its centre, PC dp above the buttons. */
+        private const val MAIN_BAR_ABOVE_BUTTONS = BUTTONS_GAP - MAIN_BAR_BELOW_LISTS - BAR / 2
         /** Ruler height over the waterfall (js8_waterfall_block.xml), PC dp. */
         private const val RULER_H = 33f
         /** Gear tab (fragment_js8_pc.xml js8_wf_ruler_gear), PC dp: the Waterfall Controls tabs' height. */
@@ -229,9 +232,11 @@ class Js8PcSplitters(private val window: FrameLayout, private val prefs: SharedP
             (gear.layoutParams as ViewGroup.MarginLayoutParams).let { lp ->
                 lp.topMargin -= 1; lp.height += 1; gear.layoutParams = lp }
         }
-        // Touch strips centred on the gaps, along the whole line
-        spot(bandLine, band + GAP_BAND / 2, (top + main) / 2, STRIP, main - top)
-        spot(callLine, call - GAP_CALL / 2, (top + main) / 2, STRIP, main - top)
+        // Touch strips centred on the gaps, along the whole line. The two upright lines reach down to the middle of
+        // the bar under the lists, so their bars meet it flush (Rob, 2026-11-26); with that bar hidden, the lists' bottom.
+        val uprightBottom = if (showWaterfall) main + MAIN_BAR_BELOW_LISTS + BAR / 2 else main
+        spot(bandLine, band + GAP_BAND / 2, (top + uprightBottom) / 2, STRIP, uprightBottom - top)
+        spot(callLine, call - GAP_CALL / 2, (top + uprightBottom) / 2, STRIP, uprightBottom - top)
         spot(textLine, (midLeft + midRight) / 2, text + GAP_TEXT / 2, midRight - midLeft, STRIP)
         // Under the lists: the strip stops at the buttons' top edge, so the buttons keep their taps
         place(mainLine, LEFT, buttonsTop - STRIP, RIGHT - LEFT, STRIP)
