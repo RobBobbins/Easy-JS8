@@ -2,6 +2,19 @@
 
 ## Next session starts here (2026-11-05): audit B sections 1-12 are fixed
 
+**State 09:30, 2026-11-26: APRS EMAIL / TXT / MSG forms in the Android look (Rob; uncommitted, built 09:13, tested on S22-Fresh)**
+- Rob: like the other settings windows. `Js8AprsFragment.kt` rewritten: top bar ← (`js8_pref_back`) + title 22 sp + **Insert**
+  (text button, id `js8_aprs_insert`, Rob picked the word and the top bar) greyed until the form is valid. Insert
+  only fills the Typing Box, as OK did (Rob: keep it inserting, not sending). Outlined boxes (TextInputLayout): To
+  (email address) / Phone number / To callsign / Grid, Message. Problem text red under the box once something is typed
+  (same wording as the old pop-ups; an empty form opens with no red). The 67 count is the Message box's counter
+  (counts the email address / phone number too). Removed: ← Back text, OK / Cancel bar, the problem pop-up.
+- Tests: `build-env/test/lib/aprsform.py`, W204-W209 passed run 4 (TEST-CHECKLIST). `ui1.py` H18-H21 only check the
+  Saved menu items: unchanged. Trap: uiautomator2's element click on ← (`d(description='Back').click()`) missed 3 of 3
+  on APRS MSG with the keyboard up; adb input tap and coordinate clicks closed it 8 of 8 (test taps the centre now).
+- Installed 09:26 on the S22 Ultra (10.0.0.35:45109): started, no crash. Not looked at on the phone.
+- Emulator and adb stopped.
+
 **State 18:15, 2026-11-25: Google Play build: Android 16 target, 16 KB engine files, screen-edge padding (Rob; uncommitted, built 18:05, tested on S22-Fresh and S22-A16)**
 - Play Console: app record created on Rob's personal account "Carson VA3OSO" (package `com.easyjs8.app`, free); its
   Dashboard requires a closed test (12 testers opted in 14 days) before production. Rob keeps the website APK too.

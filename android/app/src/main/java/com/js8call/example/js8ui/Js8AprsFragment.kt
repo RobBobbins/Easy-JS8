@@ -1,5 +1,8 @@
 package com.js8call.example.js8ui
 
+import android.content.res.ColorStateList
+import android.content.res.Configuration
+import android.graphics.Color
 import android.os.Bundle
 import android.text.Editable
 import android.text.InputFilter
@@ -12,24 +15,29 @@ import android.view.LayoutInflater
 import android.view.View
 import android.view.ViewGroup
 import android.widget.EditText
+import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
-import androidx.appcompat.app.AlertDialog
-import androidx.appcompat.widget.AppCompatButton
-import androidx.core.content.ContextCompat
-import androidx.core.content.res.ResourcesCompat
 import androidx.core.os.bundleOf
 import androidx.fragment.app.Fragment
 import androidx.navigation.fragment.findNavController
 import androidx.preference.PreferenceManager
+import com.google.android.material.button.MaterialButton
+import com.google.android.material.color.MaterialColors
+import com.google.android.material.textfield.TextInputEditText
+import com.google.android.material.textfield.TextInputLayout
 import com.js8call.example.R
 import java.util.Locale
 
 /**
  * Saved > APRS EMAIL / APRS TXT / APRS GRID / APRS MSG (Rob, 2026-10-19). Easy JS8 only: the PC
  * has no APRS forms, you type the @APRSIS commands yourself (JS8Call User Guide, "@JS8NET and
- * @APRSIS"). OK builds the line, puts it in the Typing Box and returns; it does not send.
+ * @APRSIS"). Insert builds the line, puts it in the Typing Box and returns; it does not send.
+ *
+ * Android look like the Station and Settings windows (Rob, 2026-11-26): ← and the title in the top
+ * bar, Insert at its right end (greyed until the form is valid), outlined boxes, problems in red
+ * under the box while typing, the 67 count as the Message box's counter. No Cancel: ← leaves.
  *
  * APRS rules (APRS Protocol Reference 1.2, chapter 14): addressee padded to 9 characters,
  * message text at most 67 characters, no { in the text, message number { + up to 5 characters.
@@ -58,16 +66,18 @@ class Js8AprsFragment : Fragment() {
 
     private val form get() = arguments?.getString(ARG_FORM) ?: FORM_MSG
     private val dp get() = resources.displayMetrics.density
-    private val font by lazy { ResourcesCompat.getFont(requireContext(), R.font.selawik) }
-    private val textPx get() = resources.getDimension(R.dimen.js8_text)
-    private fun color(id: Int) = ContextCompat.getColor(requireContext(), id)
     private fun px(v: Int) = (v * dp).toInt()
     private fun prefs() = PreferenceManager.getDefaultSharedPreferences(requireContext())
+    /** The app theme's Material colours (light and dark), as the Station window uses. */
+    private fun attr(a: Int) = MaterialColors.getColor(requireContext(), a, Color.GRAY)
+    private val onSurface get() = attr(com.google.android.material.R.attr.colorOnSurface)
 
     /** Email address / phone number / callsign / grid. */
     private lateinit var toBox: EditText
+    private lateinit var toLayout: TextInputLayout
     private var messageBox: EditText? = null
-    private var countLabel: TextView? = null
+    private var messageLayout: TextInputLayout? = null
+    private var insertButton: MaterialButton? = null
 
     override fun onCreateView(inflater: LayoutInflater, container: ViewGroup?, savedInstanceState: Bundle?): View {
         val title = when (form) {
@@ -76,83 +86,109 @@ class Js8AprsFragment : Fragment() {
             FORM_GRID -> "APRS GRID"
             else -> "APRS MSG"
         }
+        val sideways = resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
         val root = LinearLayout(requireContext()).apply {
             orientation = LinearLayout.VERTICAL
-            setBackgroundColor(color(R.color.js8_frame_bg))
+            setBackgroundColor(attr(com.google.android.material.R.attr.colorSurface))
         }
-        // ← Back at the top, like the Settings and Station windows (works like Cancel)
-        root.addView(label("← Back", size = 1.15f, bold = true).apply {
-            setPadding(px(12), 0, px(12), 0)
-            minHeight = px(40)
-            gravity = Gravity.CENTER_VERTICAL
-            setOnClickListener { findNavController().popBackStack() }
-        })
+        root.addView(topBar(title, sideways), LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
 
         val page = LinearLayout(requireContext()).apply {
             orientation = LinearLayout.VERTICAL
-            setPadding(px(12), px(4), px(12), px(12))
+            setPadding(px(16), px(8), px(16), px(16))
         }
-        page.addView(label(title, size = 1.15f, bold = true).apply { setPadding(0, 0, 0, px(8)) })
 
-        when (form) {
-            FORM_EMAIL -> toBox = box(InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS)
-            FORM_TXT -> toBox = box(InputType.TYPE_CLASS_PHONE).apply {
-                filters = arrayOf(digitsOnly(), InputFilter.LengthFilter(15))
-            }
-            FORM_GRID -> toBox = box(InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS).apply {
-                filters = arrayOf(InputFilter.AllCaps(), InputFilter.LengthFilter(12))
-                if (savedInstanceState == null) setText(prefs().getString("grid", "").orEmpty().trim().uppercase(Locale.US))
-            }
-            else -> toBox = box(InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS).apply {
-                filters = arrayOf(InputFilter.AllCaps(), InputFilter.LengthFilter(9))
+        val (toName, toType) = when (form) {
+            FORM_EMAIL -> "To (email address)" to (InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_VARIATION_EMAIL_ADDRESS)
+            FORM_TXT -> "Phone number" to InputType.TYPE_CLASS_PHONE
+            FORM_GRID -> "Grid" to (InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS)
+            else -> "To callsign" to (InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS)
+        }
+        toLayout = outlined(toName)
+        toBox = box(toLayout, toType).apply {
+            id = R.id.js8_aprs_to
+            when (form) {
+                FORM_TXT -> filters = arrayOf(digitsOnly(), InputFilter.LengthFilter(15))
+                FORM_GRID -> {
+                    filters = arrayOf(InputFilter.AllCaps(), InputFilter.LengthFilter(12))
+                    if (savedInstanceState == null) setText(prefs().getString("grid", "").orEmpty().trim().uppercase(Locale.US))
+                }
+                FORM_MSG -> filters = arrayOf(InputFilter.AllCaps(), InputFilter.LengthFilter(9))
             }
         }
-        toBox.id = R.id.js8_aprs_to
-        page.addView(field(when (form) {
-            FORM_EMAIL -> "To (email address):"
-            FORM_TXT -> "Phone number:"
-            FORM_GRID -> "Grid:"
-            else -> "To callsign:"
-        }, toBox))
+        page.addView(toLayout, fieldParams())
 
         if (form != FORM_GRID) {
-            val msg = box(InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS or
+            val layout = outlined("Message").apply {
+                // The 67 counts the email address or phone number too (textPrefix), so the counter is ours
+                isCounterEnabled = true
+                counterMaxLength = MAX_TEXT
+                setLengthCounter { textLength() }
+            }
+            messageLayout = layout
+            messageBox = box(layout, InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS or
                 InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS).apply {
                 id = R.id.js8_aprs_message
                 filters = arrayOf(InputFilter.AllCaps(), messageFilter())
             }
-            messageBox = msg
-            page.addView(field("Message:", msg))
-            countLabel = label("").apply { gravity = Gravity.END }
-            page.addView(countLabel, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
-            val watcher = object : TextWatcher {
-                override fun afterTextChanged(s: Editable?) = renderCount()
-                override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
-                override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
-            }
-            toBox.addTextChangedListener(watcher)
-            msg.addTextChangedListener(watcher)
+            page.addView(layout, fieldParams())
         }
+
+        val watcher = object : TextWatcher {
+            override fun afterTextChanged(s: Editable?) = check()
+            override fun beforeTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
+            override fun onTextChanged(s: CharSequence?, a: Int, b: Int, c: Int) {}
+        }
+        toBox.addTextChangedListener(watcher)
+        messageBox?.addTextChangedListener(watcher)
 
         root.addView(ScrollView(requireContext()).apply { addView(page) },
             LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f))
-
-        // OK / Cancel pinned to the bottom, right-aligned, like the Station window
-        val bar = LinearLayout(requireContext()).apply {
-            orientation = LinearLayout.HORIZONTAL
-            gravity = Gravity.END or Gravity.CENTER_VERTICAL
-            setPadding(px(10), px(8), px(10), px(8))
-        }
-        bar.addView(button("OK") { onOk() }, LinearLayout.LayoutParams(px(64), px(30)))
-        bar.addView(button("Cancel") { findNavController().popBackStack() },
-            LinearLayout.LayoutParams(px(64), px(30)).apply { marginStart = px(8) })
-        root.addView(bar)
         return root
     }
 
     override fun onViewStateRestored(savedInstanceState: Bundle?) {
         super.onViewStateRestored(savedInstanceState)
-        renderCount()
+        check()
+    }
+
+    // ---- Top bar ----------------------------------------------------------------------------
+
+    /** ← and the title like the Station window; Insert at the right end (Rob, 2026-11-26). */
+    private fun topBar(title: String, sideways: Boolean): View = LinearLayout(requireContext()).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
+        minimumHeight = px(if (sideways) 48 else 56)
+        setPadding(px(4), 0, px(8), 0)
+        addView(ImageView(requireContext()).apply {
+            setImageResource(R.drawable.js8_pref_back)
+            imageTintList = ColorStateList.valueOf(onSurface)
+            contentDescription = "Back"
+            setPadding(px(12), px(12), px(12), px(12))
+            setBackgroundResource(themeDrawable(android.R.attr.selectableItemBackgroundBorderless))
+            setOnClickListener { findNavController().popBackStack() }
+        }, LinearLayout.LayoutParams(px(48), px(48)))
+        addView(TextView(requireContext()).apply {
+            text = title
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 22f)
+            setTextColor(onSurface)
+            isSingleLine = true
+            ellipsize = android.text.TextUtils.TruncateAt.END
+            setPadding(px(12), 0, px(12), 0)
+        }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+        addView(MaterialButton(requireContext(), null, androidx.appcompat.R.attr.borderlessButtonStyle).apply {
+            id = R.id.js8_aprs_insert
+            text = "Insert"
+            isEnabled = false
+            setOnClickListener { onInsert() }
+            insertButton = this
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+    }
+
+    private fun themeDrawable(a: Int): Int {
+        val tv = TypedValue()
+        requireContext().theme.resolveAttribute(a, tv, true)
+        return tv.resourceId
     }
 
     // ---- Building the line ------------------------------------------------------------------
@@ -170,31 +206,44 @@ class Js8AprsFragment : Fragment() {
     /** Characters of APRS message text (the 67 limit includes the email address or phone number). */
     private fun textLength() = textPrefix().length + (messageBox?.text?.length ?: 0)
 
-    private fun renderCount() {
-        val count = countLabel ?: return
-        val n = textLength()
-        count.text = "$n/$MAX_TEXT"
-        count.setTextColor(if (n > MAX_TEXT) 0xFFD00000.toInt() else color(R.color.js8_frame_text))
+    /** The To box's problem, or null. */
+    private fun toProblem(to: String = to()) = when (form) {
+        FORM_EMAIL -> if (!Regex("[^@\\s{]+@[^@\\s{]+\\.[^@\\s{]+").matches(to)) "Enter an email address" else null
+        FORM_TXT -> if (to.length < 7) "Enter a phone number" else null
+        FORM_GRID -> if (!Js8Grid.isValid(to)) "The grid you provided is not valid" else null
+        else -> if (!Regex("[A-Z0-9]{1,6}(-[A-Z0-9]{1,2})?").matches(to)) "Enter a callsign (e.g. VA3XYZ or VA3XYZ-9)" else null
     }
 
-    private fun onOk() {
-        val to = to()
-        val message = message()
-        val problem = when (form) {
-            FORM_EMAIL -> if (!Regex("[^@\\s{]+@[^@\\s{]+\\.[^@\\s{]+").matches(to)) "Enter an email address" else null
-            FORM_TXT -> if (to.length < 7) "Enter a phone number" else null
-            FORM_GRID -> if (!Js8Grid.isValid(to)) "The grid you provided is not valid" else null
-            else -> if (!Regex("[A-Z0-9]{1,6}(-[A-Z0-9]{1,2})?").matches(to)) "Enter a callsign (e.g. VA3XYZ or VA3XYZ-9)" else null
-        } ?: when {
-            form != FORM_GRID && message.isEmpty() -> "Enter a message"
-            form != FORM_GRID && textLength() > MAX_TEXT -> "The message is too long: ${textLength()}/$MAX_TEXT characters"
-            else -> null
-        }
-        if (problem != null) {
-            AlertDialog.Builder(requireContext()).setMessage(problem).setPositiveButton(android.R.string.ok, null).show()
-            return
-        }
+    /** The Message box's problem, or null. */
+    private fun messageProblem() = when {
+        form == FORM_GRID -> null
+        message().isEmpty() -> "Enter a message"
+        textLength() > MAX_TEXT -> "The message is too long: ${textLength()}/$MAX_TEXT characters"
+        else -> null
+    }
 
+    /**
+     * Red text under a box once something is typed in it (an empty form opens without red);
+     * Insert greyed until both boxes are right.
+     */
+    private fun check() {
+        if (!::toLayout.isInitialized) return
+        val toBad = toProblem()
+        val msgBad = messageProblem()
+        toLayout.error = if (toBox.text.isNullOrEmpty()) null else toBad
+        messageLayout?.let { layout ->
+            layout.error = if (messageBox?.text.isNullOrEmpty() && textLength() <= MAX_TEXT) null else msgBad
+            // The To box changes the count too: switching the counter off and on redraws it
+            layout.isCounterEnabled = false
+            layout.isCounterEnabled = true
+        }
+        insertButton?.isEnabled = toBad == null && msgBad == null
+    }
+
+    private fun onInsert() {
+        check()
+        if (toProblem() != null || messageProblem() != null) return
+        val to = to()
         val line = if (form == FORM_GRID) {
             "@APRSIS GRID $to"
         } else {
@@ -206,7 +255,7 @@ class Js8AprsFragment : Fragment() {
                 FORM_TXT -> "SMSGTE"
                 else -> to
             }
-            "@APRSIS CMD :${addressee(destination)}:${textPrefix(to)}$message{" + String.format(Locale.US, "%02d", number)
+            "@APRSIS CMD :${addressee(destination)}:${textPrefix(to)}${message()}{" + String.format(Locale.US, "%02d", number)
         }
         parentFragmentManager.setFragmentResult(RESULT_KEY, bundleOf(RESULT_TEXT to line))
         findNavController().popBackStack()
@@ -231,50 +280,21 @@ class Js8AprsFragment : Fragment() {
         if (digits.length == end - start) null else digits
     }
 
-    // ---- Widgets (same look as the Settings window) ----------------------------------------
+    // ---- Widgets (Android outlined boxes, as the Station window's popups) -------------------
 
-    private fun label(text: String, size: Float = 1f, bold: Boolean = false) = TextView(requireContext()).apply {
-        this.text = text
-        typeface = if (bold) android.graphics.Typeface.create(font, android.graphics.Typeface.BOLD) else font
-        setTextSize(TypedValue.COMPLEX_UNIT_PX, textPx * size)
-        setTextColor(color(R.color.js8_frame_text))
-        includeFontPadding = false
+    private fun outlined(name: String) = TextInputLayout(requireContext()).apply {
+        boxBackgroundMode = TextInputLayout.BOX_BACKGROUND_OUTLINE
+        hint = name
     }
 
-    private fun box(type: Int) = EditText(requireContext()).apply {
-        setBackgroundResource(R.drawable.js8_cfg_field)
-        typeface = font
-        setTextSize(TypedValue.COMPLEX_UNIT_PX, textPx)
-        setTextColor(color(R.color.js8_frame_text))
-        setHintTextColor(color(R.color.js8_cfg_placeholder))
-        setPadding(px(8), 0, px(8), 0)
-        gravity = Gravity.CENTER_VERTICAL
+    private fun box(layout: TextInputLayout, type: Int) = TextInputEditText(layout.context).apply {
         isSingleLine = true
         inputType = type
         // Android 8.0+ only (the app runs on 7.0 since 2026-10-22)
         if (android.os.Build.VERSION.SDK_INT >= android.os.Build.VERSION_CODES.O) importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_NO
+        layout.addView(this, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
     }
 
-    /** Label above its box, like the Station window upright. */
-    private fun field(text: String, control: View) = LinearLayout(requireContext()).apply {
-        orientation = LinearLayout.VERTICAL
-        setPadding(0, px(4), 0, px(4))
-        addView(label(text))
-        addView(control, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, px(34)).apply { topMargin = px(4) })
-    }
-
-    private fun button(text: String, onClick: () -> Unit) = AppCompatButton(requireContext(), null, 0).apply {
-        this.text = text
-        setBackgroundResource(R.drawable.js8_btn_blue)
-        setTextColor(ContextCompat.getColorStateList(requireContext(), R.color.js8_btn_text))
-        typeface = font
-        setTextSize(TypedValue.COMPLEX_UNIT_PX, textPx)
-        isAllCaps = false
-        gravity = Gravity.CENTER
-        includeFontPadding = false
-        minHeight = 0; minimumHeight = 0; minWidth = 0; minimumWidth = 0
-        setPadding(px(10), 0, px(10), 0)
-        stateListAnimator = null
-        setOnClickListener { onClick() }
-    }
+    private fun fieldParams() = LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT)
+        .apply { topMargin = px(8) }
 }
