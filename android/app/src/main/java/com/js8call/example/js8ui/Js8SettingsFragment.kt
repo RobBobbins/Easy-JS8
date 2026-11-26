@@ -291,14 +291,17 @@ class Js8SettingsFragment : Fragment() {
             ellipsize = android.text.TextUtils.TruncateAt.END
             setPadding(px(12), 0, px(12), 0)
         }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-        if (!station) addView(iconButton(R.drawable.js8_gear, "Station") { findNavController().navigate(R.id.navigation_js8_station) })
+        // Gear 32 dp in the same 48 dp button (Rob, 2026-11-26: 24 dp looked small)
+        if (!station) addView(iconButton(R.drawable.js8_gear, "Station", iconDp = 32) { findNavController().navigate(R.id.navigation_js8_station) })
     }
 
-    private fun iconButton(icon: Int, description: String, onClick: () -> Unit) = ImageView(requireContext()).apply {
+    /** A 48 dp top bar button; [iconDp] is the icon's size inside it (Android's standard 24). */
+    private fun iconButton(icon: Int, description: String, iconDp: Int = 24, onClick: () -> Unit) = ImageView(requireContext()).apply {
         setImageResource(icon)
         imageTintList = ColorStateList.valueOf(onSurface)
         contentDescription = description
-        setPadding(px(12), px(12), px(12), px(12))
+        val pad = px((48 - iconDp) / 2)
+        setPadding(pad, pad, pad, pad)
         setBackgroundResource(themeDrawable(android.R.attr.selectableItemBackgroundBorderless))
         layoutParams = LinearLayout.LayoutParams(px(48), px(48))
         setOnClickListener { onClick() }

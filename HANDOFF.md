@@ -2,6 +2,14 @@
 
 ## Next session starts here (2026-11-05): audit B sections 1-12 are fixed
 
+**State 16:10, 2026-11-26: Settings gear 32 dp (Rob; uncommitted)**
+- Settings top bar gear (opens Station) was Android's standard 24 dp icon; now 32 dp inside the same 48 dp button
+  (`iconButton(..., iconDp = 32)` in Js8SettingsFragment). The back arrow stays 24 dp. Bar height unchanged.
+- The gear shape fills about 77% of its icon box: drawn 18.7 dp before, 24.7 dp now (emulator, density 3.0).
+- Test: `build-env/test/lib/gearchk.py` (W249-W250) passed on S22-Fresh, the tablet and the S22 Ultra. Fixed in the test: a stored
+  uiautomator2 `.exists` re-checks the screen at every bool(), so it is wrapped in bool() when taken.
+- Installed 16:07 on the tablet and 16:12 on the S22 Ultra (back on adb over Wireless debugging).
+
 **State 15:45, 2026-11-26: Settings > Log > Open Log Directory... (Rob; uncommitted, built 15:35)**
 - Settings > Log: Open Log Directory... first, then Export Log... (`open_log_dir`, Js8SettingsSchema / Fragment).
 - `openLogDirectory` moved to `Js8MainFragment` companion so the menu bar and Settings share it.
