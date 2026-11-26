@@ -2,6 +2,15 @@
 
 ## Next session starts here (2026-11-05): audit B sections 1-12 are fixed
 
+**State 15:00, 2026-11-26: pull-down text size by device (Rob; uncommitted, built 14:44)**
+- New dimen `js8_menu_text`: 9.5 dp in `values/js8_styles.xml` (phones), 14.3 dp in the new
+  `values-sw600dp/js8_dimens.xml` (tablets, 600 dp and wider on the short side). `Js8PopupMenuText` uses it, and
+  `Js8ModeMenuText` no longer sets its own 9.5 dp, so Mode matches every pull-down: menu bar, Saved, Mode, row menus,
+  Message Window, Inbox, waterfall press-and-hold, Settings Configurations. Row heights unchanged (36 dp, Mode 32 dp).
+  Waterfall drop-down lists (Offset and the rest) are not menus and are unchanged.
+- Checked by eye: W241-W243 (emulator phone sideways and upright, tablet sideways). Tablet upright not checked.
+- Installed 14:48 on the tablet. S22 Ultra still offline over adb (Wireless debugging off: no port open).
+
 **State 14:25, 2026-11-26: Station > UI as Android rows (Rob; uncommitted, built 14:07, tested on S22-Fresh)**
 - `colorButtons`: one `row` per colour (name, #RRGGBB under it) and per font (font · style · size, or "Screen's own
   font · N pt" when none is set), K1ABC chip at the right end (`chip()`); Received / Transmitted grey labels. Routed

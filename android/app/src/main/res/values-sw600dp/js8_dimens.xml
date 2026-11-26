@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Tablets (600 dp and wider on the short side) -->
+<resources>
+    <!-- Pull-down menu text: the list text size, as phones' menus were before (Rob, 2026-11-26) -->
+    <dimen name="js8_menu_text">14.3dp</dimen>
+</resources>

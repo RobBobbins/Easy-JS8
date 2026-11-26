@@ -6,6 +6,8 @@
 -->
 <resources>
     <dimen name="js8_text">14.3dp</dimen>
+    <!-- Pull-down menu text: 9.5 dp on a phone, 14.3 dp on a tablet (values-sw600dp) (Rob, 2026-11-26) -->
+    <dimen name="js8_menu_text">9.5dp</dimen>
     <dimen name="js8_text_freq">31dp</dimen>
     <dimen name="js8_text_clock">20dp</dimen>
     <dimen name="js8_text_callsign">19dp</dimen>
@@ -85,17 +87,15 @@
 
     <!-- Saved, Directed and Call Activity press-and-hold menus: list text size, shorter rows (Rob, 2026-10-19) -->
     <style name="Js8PopupMenuText" parent="@android:style/TextAppearance.Material.Widget.PopupMenu.Large">
-        <item name="android:textSize">@dimen/js8_text</item>
+        <item name="android:textSize">@dimen/js8_menu_text</item>
     </style>
     <style name="ThemeOverlay.Js8PopupMenu" parent="">
         <item name="android:textAppearanceLargePopupMenu">@style/Js8PopupMenuText</item>
         <item name="android:textAppearanceSmallPopupMenu">@style/Js8PopupMenuText</item>
         <item name="android:listPreferredItemHeightSmall">36dp</item>
     </style>
-    <!-- Mode menu: small enough that the PC's long item names show in full (Rob, 2026-10-31) -->
-    <style name="Js8ModeMenuText" parent="Js8PopupMenuText">
-        <item name="android:textSize">9.5dp</item>
-    </style>
+    <!-- Mode menu: shorter rows; its text the same size as every pull-down (Rob, 2026-11-26; was 9.5 dp on all devices) -->
+    <style name="Js8ModeMenuText" parent="Js8PopupMenuText" />
     <style name="ThemeOverlay.Js8ModeMenu" parent="">
         <item name="android:textAppearanceLargePopupMenu">@style/Js8ModeMenuText</item>
         <item name="android:textAppearanceSmallPopupMenu">@style/Js8ModeMenuText</item>

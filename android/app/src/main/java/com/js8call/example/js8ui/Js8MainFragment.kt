@@ -2041,7 +2041,7 @@ class Js8MainFragment : Fragment() {
     }
 
     /** Saved button: the Saved Messages list (Settings > Saved Messages), macros expanded. */
-    /** Popup menus with the lists' text size and shorter rows (ThemeOverlay.Js8PopupMenu). */
+    /** Popup menus: 9.5 dp text on a phone, 14.3 dp on a tablet, shorter rows (ThemeOverlay.Js8PopupMenu). */
     private fun popupMenu(anchor: View) =
         android.widget.PopupMenu(android.view.ContextThemeWrapper(requireContext(), R.style.ThemeOverlay_Js8PopupMenu), anchor)
 
