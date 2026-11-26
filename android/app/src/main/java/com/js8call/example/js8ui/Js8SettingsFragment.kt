@@ -615,6 +615,7 @@ class Js8SettingsFragment : Fragment() {
                 "frequencies_table" -> frequencyTable()
                 "schedule_table" -> scheduleTable()
                 "saved_messages" -> savedMessages()
+                "ui_band_call", "ui_messages", "ui_composition" -> special(item.id)
                 // Tables and lists keep their own look (Rob, 2026-11-24), inside the page's margins
                 else -> FrameLayout(requireContext()).apply {
                     setPadding(px(16), px(8), px(16), px(8))
@@ -1820,25 +1821,133 @@ class Js8SettingsFragment : Fragment() {
         }
     }
 
-    /** PC QColorDialog: Red, Green, Blue sliders with a sample, any colour. */
-    private fun pickColor(title: String, start: String?, onPick: (String) -> Unit) {
+    /**
+     * PC QColorDialog, Android look (Rob, 2026-11-26): a K1ABC sample in its row's colours (outlined, so white shows),
+     * the 24 ready colours to tap, Red / Green / Blue sliders with their numbers; Cancel and OK.
+     */
+    private fun pickColor(title: String, k: String, start: String?, onPick: (String) -> Unit) {
         val first = start?.let { runCatching { Color.parseColor(it) }.getOrNull() } ?: Color.WHITE
-        val box = column().apply { setPadding(px(16), px(8), px(16), 0) }
-        val sample = View(requireContext())
-        box.addView(sample, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, px(36)))
-        val bars = listOf("Red" to Color.red(first), "Green" to Color.green(first), "Blue" to Color.blue(first)).map { (name, v) ->
-            box.addView(label(name).apply { setTextColor(Color.BLACK); setPadding(0, px(6), 0, 0) })
-            android.widget.SeekBar(requireContext()).apply { max = 255; progress = v; box.addView(this) }
+        // A slider takes all the width it is offered: without a limit the box filled a sideways tablet's screen
+        val box = object : LinearLayout(requireContext()) {
+            override fun onMeasure(widthSpec: Int, heightSpec: Int) = super.onMeasure(
+                MeasureSpec.makeMeasureSpec(minOf(MeasureSpec.getSize(widthSpec), px(560)), MeasureSpec.getMode(widthSpec)), heightSpec)
+        }.apply { orientation = LinearLayout.VERTICAL; setPadding(px(24), px(16), px(24), 0) }
+        val sample = TextView(requireContext()).apply {
+            text = "K1ABC"
+            gravity = Gravity.CENTER
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 18f)
         }
-        fun chosen() = Color.rgb(bars[0].progress, bars[1].progress, bars[2].progress)
-        sample.setBackgroundColor(first)
-        bars.forEach { it.setOnSeekBarChangeListener(object : android.widget.SeekBar.OnSeekBarChangeListener {
-            override fun onProgressChanged(s: android.widget.SeekBar, p: Int, user: Boolean) = sample.setBackgroundColor(chosen())
-            override fun onStartTrackingTouch(s: android.widget.SeekBar) {}
-            override fun onStopTrackingTouch(s: android.widget.SeekBar) {}
-        }) }
-        AlertDialog.Builder(requireContext()).setTitle(title).setView(box)
+        box.addView(sample, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, px(48)).apply { bottomMargin = px(16) })
+        val values = intArrayOf(Color.red(first), Color.green(first), Color.blue(first))
+        val sliders = mutableListOf<com.google.android.material.slider.Slider>()
+        val numbers = mutableListOf<TextView>()
+        fun chosen() = Color.rgb(values[0], values[1], values[2])
+        fun show() {
+            // The row's sample: this colour in its place, the other half of the pair as saved
+            val (bgKey, fgKey) = UiColors.SAMPLE_COLORS[k] ?: (k to k)
+            fun saved(n: String) = runCatching { Color.parseColor(draft.values["js8cfg_ui_$n"] ?: draft.prefs.getString("js8cfg_ui_$n", null) ?: UiColors.UI_DEFAULTS.getValue(n)) }
+                .getOrDefault(Color.BLACK)
+            val bg = if (bgKey == k) chosen() else saved(bgKey)
+            sample.setTextColor(if (fgKey == k) chosen() else saved(fgKey))
+            sample.background = chip(bg, 12)
+            numbers.forEachIndexed { i, t -> t.text = values[i].toString() }
+        }
+        // Ready colours, 6 to a line
+        palette.chunked(6).forEach { line ->
+            val r = LinearLayout(requireContext()).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_HORIZONTAL }
+            line.forEach { hex ->
+                val c = Color.parseColor(hex)
+                r.addView(View(requireContext()).apply {
+                    background = android.graphics.drawable.GradientDrawable().apply {
+                        shape = android.graphics.drawable.GradientDrawable.OVAL
+                        setColor(c)
+                        setStroke(px(1), attr(com.google.android.material.R.attr.colorOutline))
+                    }
+                    contentDescription = hex
+                    setOnClickListener {
+                        values[0] = Color.red(c); values[1] = Color.green(c); values[2] = Color.blue(c)
+                        sliders.forEachIndexed { i, s -> s.value = values[i].toFloat() }
+                        show()
+                    }
+                }, LinearLayout.LayoutParams(px(32), px(32)).apply { setMargins(px(5), px(5), px(5), px(5)) })
+            }
+            box.addView(r, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        }
+        val names = listOf("Red", "Green", "Blue")
+        names.forEachIndexed { i, name ->
+            val r = LinearLayout(requireContext()).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
+            r.addView(TextView(requireContext()).apply {
+                text = name
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
+                setTextColor(onSurface)
+                maxLines = 1
+                minWidth = names.maxOf { kotlin.math.ceil(paint.measureText(it)).toInt() } + px(8)
+            }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+            val s = com.google.android.material.slider.Slider(requireContext()).apply {
+                valueFrom = 0f; valueTo = 255f; stepSize = 1f
+                value = values[i].toFloat()
+                labelBehavior = com.google.android.material.slider.LabelFormatter.LABEL_GONE
+                isTickVisible = false // 255 steps: the dots would fill the track
+                contentDescription = name
+                addOnChangeListener { _, v, _ -> values[i] = v.toInt(); show() }
+            }
+            sliders += s
+            r.addView(s, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
+            val n = TextView(requireContext()).apply {
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
+                setTextColor(onSurfaceVariant)
+                gravity = Gravity.END
+                maxLines = 1
+                minWidth = kotlin.math.ceil(paint.measureText("255")).toInt() + px(4)
+            }
+            numbers += n
+            r.addView(n, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+            box.addView(r, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = px(4) })
+        }
+        show()
+        MaterialAlertDialogBuilder(requireContext()).setTitle(title).setView(ScrollView(requireContext()).apply { addView(box) })
             .setPositiveButton(android.R.string.ok) { _, _ -> onPick(String.format("#%06X", chosen() and 0xFFFFFF)) }
+            .setNegativeButton(android.R.string.cancel, null).show()
+    }
+
+    /** A rounded swatch with a thin outline, so white on a white page still shows. */
+    private fun chip(color: Int, cornerDp: Int = 8) = android.graphics.drawable.GradientDrawable().apply {
+        cornerRadius = px(cornerDp).toFloat()
+        setColor(color)
+        setStroke(px(1), attr(com.google.android.material.R.attr.colorOutlineVariant))
+    }
+
+    /**
+     * PC QFontDialog in one Android form (Rob, 2026-11-26; was three boxes in a row): Font, Style and Size drop-downs,
+     * a K1ABC sample in the chosen font; Cancel and OK.
+     */
+    private fun pickFont(title: String, key: String) {
+        val box = column().apply { setPadding(px(24), px(16), px(24), 0) }
+        val sizes = (8..20).map { "$it pt" }
+        val family = formChoice(box, "Font", FONT_FAMILIES, draft.values["${key}_family"] ?: draft.prefs.getString("${key}_family", null) ?: FONT_FAMILIES[0])
+        val style = formChoice(box, "Style", FONT_STYLES, draft.values["${key}_style"] ?: draft.prefs.getString("${key}_style", null) ?: FONT_STYLES[0])
+        val size = formChoice(box, "Size", sizes, "${draft.values[key] ?: draft.prefs.getString(key, null) ?: "10"} pt")
+        val sample = TextView(requireContext()).apply {
+            text = "K1ABC"
+            gravity = Gravity.CENTER
+            setTextColor(onSurface)
+            background = chip(Color.TRANSPARENT, 12)
+        }
+        box.addView(sample, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, px(64)).apply { bottomMargin = px(8) })
+        fun show() {
+            sample.typeface = typefaceFor(requireContext(), family.text.toString(), style.text.toString())
+            // 10 pt is the size the screens were laid out for (Js8MainFragment.applyUiFonts): 16 sp here
+            sample.setTextSize(TypedValue.COMPLEX_UNIT_SP, 1.6f * (size.text.toString().removeSuffix(" pt").toFloatOrNull() ?: 10f))
+        }
+        listOf(family, style, size).forEach { it.setOnItemClickListener { _, _, _, _ -> show() } }
+        show()
+        MaterialAlertDialogBuilder(requireContext()).setTitle(title).setView(ScrollView(requireContext()).apply { addView(box) })
+            .setPositiveButton(android.R.string.ok) { _, _ ->
+                draft.values[key] = size.text.toString().removeSuffix(" pt")
+                draft.values["${key}_family"] = family.text.toString()
+                draft.values["${key}_style"] = style.text.toString()
+                content.post { render(keepScroll = true) }
+            }
             .setNegativeButton(android.R.string.cancel, null).show()
     }
 
@@ -1849,7 +1958,11 @@ class Js8SettingsFragment : Fragment() {
         "#8E44AD", "#E91E63", "#00BCD4", "#795548", "#FFC0CB", "#90EE90"
     )
 
-    /** UI tab: one button per color / font with a "K1ABC" sample, like the PC tab. */
+    /**
+     * UI page, Android rows (Rob, 2026-11-26; was one blue button per colour / font with a K1ABC sample beside it):
+     * name, its colour code (or font · style · size) under it, the K1ABC sample as a rounded chip at the right end.
+     * Received / Transmitted are grey labels above their rows.
+     */
     private fun colorButtons(
         items: List<Pair<String, String>>,
         extra: List<Pair<String, String>> = emptyList(),
@@ -1858,57 +1971,48 @@ class Js8SettingsFragment : Fragment() {
         val col = column()
         if (pills) col.addView(switchRow(Field("js8cfg_pills", "Display callsigns and commands as pills", Kind.CHECK, "true"), true))
         var lastHeading: String? = null
-        val painters = mutableListOf<() -> Unit>()
+        fun saved(n: String) = runCatching { Color.parseColor(draft.values["js8cfg_ui_$n"] ?: draft.prefs.getString("js8cfg_ui_$n", null) ?: UiColors.UI_DEFAULTS.getValue(n)) }
+            .getOrDefault(Color.parseColor(UiColors.UI_DEFAULTS.getValue(n)))
         items.forEach { (lab, k) ->
             val heading = if (lab.contains(": ")) lab.substringBefore(": ") else null
-            if (heading != null && heading != lastHeading) {
-                col.addView(label("$heading:", bold = true).apply { setPadding(0, px(8), 0, px(2)) })
-            }
+            if (heading != null && heading != lastHeading) col.addView(TextView(requireContext()).apply {
+                text = heading
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
+                setTextColor(onSurfaceVariant)
+                setPadding(px(16), px(12), px(16), px(2))
+            })
             lastHeading = heading
             val key = "js8cfg_ui_$k"
-            val row = LinearLayout(requireContext()).apply {
-                orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL; setPadding(0, px(3), 0, px(3))
-            }
-            val sample = label("K1ABC").apply {
+            val name = lab.substringAfter(": ")
+            val sample = TextView(requireContext()).apply {
+                text = "K1ABC"
                 gravity = Gravity.CENTER
-                setPadding(px(10), px(3), px(10), px(3))
+                setTextSize(TypedValue.COMPLEX_UNIT_SP, 14f)
+                setPadding(px(12), px(4), px(12), px(4))
             }
-            fun paint() {
-                val v = draft.values[key] ?: draft.prefs.getString(key, null)
-                if (k.endsWith("_font")) { sample.text = "K1ABC ${v ?: "10"}pt"; return }
+            val summary: String
+            if (k.endsWith("_font")) {
+                val family = draft.values["${key}_family"] ?: draft.prefs.getString("${key}_family", null)
+                val style = draft.values["${key}_style"] ?: draft.prefs.getString("${key}_style", null) ?: FONT_STYLES[0]
+                val size = draft.values[key] ?: draft.prefs.getString(key, null) ?: "10"
+                summary = if (family == null) "Screen's own font · $size pt" else "$family · $style · $size pt"
+                typefaceFor(requireContext(), family, style)?.let { sample.typeface = it }
+                sample.setTextColor(onSurface)
+                sample.background = chip(Color.TRANSPARENT)
+            } else {
                 // PC Configuration: each sample is "background: <its group's background>; color: <its group's text>"
-                val (bg, fg) = UiColors.SAMPLE_COLORS[k] ?: return
-                fun c(n: String) = runCatching { Color.parseColor(draft.values["js8cfg_ui_$n"] ?: draft.prefs.getString("js8cfg_ui_$n", null) ?: UiColors.UI_DEFAULTS.getValue(n)) }
-                    .getOrDefault(Color.parseColor(UiColors.UI_DEFAULTS.getValue(n)))
-                sample.setBackgroundColor(c(bg))
-                sample.setTextColor(c(fg))
+                val (bg, fg) = UiColors.SAMPLE_COLORS[k] ?: (k to k)
+                sample.background = chip(saved(bg))
+                sample.setTextColor(saved(fg))
+                summary = String.format("#%06X", saved(k) and 0xFFFFFF)
             }
-            painters += ::paint
-            paint()
-            row.addView(button(lab.substringAfter(": ")) {
-                if (k.endsWith("_font")) {
-                    // PC QFontDialog: family, style, size
-                    AlertDialog.Builder(requireContext()).setTitle("Font").setItems(FONT_FAMILIES.toTypedArray()) { _, f ->
-                        AlertDialog.Builder(requireContext()).setTitle("Font style").setItems(FONT_STYLES.toTypedArray()) { _, s ->
-                            val sizes = (8..20).map { it.toString() }
-                            AlertDialog.Builder(requireContext()).setTitle("Font size")
-                                .setItems(sizes.map { "$it pt" }.toTypedArray()) { _, w ->
-                                    draft.values[key] = sizes[w]
-                                    draft.values["${key}_family"] = FONT_FAMILIES[f]
-                                    draft.values["${key}_style"] = FONT_STYLES[s]
-                                    paint()
-                                }.show()
-                        }.show()
-                    }.show()
-                } else {
-                    pickColor(lab, draft.values[key] ?: draft.prefs.getString(key, null) ?: UiColors.UI_DEFAULTS[k]) { draft.values[key] = it; painters.forEach { p -> p() } }
+            col.addView(row(name, summary, end = sample) {
+                if (k.endsWith("_font")) pickFont(name, key)
+                else pickColor(name, k, draft.values[key] ?: draft.prefs.getString(key, null) ?: UiColors.UI_DEFAULTS[k]) {
+                    draft.values[key] = it
+                    content.post { render(keepScroll = true) }
                 }
-            }.apply {
-                // 28 dp, taller when the label wraps (Secondary Highlight Background upright)
-                minimumHeight = px(28); setPadding(px(10), px(3), px(10), px(3))
-            }, LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f))
-            row.addView(sample, LinearLayout.LayoutParams(px(110), ViewGroup.LayoutParams.WRAP_CONTENT).apply { marginStart = px(8) })
-            col.addView(row)
+            })
         }
         extra.forEach { (key, lab) -> col.addView(fieldRow(Field(key, lab, Kind.TEXT, "", upper = true))) }
         return col

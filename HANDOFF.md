@@ -2,6 +2,22 @@
 
 ## Next session starts here (2026-11-05): audit B sections 1-12 are fixed
 
+**State 14:25, 2026-11-26: Station > UI as Android rows (Rob; uncommitted, built 14:07, tested on S22-Fresh)**
+- `colorButtons`: one `row` per colour (name, #RRGGBB under it) and per font (font · style · size, or "Screen's own
+  font · N pt" when none is set), K1ABC chip at the right end (`chip()`); Received / Transmitted grey labels. Routed
+  out of the padded frame.
+- `pickColor`: Material dialog, K1ABC sample in the row's colours, the 24 `palette` colours (6 to a line, outlined),
+  Red / Green / Blue Material sliders (no tick dots, no value bubble) with numbers. The box is capped at 560 dp wide:
+  a slider takes all the width it is offered and the box filled a sideways tablet. Names / numbers are sized to
+  "Green" / "255" in the device's text size (fixed widths wrapped on the tablet).
+- `pickFont`: one dialog with Font / Style / Size drop-downs (`formChoice`) and a K1ABC sample; replaces the three
+  chained boxes. Monospace checked: the sample is Droid Sans Mono (letter positions measured against the font file).
+- Test: `build-env/test/lib/uichk.py` W234-W240 passed run 9 (emulator restarted first; runs 6-8 failed W238 when a
+  drop-down was tapped under ~1 s after the previous pick: the list stays shut. With 1.5 s every tap opened, 6 of 6
+  on the tablet and the emulator; the test now waits 1.5 s and retries).
+- `website/help/station.html` UI bullets rewritten (Rob uploads it).
+- Installed 14:09 on the tablet. S22 Ultra still offline over adb.
+
 **State 13:30, 2026-11-26: Station > Saved Messages as Android rows (Rob; uncommitted, built 13:15, tested on S22-Fresh)**
 - `savedMessages`: Add saved message row, one `row` per message with a ≡ handle (drawable `js8_pref_drag`,
   contentDescription "Move <message>"). Dragging the handle lifts the row (translationZ, colorSurfaceContainerHigh),
