@@ -1470,17 +1470,19 @@ class Js8MainFragment : Fragment() {
         }
     }
 
-    /** PC menu_Log. Erase ... are the same as Settings > Log. */
+    /** PC menu_Log. Export Log... and Erase ... are the same as Settings > Log (Export Log... added Rob, 2026-11-26). */
     private fun showLogMenu(anchor: View) {
         val menu = popupMenu(anchor)
         menu.menu.add(0, 1, 1, "Add Log Entry...")
         menu.menu.add(0, 2, 2, "Open Log Directory...")
-        menu.menu.add(0, 3, 3, "Erase ALL.TXT")
-        menu.menu.add(0, 4, 4, "Erase js8call_log.adi")
+        menu.menu.add(0, 5, 3, "Export Log...")
+        menu.menu.add(0, 3, 4, "Erase ALL.TXT")
+        menu.menu.add(0, 4, 5, "Erase js8call_log.adi")
         menu.setOnMenuItemClickListener { item ->
             when (item.itemId) {
                 1 -> openLog(selectedCall)
                 2 -> openLogDirectory()
+                5 -> navigateFromMain(R.id.navigation_js8_export) // the Export Options page
                 3 -> confirmErase("Are you sure you want to erase file ALL.TXT?") {
                     requireContext().startService(Intent(requireContext(), JS8EngineService::class.java).setAction(JS8EngineService.ACTION_ERASE_LOG))
                 }

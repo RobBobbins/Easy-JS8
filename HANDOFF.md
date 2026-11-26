@@ -2,6 +2,13 @@
 
 ## Next session starts here (2026-11-05): audit B sections 1-12 are fixed
 
+**State 15:05, 2026-11-26: menu bar Log > Export Log... (Rob; uncommitted, built 14:56)**
+- `showLogMenu`: Export Log... third, under Open Log Directory..., opens the Export Options page
+  (`navigation_js8_export`), as Settings > Log > Export Log... does. PC and FT8Call layouts (both have the menu bar).
+- Test: `build-env/test/lib/logmenu.py` (W244-W245) passed on S22-Fresh (PC and FT8Call) and the tablet (PC).
+- Not changed: Settings > Log has no Open Log Directory..., so upright it can't be reached (told Rob).
+- Installed 14:59 on the tablet. S22 Ultra still offline over adb.
+
 **State 15:00, 2026-11-26: pull-down text size by device (Rob; uncommitted, built 14:44)**
 - New dimen `js8_menu_text`: 9.5 dp in `values/js8_styles.xml` (phones), 14.3 dp in the new
   `values-sw600dp/js8_dimens.xml` (tablets, 600 dp and wider on the short side). `Js8PopupMenuText` uses it, and
