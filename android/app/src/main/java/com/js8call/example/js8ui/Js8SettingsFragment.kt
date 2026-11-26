@@ -612,6 +612,9 @@ class Js8SettingsFragment : Fragment() {
                 "notifications_table" -> notifications()
                 "aprs_gps" -> aprsGpsLine()
                 "aprs_status" -> aprsStatusWindow()
+                "frequencies_table" -> frequencyTable()
+                "schedule_table" -> scheduleTable()
+                "saved_messages" -> savedMessages()
                 // Tables and lists keep their own look (Rob, 2026-11-24), inside the page's margins
                 else -> FrameLayout(requireContext()).apply {
                     setPadding(px(16), px(8), px(16), px(8))
@@ -1305,81 +1308,166 @@ class Js8SettingsFragment : Fragment() {
             }
         }
 
-    /** PC frequencies_table_view and its right-click menu: Insert ..., Delete, Reset. */
+    /**
+     * Station > Frequencies > Frequencies, Android rows (Rob, 2026-11-26; was the PC frequencies_table_view with
+     * Insert ... / Delete / Reset / Load ... / Save as ... / Merge ... buttons): Add frequency, one row per frequency
+     * ("7.078 000 MHz (40m)", mode · region · description under it; a tap opens Edit Frequency with Delete), then the
+     * file rows. Save to file… saves them all (the PC's "only the selected ones" needs a selection, gone with rows).
+     */
     private fun frequencyTable(): View {
         val key = Js8SettingsSchema.FREQUENCIES_KEY
         fun current() = Js8SettingsSchema.frequencyItems(requireContext(), draft.values[key] ?: draft.prefs.getString(key, null))
-        // PC FrequencyList frequency_column: "7.078 000 MHz (40m)", OOB outside the 30 bands; the
-        // Frequency (MHz) column is hidden (cpp 1639-1640, FrequencyList.cpp 356-359)
-        fun rows(items: List<Js8SettingsSchema.FrequencyItem>) = items.mapIndexed { i, f ->
-            val band = com.js8call.example.util.BandUtils.bandOrNull(f.hz) ?: "OOB"
-            Js8TableView.Row("$i", mapOf(
-                "region" to f.region, "mode" to f.mode,
-                "freq" to "${com.js8call.example.util.BandUtils.prettyMhz(f.hz)} MHz ($band)",
-                "desc" to f.description
-            ), sortValues = mapOf("freq" to f.hz))
-        }
-        val list = table("cfg_freq", listOf(
-            Js8TableView.Column("region", "IARU Region", 90), Js8TableView.Column("mode", "Mode", 60),
-            Js8TableView.Column("freq", "Frequency", 150, numeric = true),
-            Js8TableView.Column("desc", "Description", 120, stretch = true)
-        ), rows(current()), 160)
-        list.onRowClick = { list.selectedRowId = it.id }
         fun refresh(items: List<Js8SettingsSchema.FrequencyItem>) {
-            val sorted = items.sortedBy { it.hz }
-            draft.values[key] = sorted.joinToString("\n") { it.line() }
-            list.selectedRowId = null
-            list.setRows(rows(sorted))
-        }
-        // PC edits cells in place; a touch table opens the same fields filled in
-        list.onRowLongClick = { row, _ ->
-            val i = row.id.toInt()
-            insertFrequency(current().getOrNull(i)) { edited -> refresh(current().filterIndexed { n, _ -> n != i } + edited) }
+            draft.values[key] = items.sortedBy { it.hz }.joinToString("\n") { it.line() }
+            content.post { render(keepScroll = true) }
         }
         val col = column()
-        val buttons = LinearLayout(requireContext()).apply { orientation = LinearLayout.HORIZONTAL }
-        buttons.addView(button("Insert ...") { insertFrequency { refresh(current() + it) } }, LinearLayout.LayoutParams(0, px(30), 1f))
-        buttons.addView(button("Delete") {
-            val sel = list.selectedRowId?.toIntOrNull() ?: return@button
-            refresh(current().filterIndexed { i, _ -> i != sel })
-        }, LinearLayout.LayoutParams(0, px(30), 1f).apply { marginStart = px(6) })
-        val files = LinearLayout(requireContext()).apply { orientation = LinearLayout.HORIZONTAL }
-        files.addView(button("Load ...") {
+        col.addView(addRow("Add frequency") { editFrequency(null, null) { refresh(current() + it) } })
+        current().forEachIndexed { i, f ->
+            // PC FrequencyList frequency_column: "7.078 000 MHz (40m)", OOB outside the 30 bands
+            val band = com.js8call.example.util.BandUtils.bandOrNull(f.hz) ?: "OOB"
+            val summary = listOf(f.mode, if (f.region == "All") "All regions" else f.region, f.description)
+                .filter { it.isNotBlank() }.joinToString(" · ")
+            col.addView(row("${com.js8call.example.util.BandUtils.prettyMhz(f.hz)} MHz ($band)", summary) {
+                editFrequency(f, onDelete = { refresh(current().filterIndexed { n, _ -> n != i }) }) { edited ->
+                    refresh(current().filterIndexed { n, _ -> n != i } + edited)
+                }
+            })
+        }
+        col.addView(row("Load from file…", null) {
             frequencyFile = { loaded ->
                 if (loaded.isNotEmpty() && current().isEmpty()) refresh(loaded)
-                else if (loaded.isNotEmpty()) AlertDialog.Builder(requireContext()).setTitle("Replace Working Frequencies")
+                else if (loaded.isNotEmpty()) MaterialAlertDialogBuilder(requireContext()).setTitle("Replace Working Frequencies")
                     .setMessage("Are you sure you want to discard your current working frequencies and replace them with the loaded ones?")
                     .setPositiveButton("Yes") { _, _ -> refresh(loaded) }.setNegativeButton("No", null).show()
             }
             pickFrequencies.launch(arrayOf("*/*"))
-        }, LinearLayout.LayoutParams(0, px(30), 1f))
-        files.addView(button("Save as ...") {
-            val all = current()
-            val selected = list.selectedRowId?.toIntOrNull()?.let { all.getOrNull(it) }
-            fun save(items: List<Js8SettingsSchema.FrequencyItem>) {
-                frequencySave = Js8Qrg.write(items)
-                saveFrequencies.launch("frequencies.qrg")
-            }
-            if (selected == null) save(all)
-            else AlertDialog.Builder(requireContext()).setTitle("Only Save Selected  Working Frequencies")
-                .setMessage("Are you sure you want to save only the working frequencies that are currently selected? Click No to save all.")
-                .setPositiveButton("Yes") { _, _ -> save(listOf(selected)) }
-                .setNegativeButton("No") { _, _ -> save(all) }.show()
-        }, LinearLayout.LayoutParams(0, px(30), 1f).apply { marginStart = px(6) })
-        files.addView(button("Merge ...") {
-            frequencyFile = { loaded -> refresh((current() + loaded).distinct()) } // PC: only rows not in the table
+        })
+        col.addView(row("Save to file…", null) {
+            frequencySave = Js8Qrg.write(current())
+            saveFrequencies.launch("frequencies.qrg")
+        })
+        col.addView(row("Merge from file…", null) {
+            frequencyFile = { loaded -> refresh((current() + loaded).distinct()) } // PC: only rows not in the list
             pickFrequencies.launch(arrayOf("*/*"))
-        }, LinearLayout.LayoutParams(0, px(30), 1f).apply { marginStart = px(6) })
-        buttons.addView(button("Reset") {
-            AlertDialog.Builder(requireContext()).setTitle("Reset Working Frequencies")
+        })
+        col.addView(row("Reset to default frequencies", null) {
+            MaterialAlertDialogBuilder(requireContext()).setTitle("Reset Working Frequencies")
                 .setMessage("Are you sure you want to discard your current working frequencies and replace them with default ones?")
                 .setPositiveButton("Yes") { _, _ -> refresh(Js8SettingsSchema.frequencyItems(requireContext(), null)) }
                 .setNegativeButton("No", null).show()
-        }, LinearLayout.LayoutParams(0, px(30), 1f).apply { marginStart = px(6) })
-        col.addView(buttons)
-        col.addView(files, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { topMargin = px(6) })
-        col.addView(list)
+        })
         return col
+    }
+
+    /** Android's add row at the top of a list: a + and the words; greyed (38 %) when it can't be used. */
+    private fun addRow(text: String, enabled: Boolean = true, onClick: () -> Unit): View = LinearLayout(requireContext()).apply {
+        orientation = LinearLayout.HORIZONTAL
+        gravity = Gravity.CENTER_VERTICAL
+        minimumHeight = px(56)
+        setPadding(px(16), px(8), px(16), px(8))
+        setBackgroundResource(themeDrawable(android.R.attr.selectableItemBackground))
+        addView(ImageView(requireContext()).apply {
+            setImageResource(R.drawable.js8_pref_add)
+            imageTintList = ColorStateList.valueOf(accent)
+        }, LinearLayout.LayoutParams(px(24), px(24)).apply { marginEnd = px(16) })
+        addView(TextView(requireContext()).apply {
+            this.text = text
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
+            setTextColor(onSurface)
+        })
+        if (enabled) setOnClickListener { onClick() } else { alpha = 0.38f; isClickable = false }
+    }
+
+    /** An Android form box: outlined, its name in the outline. */
+    private fun formBox(parent: LinearLayout, name: String, type: Int, value: String = "", placeholder: String? = null): Pair<TextInputLayout, EditText> {
+        val layout = TextInputLayout(requireContext()).apply {
+            boxBackgroundMode = TextInputLayout.BOX_BACKGROUND_OUTLINE
+            this.hint = name
+            placeholder?.let { placeholderText = it }
+        }
+        val edit = TextInputEditText(layout.context).apply {
+            inputType = type
+            isSingleLine = true
+            setText(value)
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) importantForAutofill = View.IMPORTANT_FOR_AUTOFILL_NO
+        }
+        layout.addView(edit, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        parent.addView(layout, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin = px(12) })
+        return layout to edit
+    }
+
+    /** An Android form drop-down: outlined, its name in the outline, a list to pick from. */
+    private fun formChoice(parent: LinearLayout, name: String, items: List<String>, value: String): com.google.android.material.textfield.MaterialAutoCompleteTextView {
+        val layout = TextInputLayout(requireContext()).apply {
+            boxBackgroundMode = TextInputLayout.BOX_BACKGROUND_OUTLINE
+            endIconMode = TextInputLayout.END_ICON_DROPDOWN_MENU
+            hint = name
+        }
+        val pick = com.google.android.material.textfield.MaterialAutoCompleteTextView(layout.context).apply {
+            inputType = InputType.TYPE_NULL
+            // Same text size and inset as the typed boxes (a drop-down made in code has neither)
+            setTextSize(TypedValue.COMPLEX_UNIT_SP, 16f)
+            setPadding(px(16), px(16), px(16), px(16))
+            setSimpleItems(items.toTypedArray())
+            setText(value, false)
+        }
+        layout.addView(pick, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+        parent.addView(layout, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin = px(12) })
+        return pick
+    }
+
+    /** Red text under a form box; none takes back its space, so the boxes stay evenly spaced. */
+    private fun boxProblem(box: TextInputLayout, text: String?) {
+        box.error = text
+        box.isErrorEnabled = text != null
+    }
+
+    /** MHz typed in a box, as Hz; 0 when it is not a frequency. */
+    private fun hzOf(text: CharSequence?): Long =
+        text.toString().trim().toDoubleOrNull()?.let { Math.round(it * 1_000_000.0) }?.takeIf { it > 0 } ?: 0L
+
+    private fun watch(edit: EditText, check: () -> Unit) = edit.addTextChangedListener(object : TextWatcher {
+        override fun afterTextChanged(s: Editable?) = check()
+        override fun beforeTextChanged(s: CharSequence?, a: Int, c: Int, d: Int) {}
+        override fun onTextChanged(s: CharSequence?, a: Int, c: Int, d: Int) {}
+    })
+
+    /**
+     * PC FrequencyDialog "Add Frequency"; with [item], the same fields for an edit and a Delete button. Android form
+     * (Rob, 2026-11-26): outlined boxes, OK greyed until the frequency is a number above 0.
+     */
+    private fun editFrequency(item: Js8SettingsSchema.FrequencyItem?, onDelete: (() -> Unit)?, onSave: (Js8SettingsSchema.FrequencyItem) -> Unit) {
+        val box = column().apply { setPadding(px(24), px(16), px(24), 0) }
+        val (mhzBox, mhz) = formBox(box, "Frequency (MHz)", InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL,
+            item?.let { String.format(Locale.US, "%.6f", it.hz / 1_000_000.0) } ?: "")
+        val (_, desc) = formBox(box, "Description", InputType.TYPE_CLASS_TEXT, item?.description ?: "")
+        val region = formChoice(box, "IARU Region", listOf("All", "Region 1", "Region 2", "Region 3"), item?.region ?: "All")
+        val mode = formChoice(box, "Mode", listOf("All", "JS8"), item?.mode ?: "JS8")
+        val b = MaterialAlertDialogBuilder(requireContext()).setTitle(if (item == null) "Add Frequency" else "Edit Frequency")
+            .setView(ScrollView(requireContext()).apply { addView(box) })
+            .setPositiveButton(android.R.string.ok, null).setNegativeButton(android.R.string.cancel, null)
+        if (onDelete != null) b.setNeutralButton("Delete") { _, _ -> onDelete() }
+        val dialog = b.create()
+        dialog.setCanceledOnTouchOutside(false)
+        dialog.setOnShowListener {
+            val ok = dialog.getButton(AlertDialog.BUTTON_POSITIVE)
+            fun check() {
+                val good = hzOf(mhz.text) > 0
+                ok.isEnabled = good
+                boxProblem(mhzBox, if (good || mhz.text.isNullOrBlank()) null else "Enter the frequency in MHz, for example 7.078")
+            }
+            check()
+            watch(mhz) { check() }
+            ok.setOnClickListener {
+                val hz = hzOf(mhz.text)
+                if (hz <= 0L) return@setOnClickListener
+                onSave(Js8SettingsSchema.FrequencyItem(hz, region.text.toString(), mode.text.toString(),
+                    desc.text.toString().replace('|', ' ').replace('\n', ' ').trim()))
+                dialog.dismiss()
+            }
+        }
+        dialog.show()
     }
 
     private var frequencyFile: ((List<Js8SettingsSchema.FrequencyItem>) -> Unit)? = null
@@ -1398,48 +1486,6 @@ class Js8SettingsFragment : Fragment() {
         if (uri != null) requireContext().contentResolver.openOutputStream(uri)?.use { it.write(frequencySave) }
     }
 
-    /** PC FrequencyDialog "Add Frequency"; with [item], the same fields for an edit. */
-    private fun insertFrequency(item: Js8SettingsSchema.FrequencyItem? = null, onAdd: (Js8SettingsSchema.FrequencyItem) -> Unit) {
-        val box = column().apply { setPadding(px(16), px(8), px(16), 0) }
-        fun title(name: String) = box.addView(label(name).apply { setTextColor(Color.BLACK) })
-        fun spinner(items: List<String>) = android.widget.Spinner(requireContext()).apply {
-            adapter = android.widget.ArrayAdapter(requireContext(), android.R.layout.simple_spinner_dropdown_item, items)
-            box.addView(this)
-        }
-        title("IARU Region:")
-        val regions = listOf("All", "Region 1", "Region 2", "Region 3")
-        val region = spinner(regions)
-        title("Mode:")
-        val modes = listOf("All", "JS8")
-        val mode = spinner(modes)
-        mode.setSelection(1)
-        title("Frequency (MHz):")
-        val mhz = styledField(EditText(requireContext())).apply {
-            inputType = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL
-            box.addView(this)
-        } as EditText
-        title("Description:")
-        val desc = styledField(EditText(requireContext())).apply { inputType = InputType.TYPE_CLASS_TEXT; box.addView(this) } as EditText
-        item?.let {
-            region.setSelection(regions.indexOf(it.region).coerceAtLeast(0))
-            mode.setSelection(modes.indexOf(it.mode).coerceAtLeast(0))
-            mhz.setText(String.format(Locale.US, "%.6f", it.hz / 1_000_000.0))
-            desc.setText(it.description)
-        }
-        val dialog = AlertDialog.Builder(requireContext()).setTitle(if (item == null) "Add Frequency" else "Edit Frequency").setView(ScrollView(requireContext()).apply { addView(box) })
-            .setPositiveButton(android.R.string.ok, null).setNegativeButton(android.R.string.cancel, null).create()
-        dialog.setCanceledOnTouchOutside(false)
-        dialog.setOnShowListener {
-            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
-                val hz = mhz.text.toString().trim().toDoubleOrNull()?.let { Math.round(it * 1_000_000.0) } ?: 0L
-                if (hz <= 0L) { mhz.error = "MHz"; return@setOnClickListener }
-                onAdd(Js8SettingsSchema.FrequencyItem(hz, region.selectedItem.toString(), mode.selectedItem.toString(),
-                    desc.text.toString().replace('|', ' ').replace('\n', ' ').trim()))
-                dialog.dismiss()
-            }
-        }
-        dialog.show()
-    }
 
     /** Settings > Power: PC outAttenuation, acts at once like the PC slider (also while TUNE is on), not on Save. */
     private fun powerSlider(): View {
@@ -1482,153 +1528,200 @@ class Js8SettingsFragment : Fragment() {
             .setPositiveButton("Yes") { _, _ -> erase() }.setNegativeButton("No", null).show()
     }
 
-    /** PC stations_table_view and its right-click menu: Insert ..., Delete, Switch to Frequency Now. */
+    /**
+     * Station > Frequencies > Frequency Schedule, Android rows (Rob, 2026-11-26; was the PC stations_table_view with
+     * Insert ... / Delete / Switch to Frequency Now buttons): Add schedule, then one row per entry ("7.078 000 MHz
+     * (40m)", "HH:MM to HH:MM UTC · description" under it; a tap opens Edit Schedule with Delete and Switch to
+     * Frequency Now). Sorted by start time. Greyed while the switch above is off, as the PC table is.
+     */
     private fun scheduleTable(): View {
         val key = Js8SettingsSchema.SCHEDULE_KEY
         fun current(): MutableList<String> = (draft.values[key] ?: draft.prefs.getString(key, "")).orEmpty()
             .split('\n').filter { it.isNotBlank() }.toMutableList()
-        fun rows(items: List<String>) = items.mapIndexed { i, line ->
+        fun refresh(items: List<String>) {
+            draft.values[key] = items.sortedBy { it.split('|').getOrElse(1) { "" } }.joinToString("\n")
+            content.post { render(keepScroll = true) }
+        }
+        val on = (draft.values["js8cfg_auto_switch_bands"] ?: draft.prefs.getBoolean("js8cfg_auto_switch_bands", false).toString()) == "true"
+        val col = column()
+        col.addView(addRow("Add schedule", on) { editSchedule(null, null) { line -> refresh(current() + line) } })
+        current().forEachIndexed { i, line ->
             val p = line.split('|', limit = 4)
             val hz = p[0].toLongOrNull() ?: 0L
-            Js8TableView.Row("$i", mapOf(
-                "band" to com.js8call.example.util.BandUtils.bandLabelForFrequencyHz(hz),
-                // PC StationList frequency_column: "7.078 000 MHz" (StationList.cpp 279-281)
-                "mhz" to "${com.js8call.example.util.BandUtils.prettyMhz(hz)} MHz",
-                "at" to p.getOrElse(1) { "" }, "until" to p.getOrElse(2) { "" }, "desc" to p.getOrElse(3) { "" }
-            ), sortValues = mapOf("mhz" to hz))
-        }
-        val list = table("cfg_sched", listOf(
-            Js8TableView.Column("band", "Band", 60), Js8TableView.Column("mhz", "Freq. (MHz)", 110, numeric = true),
-            Js8TableView.Column("at", "Switch at (UTC)", 110), Js8TableView.Column("until", "Until (UTC)", 90),
-            Js8TableView.Column("desc", "Description", 120, stretch = true)
-        ), rows(current()), 110)
-        list.onRowClick = { list.selectedRowId = it.id }
-        fun refresh(items: List<String>) {
-            draft.values[key] = items.joinToString("\n")
-            list.selectedRowId = null
-            list.setRows(rows(items))
-        }
-        list.onRowLongClick = { row, _ ->
-            val i = row.id.toInt()
-            insertSchedule(current().getOrNull(i)) { line ->
-                refresh((current().filterIndexed { n, _ -> n != i } + line).sortedBy { it.split('|').getOrElse(1) { "" } })
-            }
-        }
-        val col = column()
-        val buttons = LinearLayout(requireContext()).apply { orientation = LinearLayout.HORIZONTAL }
-        buttons.addView(button("Insert ...") { insertSchedule { line ->
-            refresh((current() + line).sortedBy { it.split('|').getOrElse(1) { "" } })
-        } }, LinearLayout.LayoutParams(0, px(30), 1f))
-        buttons.addView(button("Delete") {
-            val sel = list.selectedRowId?.toIntOrNull() ?: return@button
-            refresh(current().filterIndexed { i, _ -> i != sel })
-        }, LinearLayout.LayoutParams(0, px(30), 1f).apply { marginStart = px(6) })
-        col.addView(buttons)
-        col.addView(button("Switch to Frequency Now") {
-            val sel = list.selectedRowId?.toIntOrNull() ?: return@button
-            val hz = current().getOrNull(sel)?.substringBefore('|')?.toLongOrNull() ?: return@button
-            requireContext().startService(Intent(requireContext(), JS8EngineService::class.java).apply {
-                action = JS8EngineService.ACTION_SCHEDULE_HOP_NOW
-                putExtra(JS8EngineService.EXTRA_FREQUENCY_HZ, hz)
+            val title = "${com.js8call.example.util.BandUtils.prettyMhz(hz)} MHz (${com.js8call.example.util.BandUtils.bandLabelForFrequencyHz(hz)})"
+            val summary = "${p.getOrElse(1) { "" }} to ${p.getOrElse(2) { "" }} UTC" +
+                p.getOrElse(3) { "" }.takeIf { it.isNotBlank() }?.let { " · $it" }.orEmpty()
+            col.addView(row(title, summary, on) {
+                editSchedule(line, onDelete = { refresh(current().filterIndexed { n, _ -> n != i }) }) { edited ->
+                    refresh(current().filterIndexed { n, _ -> n != i } + edited)
+                }
             })
-        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, px(30)).apply { topMargin = px(6) })
-        col.addView(list)
-        // PC stations_table_view: enabled by Automatically switch bands / frequencies at specific times of day
-        val on = (draft.values["js8cfg_auto_switch_bands"] ?: draft.prefs.getBoolean("js8cfg_auto_switch_bands", false).toString()) == "true"
-        fun grey(v: View) { v.isEnabled = on; (v as? ViewGroup)?.let { g -> (0 until g.childCount).forEach { grey(g.getChildAt(it)) } } }
-        grey(col)
-        col.alpha = if (on) 1f else 0.45f
+        }
         return col
     }
 
-    /** PC StationDialog "Add Schedule"; with [line], the same fields for an edit. The band comes from the frequency, as the PC saves it. */
-    private fun insertSchedule(line: String? = null, onAdd: (String) -> Unit) {
-        val box = column().apply { setPadding(px(16), px(8), px(16), 0) }
-        fun field(name: String, type: Int): EditText {
-            box.addView(label(name).apply { setTextColor(Color.BLACK) })
-            return styledField(EditText(requireContext())).apply { inputType = type; box.addView(this) } as EditText
-        }
+    /**
+     * PC StationDialog "Add Schedule"; with [line], the same fields for an edit, Delete, and the PC's right-click
+     * Switch to Frequency Now. Android form (Rob, 2026-11-26): outlined boxes, OK greyed until the frequency and both
+     * times are right. The band comes from the frequency, as the PC saves it.
+     */
+    private fun editSchedule(line: String?, onDelete: (() -> Unit)?, onSave: (String) -> Unit) {
+        val box = column().apply { setPadding(px(24), px(16), px(24), 0) }
+        val p = line?.split('|', limit = 4)
         val number = InputType.TYPE_CLASS_NUMBER or InputType.TYPE_NUMBER_FLAG_DECIMAL
         val time = InputType.TYPE_CLASS_DATETIME or InputType.TYPE_DATETIME_VARIATION_TIME
-        val mhz = field("Frequency (MHz):", number)
-        val at = field("Switch at (UTC):", time)
-        val until = field("Until (UTC):", time)
-        val desc = field("Description:", InputType.TYPE_CLASS_TEXT)
-        line?.split('|', limit = 4)?.let { p ->
-            mhz.setText(String.format(Locale.US, "%.6f", (p[0].toLongOrNull() ?: 0L) / 1_000_000.0))
-            at.setText(p.getOrElse(1) { "" }); until.setText(p.getOrElse(2) { "" }); desc.setText(p.getOrElse(3) { "" })
-        }
-        val dialog = AlertDialog.Builder(requireContext()).setTitle(if (line == null) "Add Schedule" else "Edit Schedule").setView(ScrollView(requireContext()).apply { addView(box) })
-            .setPositiveButton(android.R.string.ok, null).setNegativeButton(android.R.string.cancel, null).create()
+        val (mhzBox, mhz) = formBox(box, "Frequency (MHz)", number,
+            p?.let { String.format(Locale.US, "%.6f", (it[0].toLongOrNull() ?: 0L) / 1_000_000.0) } ?: "")
+        val (atBox, at) = formBox(box, "Switch at (UTC)", time, p?.getOrElse(1) { "" } ?: "", "HH:MM")
+        val (untilBox, until) = formBox(box, "Until (UTC)", time, p?.getOrElse(2) { "" } ?: "", "HH:MM")
+        val (_, desc) = formBox(box, "Description", InputType.TYPE_CLASS_TEXT, p?.getOrElse(3) { "" } ?: "")
+        if (line != null) box.addView(com.google.android.material.button.MaterialButton(requireContext(), null,
+            com.google.android.material.R.attr.borderlessButtonStyle).apply {
+            text = "Switch to Frequency Now"
+            setOnClickListener {
+                val hz = hzOf(mhz.text).takeIf { it > 0 } ?: (p?.get(0)?.toLongOrNull() ?: return@setOnClickListener)
+                requireContext().startService(Intent(requireContext(), JS8EngineService::class.java).apply {
+                    action = JS8EngineService.ACTION_SCHEDULE_HOP_NOW
+                    putExtra(JS8EngineService.EXTRA_FREQUENCY_HZ, hz)
+                })
+            }
+        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT).apply { bottomMargin = px(4) })
+        val b = MaterialAlertDialogBuilder(requireContext()).setTitle(if (line == null) "Add Schedule" else "Edit Schedule")
+            .setView(ScrollView(requireContext()).apply { addView(box) })
+            .setPositiveButton(android.R.string.ok, null).setNegativeButton(android.R.string.cancel, null)
+        if (onDelete != null) b.setNeutralButton("Delete") { _, _ -> onDelete() }
+        val dialog = b.create()
         dialog.setCanceledOnTouchOutside(false)
+        val clock = Regex("([01]\\d|2[0-3]):[0-5]\\d")
         dialog.setOnShowListener {
-            dialog.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener {
-                val clock = Regex("([01]\\d|2[0-3]):[0-5]\\d")
-                val hz = mhz.text.toString().trim().toDoubleOrNull()?.let { Math.round(it * 1_000_000.0) } ?: 0L
+            val ok = dialog.getButton(AlertDialog.BUTTON_POSITIVE)
+            fun check() {
+                val f = hzOf(mhz.text) > 0
+                val a = clock.matches(at.text.toString().trim())
+                val u = clock.matches(until.text.toString().trim())
+                ok.isEnabled = f && a && u
+                boxProblem(mhzBox, if (f || mhz.text.isNullOrBlank()) null else "Enter the frequency in MHz, for example 7.078")
+                boxProblem(atBox, if (a || at.text.isNullOrBlank()) null else "Enter the time as HH:MM, for example 06:00")
+                boxProblem(untilBox, if (u || until.text.isNullOrBlank()) null else "Enter the time as HH:MM, for example 18:00")
+            }
+            check()
+            watch(mhz) { check() }; watch(at) { check() }; watch(until) { check() }
+            ok.setOnClickListener {
+                val hz = hzOf(mhz.text)
                 val a = at.text.toString().trim()
                 val u = until.text.toString().trim()
-                when {
-                    hz <= 0L -> mhz.error = "MHz"
-                    !clock.matches(a) -> at.error = "HH:MM"
-                    !clock.matches(u) -> until.error = "HH:MM"
-                    else -> {
-                        onAdd("$hz|$a|$u|" + desc.text.toString().replace('|', ' ').replace('\n', ' ').trim())
-                        dialog.dismiss()
-                    }
-                }
+                if (hz <= 0L || !clock.matches(a) || !clock.matches(u)) return@setOnClickListener
+                onSave("$hz|$a|$u|" + desc.text.toString().replace('|', ' ').replace('\n', ' ').trim())
+                dialog.dismiss()
             }
         }
         dialog.show()
     }
 
+    /**
+     * Station > Saved Messages, Android rows (Rob, 2026-11-26; was the PC macros table with Add, a text box and
+     * Delete): Add saved message at the top, one row per message (a tap opens Edit Saved Message with Delete), a ≡
+     * handle at each row's right end that drags the row up or down (Android's Languages list; PC
+     * RearrangableMacrosModel). The order is the Saved button's order.
+     */
+    @SuppressLint("ClickableViewAccessibility")
     private fun savedMessages(): View {
         val key = Js8SettingsSchema.SAVED_MESSAGES_KEY
         fun current(): MutableList<String> = (draft.values[key]
             ?: draft.prefs.getString(key, Js8SettingsSchema.SAVED_MESSAGES_DEFAULT).orEmpty())
             .split('\n').filter { it.isNotBlank() }.toMutableList()
-        val col = column()
-        val addRow = LinearLayout(requireContext()).apply { orientation = LinearLayout.HORIZONTAL; gravity = Gravity.CENTER_VERTICAL }
-        val input = styledField(EditText(requireContext())).apply {
-            inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
-            filters = arrayOf(messageAlphabet) // PC add_macro_line_edit (cpp 1491)
-        }
-        val list = table("cfg_saved", listOf(Js8TableView.Column("msg", "Message", 200, stretch = true)),
-            current().mapIndexed { i, m -> Js8TableView.Row("$i", mapOf("msg" to m)) }, 200)
         fun refresh(items: List<String>) {
             draft.values[key] = items.joinToString("\n")
-            list.setRows(items.mapIndexed { i, m -> Js8TableView.Row("$i", mapOf("msg" to m)) })
+            content.post { render(keepScroll = true) }
         }
-        // PC RearrangableMacrosModel: press and hold, then drag, moves a row
-        list.onRowsMoved = { order ->
-            val items = current()
-            refresh(order.mapNotNull { items.getOrNull(it.toInt()) })
+        val col = column()
+        col.addView(addRow("Add saved message") { editSavedMessage(null, null) { refresh(current() + it) } })
+        val rows = mutableListOf<View>()
+        current().forEachIndexed { i, msg ->
+            val handle = ImageView(requireContext()).apply {
+                setImageResource(R.drawable.js8_pref_drag)
+                imageTintList = ColorStateList.valueOf(onSurfaceVariant)
+                setPadding(px(8), px(8), px(8), px(8))
+                contentDescription = "Move $msg"
+            }
+            val r = row(msg, null, end = handle) {
+                editSavedMessage(msg, onDelete = { refresh(current().filterIndexed { n, _ -> n != i }) }) { edited ->
+                    refresh(current().also { it[i] = edited })
+                }
+            }
+            (handle.layoutParams as? LinearLayout.LayoutParams)?.apply { width = px(40); height = px(40) }
+            // Drag: the row follows the finger, the rows it passes slide out of its way; let go to drop it there
+            var startY = 0f
+            var target = i
+            handle.setOnTouchListener { v, e ->
+                when (e.actionMasked) {
+                    android.view.MotionEvent.ACTION_DOWN -> {
+                        v.parent?.requestDisallowInterceptTouchEvent(true)
+                        startY = e.rawY
+                        target = i
+                        r.translationZ = px(8).toFloat()
+                        r.setBackgroundColor(attr(com.google.android.material.R.attr.colorSurfaceContainerHigh))
+                    }
+                    android.view.MotionEvent.ACTION_MOVE -> {
+                        val dy = e.rawY - startY
+                        r.translationY = dy
+                        target = i
+                        var passed = 0f
+                        if (dy > 0) for (j in i + 1 until rows.size) {
+                            if (dy > passed + rows[j].height / 2f) { target = j; passed += rows[j].height } else break
+                        } else for (j in i - 1 downTo 0) {
+                            if (-dy > passed + rows[j].height / 2f) { target = j; passed += rows[j].height } else break
+                        }
+                        rows.forEachIndexed { j, o ->
+                            if (j == i) return@forEachIndexed
+                            val shift = when {
+                                j in (i + 1)..target -> -r.height.toFloat()
+                                j in target until i -> r.height.toFloat()
+                                else -> 0f
+                            }
+                            if (o.translationY != shift) o.animate().translationY(shift).setDuration(120).start()
+                        }
+                    }
+                    android.view.MotionEvent.ACTION_UP, android.view.MotionEvent.ACTION_CANCEL -> {
+                        rows.forEach { it.animate().cancel(); it.translationY = 0f }
+                        r.translationZ = 0f
+                        r.setBackgroundResource(themeDrawable(android.R.attr.selectableItemBackground))
+                        if (target != i) refresh(current().also { it.add(target, it.removeAt(i)) })
+                    }
+                }
+                true
+            }
+            rows += r
+            col.addView(r)
         }
-        // PC edits in place on a double click; a touch table opens the text in a box
-        list.onRowDoubleClick = { row ->
-            val i = row.id.toInt()
-            val items = current()
-            val edit = styledField(EditText(requireContext())).apply {
-                inputType = InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS
-            } as EditText
-            edit.setText(items[i])
-            AlertDialog.Builder(requireContext()).setTitle("Saved Message").setView(edit)
-                .setPositiveButton(android.R.string.ok) { _, _ ->
-                    val t = edit.text.toString().trim().uppercase(Locale.US)
-                    if (t.isNotEmpty()) { items[i] = t; refresh(items) }
-                }.setNegativeButton(android.R.string.cancel, null).show()
-        }
-        addRow.addView(button("Add") {
-            val t = input.text.toString().trim().uppercase(Locale.US)
-            if (t.isNotEmpty()) { refresh(current() + t); input.setText("") }
-        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, px(30)))
-        addRow.addView(input, LinearLayout.LayoutParams(0, px(32), 1f).apply { marginStart = px(8); marginEnd = px(8) })
-        addRow.addView(button("Delete") {
-            val sel = list.selectedRowId?.toIntOrNull() ?: return@button
-            refresh(current().filterIndexed { i, _ -> i != sel }); list.selectedRowId = null
-        }, LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, px(30)))
-        col.addView(addRow)
-        col.addView(list)
         return col
+    }
+
+    /** PC edits a saved message in place; Android form (Rob, 2026-11-26): one outlined Message box, OK greyed while empty, Delete on edit. */
+    private fun editSavedMessage(msg: String?, onDelete: (() -> Unit)?, onSave: (String) -> Unit) {
+        val box = column().apply { setPadding(px(24), px(16), px(24), 0) }
+        val (_, text) = formBox(box, "Message",
+            InputType.TYPE_CLASS_TEXT or InputType.TYPE_TEXT_FLAG_CAP_CHARACTERS or InputType.TYPE_TEXT_FLAG_NO_SUGGESTIONS, msg ?: "")
+        text.filters = arrayOf(messageAlphabet) // PC add_macro_line_edit (cpp 1491)
+        val b = MaterialAlertDialogBuilder(requireContext()).setTitle(if (msg == null) "Add Saved Message" else "Edit Saved Message")
+            .setView(box)
+            .setPositiveButton(android.R.string.ok, null).setNegativeButton(android.R.string.cancel, null)
+        if (onDelete != null) b.setNeutralButton("Delete") { _, _ -> onDelete() }
+        val dialog = b.create()
+        dialog.setCanceledOnTouchOutside(false)
+        dialog.setOnShowListener {
+            val ok = dialog.getButton(AlertDialog.BUTTON_POSITIVE)
+            fun check() { ok.isEnabled = !text.text.isNullOrBlank() }
+            check()
+            watch(text) { check() }
+            ok.setOnClickListener {
+                val t = text.text.toString().trim().uppercase(Locale.US)
+                if (t.isEmpty()) return@setOnClickListener
+                onSave(t)
+                dialog.dismiss()
+            }
+        }
+        dialog.show()
     }
 
     /**

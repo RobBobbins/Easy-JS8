@@ -2,6 +2,33 @@
 
 ## Next session starts here (2026-11-05): audit B sections 1-12 are fixed
 
+**State 13:30, 2026-11-26: Station > Saved Messages as Android rows (Rob; uncommitted, built 13:15, tested on S22-Fresh)**
+- `savedMessages`: Add saved message row, one `row` per message with a ≡ handle (drawable `js8_pref_drag`,
+  contentDescription "Move <message>"). Dragging the handle lifts the row (translationZ, colorSurfaceContainerHigh),
+  the rows it passes slide out of its way, letting go saves the new order. Tap a row: `editSavedMessage` (Add / Edit
+  Saved Message): one outlined Message box, same character filter, capitals on save, OK greyed while empty, Delete on
+  edit. The old Add / box / Delete line and table (press-and-hold drag) are gone; out of the padded frame.
+- Test: `build-env/test/lib/savedchk.py` W227-W233 passed run 1 (adds ZA / ZB test messages and deletes them again).
+- `website/help/station.html` Saved Messages bullets rewritten (Rob uploads it).
+- Installed 13:23 on the tablet: page looked at upright dark. S22 Ultra still offline over adb (port now 43927).
+
+**State 13:15, 2026-11-26: Station > Frequencies as Android rows (Rob; uncommitted, built 12:50, tested on S22-Fresh)**
+- `frequencyTable`: Add frequency row (+, `addRow`, drawable `js8_pref_add`), one `row` per frequency ("7.078 000 MHz
+  (40m)", mode · region · description under it; "All" shows as "All regions"), then Load from file… / Save to file… /
+  Merge from file… / Reset to default frequencies (same Yes/No boxes, now Material). Save to file… always saves the
+  whole list (the PC's save-only-selected box is gone; Rob took that). Tap a row: `editFrequency` (Add / Edit
+  Frequency): outlined Frequency (MHz), Description, IARU Region and Mode drop-downs (`formBox`, `formChoice`), OK
+  greyed until the frequency is above 0, red text on a bad one (`boxProblem`), Delete on edit.
+- `scheduleTable`: Add schedule row, one row per entry ("HH:MM to HH:MM UTC · description" under the frequency),
+  all greyed while the switch is off. `editSchedule`: outlined boxes, OK greyed until frequency and both HH:MM are
+  right, Delete and Switch to Frequency Now (hops at once, as before). Both tables out of the padded frame.
+- Test: `build-env/test/lib/freqchk.py` W217-W226 passed run 5 (replaces ui9.py M35-M38, which still use the old
+  buttons). A schedule entry whose window holds the current UTC time starts the app's Scheduled Frequency Change
+  countdown as soon as the switch is on: the test uses times 3-4 h ahead.
+- `website/help/station.html` Frequencies and Frequency Schedule bullets rewritten for the rows (Rob uploads it).
+- Installed 13:10 on the tablet (port 35099): looked at sideways dark, rows and form right. S22 Ultra: its port moved
+  to 35745 and adb shows it offline: not installed yet (needs pairing again).
+
 **State 10:50, 2026-11-26: APRS Beacon GPS row and Status box in the Android look (Rob; uncommitted, built 10:14, tested on S22-Fresh)**
 - `aprsGpsLine`: an Android row, GPS over the status (AprsBeacon.gpsLine without "GPS: ", first letter upper case;
   id `js8_aprs_gps` on the status text, 2 lines at most). `aprsStatusWindow`: "Status" 14 sp over a rounded box
