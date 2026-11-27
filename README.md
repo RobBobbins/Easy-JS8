@@ -1,6 +1,6 @@
-# Easy JS8<br><sub>by VA3OSO and Claude</sub>
+# Easy JS8<br><sub>by VA3OSO</sub>
 
-Easy JS8 is a fork of JS8Android with added features and a new screen layout.
+Easy JS8 is a fork of JS8Android visually inspired by JS8Call and JS8Call-improved.
 
 ## Status
 
@@ -38,7 +38,7 @@ Emulator test pass (2026-11-01 to 11-04): 1,045 checks, each run twice; all pass
 - UI fonts
 - Configurations
 - Test CAT and Test PTT
-- JS8Call 3.0.3 decoder stages
+- js8core-plus decoder: ~15% more decodes than JS8Call-improved v3.0.3
 - Station map: offline map, a dot for every station with a grid, who-hears-who lines
 - APRS beacon: your grid to APRS-IS over the air, every 2 minutes to 1 hour or SmartBeaconing, a GPS fix before each beacon
 

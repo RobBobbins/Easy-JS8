@@ -896,7 +896,7 @@ class Js8SettingsFragment : Fragment() {
         line("by Carson VA3OSO")
         line("Version ${BuildConfig.VERSION_NAME} (build ${BuildConfig.VERSION_CODE})")
         line("Built ${BuildConfig.BUILD_DATE}")
-        line("Easy JS8 is a fork of JS8Android.", top = 12)
+        line("Easy JS8 is a fork of JS8Android visually inspired by JS8Call and JS8Call-improved.", top = 12)
         line("Features", size = 1.1f, bold = true, top = 16)
         val features = listOf("Traditional style", "Upright and sideways layouts", "SWL mode", "JS8 Slow decoding",
             "APRS forms", "FT8 decodes", "APRS-IS relay", "Message mailbox", "HB and CQ timers",
