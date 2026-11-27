@@ -120,10 +120,13 @@ class Js8MainFragment : Fragment() {
         private var startupChecked = false
         /** RX / TX set from Receiver / Transmitter off at startup once per app start, not on each rotation. */
         private var startupRxTxDone = false
+        /** RX was asked for (first start or the RX button) while the microphone was not allowed: start it once allowed. */
+        private var rxWaitingForMic = false
 
         /** MainActivity closing (Back on the main screen, PC closeEvent): Android keeps the process, the next open is a new start. */
         fun appClosed() {
             startupRxTxDone = false
+            rxWaitingForMic = false
             startupChecked = false // AUTO from Turn autoreply on at startup again, as a PC restart
         }
         /** When each callsign was first selected: the QSO start time for Log QSO (m_callSelectedTime). */
@@ -547,6 +550,14 @@ class Js8MainFragment : Fragment() {
 
     override fun onResume() {
         super.onResume()
+        // Back from Android's microphone prompt with the microphone allowed: RX starts as it was asked to
+        // (Rob, 2026-11-27: a fresh install stayed on RX off after Allow)
+        if (rxWaitingForMic && ContextCompat.checkSelfPermission(requireContext(), Manifest.permission.RECORD_AUDIO) ==
+            PackageManager.PERMISSION_GRANTED) {
+            rxWaitingForMic = false
+            val running = monitorVm.status.value?.state.let { it == EngineState.RUNNING || it == EngineState.STARTING }
+            if (!running) startMonitoring()
+        }
         androidx.localbroadcastmanager.content.LocalBroadcastManager.getInstance(requireContext())
             .registerReceiver(rigErrorReceiver, android.content.IntentFilter(JS8EngineService.ACTION_RIG_ERROR))
         androidx.localbroadcastmanager.content.LocalBroadcastManager.getInstance(requireContext())
@@ -3253,6 +3264,7 @@ class Js8MainFragment : Fragment() {
         if (!AudioDevices.usesSerialAudio(ctx) &&
             ContextCompat.checkSelfPermission(ctx, Manifest.permission.RECORD_AUDIO) != PackageManager.PERMISSION_GRANTED
         ) {
+            rxWaitingForMic = true // onResume starts RX once the microphone is allowed
             AlertDialog.Builder(ctx)
                 .setMessage("Microphone permission is needed to receive.")
                 .setPositiveButton(android.R.string.ok) { _, _ ->
