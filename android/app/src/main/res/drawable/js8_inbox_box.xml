@@ -1,0 +1,19 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Inbox message and reply boxes (Rob, 2026-11-26): Android outlined box in the device's light or dark colours;
+     the reply box's line turns blue and thicker while typing, as Android's outlined boxes do. -->
+<selector xmlns:android="http://schemas.android.com/apk/res/android">
+    <item android:state_focused="true">
+        <shape android:shape="rectangle">
+            <solid android:color="?attr/colorSurface" />
+            <stroke android:width="2dp" android:color="?attr/colorPrimary" />
+            <corners android:radius="4dp" />
+        </shape>
+    </item>
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="?attr/colorSurface" />
+            <stroke android:width="1dp" android:color="?attr/colorOutline" />
+            <corners android:radius="4dp" />
+        </shape>
+    </item>
+</selector>

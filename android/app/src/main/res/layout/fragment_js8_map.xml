@@ -4,44 +4,50 @@
     android:layout_width="match_parent"
     android:layout_height="match_parent"
     android:background="@color/js8_frame_bg"
-    android:orientation="vertical"
-    android:padding="6dp">
+    android:orientation="vertical">
 
+    <!-- Top bar as Settings has it (Rob, 2026-11-26): ← arrow 24 dp in a 48 dp button, the title 22 sp beside it;
+         the bar 48 dp tall sideways, 56 dp upright (set in Js8MapFragment). Frame colours kept. -->
     <LinearLayout
+        android:id="@+id/js8_map_top_bar"
         android:layout_width="match_parent"
-        android:layout_height="40dp"
+        android:layout_height="wrap_content"
         android:gravity="center_vertical"
-        android:orientation="horizontal">
+        android:minHeight="48dp"
+        android:orientation="horizontal"
+        android:paddingStart="4dp"
+        android:paddingEnd="4dp">
 
-        <TextView
+        <ImageView
             android:id="@+id/js8_map_back"
-            style="@style/Js8FrameText"
-            android:layout_width="72dp"
-            android:layout_height="match_parent"
-            android:gravity="center_vertical"
-            android:paddingStart="6dp"
-            android:text="← Back"
-            android:textStyle="bold" />
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="Back"
+            android:padding="12dp"
+            android:src="@drawable/js8_pref_back"
+            android:tint="@color/js8_frame_text" />
 
         <TextView
-            style="@style/Js8FrameText"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:gravity="center"
+            android:ellipsize="end"
+            android:paddingStart="12dp"
+            android:paddingEnd="12dp"
+            android:singleLine="true"
             android:text="Map"
-            android:textStyle="bold" />
-
-        <!-- Same width as ← Back, so the title is centred -->
-        <View
-            android:layout_width="72dp"
-            android:layout_height="1dp" />
+            android:textColor="@color/js8_frame_text"
+            android:textSize="22sp" />
     </LinearLayout>
 
     <FrameLayout
         android:layout_width="match_parent"
         android:layout_height="0dp"
-        android:layout_weight="1">
+        android:layout_weight="1"
+        android:layout_marginStart="6dp"
+        android:layout_marginEnd="6dp"
+        android:layout_marginBottom="6dp">
 
         <com.js8call.example.js8ui.Js8MapView
             android:id="@+id/js8_map"

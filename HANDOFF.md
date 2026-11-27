@@ -2,6 +2,48 @@
 
 ## Next session starts here (2026-11-05): audit B sections 1-12 are fixed
 
+**State 20:05, 2026-11-26: drag bars invisible everywhere, to try (Rob; uncommitted)**
+- Js8LineHandle (Js8LineDividers.kt): `SHOW_BAR = false`, so onDraw draws nothing. The 24 dp touch strips are
+  unchanged, so every line still drags. `SHOW_BAR = true` puts every grey bar back.
+- The gaps now show what is behind them: the main page colour (light #F0F0F0, dark #1E1E1E; black on sideways PC in
+  dark mode). The 2 px bar placement above the HB CQ row (2853e340) is not visible while the bars are off.
+- Help not changed: sideways.html line 221 still says "The lines between the parts move".
+- barchk.py measures the bar, so it has nothing to measure while SHOW_BAR is false.
+- Test: `build-env/test/lib/barsoff.py` (W267-W268), emulator and tablet; judged on the screenshots.
+
+**State 19:50, 2026-11-26: Message Inbox in the Android look (Rob; uncommitted)**
+- All three Inbox views: menu bar > Inbox (fragment_js8_inbox.xml, Js8InboxFragment), the Pages Inbox tab
+  (fragment_js8_swipe.xml page 4) and the upright Inbox (js8_inbox.xml).
+- New list Js8InboxList.kt replaces Js8TableView there: one row per message, From (bold while unread) with the date
+  "MMM d HH:mm" UTC at the right, the message on one line, "frequency · to CALL". The selected row is in
+  colorSecondaryContainer. Tap, tap again, Select More and Select All work as the table's did.
+- Gone: the column headers, sort by header, the column show/hide list, the ID and the ⚑ column. Call Activity's ⚑ for
+  unread senders is not changed.
+- Message and reply boxes: drawable js8_inbox_box.xml, the device's surface colour, a 1 dp outline, 4 dp corners; the
+  outline turns colorPrimary and 2 dp while typing. Hints kept. No labels on the box borders.
+- Send: a MaterialButton with the word Send (id js8_inbox_reply, so the click code is the same) beside the reply box
+  in a row js8_inbox_reply_row. The old Reply button below is gone.
+- PC screen: the Settings top bar (js8_inbox_top_bar, as the Map screen). Pages tab and upright: a "Message Inbox"
+  heading at 18 sp. PC screen and Pages tab background colorSurface; upright keeps the main page's background.
+- Js8LineDividers: the reply line works on js8_inbox_reply_row; upright keeps its third line (under the reply row)
+  with an empty view js8_inbox_end below it. Saved line positions still apply.
+- js8_inbox_pc.xml is not used anywhere (no include) and was left as it was.
+- Help: upright.html INBOX (rows, Send), sideways.html Pages Inbox tab (Send). The screenshots inbox.jpg and
+  pages-inbox.jpg show the old look.
+- Test: `build-env/test/lib/inboxlook.py` (W259-W266). The old inboxlines.py and inboxup.py use the old ids
+  (← Back, js8_inbox_reply under the reply box) and were not run.
+- Emulator: S22-Fresh's adb port 5601 was not listed by adb after an adb server restart; `adb connect 127.0.0.1:5601`
+  reached it. After an emulator restart it was listed as emulator-5600 again.
+
+**State 18:25, 2026-11-26: Map screen top bar as Settings (Rob; uncommitted)**
+- Menu bar > Map (fragment_js8_map.xml): "← Back" and "Map" in 14.3 dp text became the Settings top bar: the
+  js8_pref_back arrow, 24 dp in a 48 dp button, Map at 22 sp beside it; the bar 48 dp tall sideways, 56 dp upright
+  (Js8MapFragment). Frame colours kept (js8_frame_text, js8_frame_bg). The 6 dp page padding moved to the map.
+- Not changed: the Inbox screen's header is still "← Back" and "Message Inbox" in 14.3 dp text.
+- Test: `build-env/test/lib/mapbarchk.py` (W257-W258) passed on S22-Fresh, the tablet and the S22 Ultra (installed 18:20). The test
+  picks the app's Back (packageName): the S22's navigation bar has its own "Back". On the tablet the title
+  box measures 37.3 dp against Settings' 36.0 with the same text size on screen.
+
 **State 18:10, 2026-11-26: grey bar under the lists, sideways PC and FT8Call (Rob; uncommitted)**
 - The bar under the lists was drawn 3 dp above the lists' bottom, over them, with 1 dp of list showing below it.
   Now it starts `MAIN_BAR_BELOW_LISTS` = 2 dp below them, the same frame colour as each side of the Band Activity bar

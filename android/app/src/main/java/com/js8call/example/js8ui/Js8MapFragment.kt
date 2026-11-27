@@ -36,6 +36,9 @@ class Js8MapFragment : Fragment() {
         map = m
         m.activity = vm.activity
         m.dialHz = dialHz(prefs)
+        // Top bar as Settings: 48 dp tall sideways, 56 dp upright
+        val sideways = resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+        view.findViewById<View>(R.id.js8_map_top_bar).minimumHeight = ((if (sideways) 48 else 56) * resources.displayMetrics.density).toInt()
         view.findViewById<View>(R.id.js8_map_back).setOnClickListener { findNavController().popBackStack() }
         view.findViewById<View>(R.id.js8_map_zoom_in).setOnClickListener { m.zoomBy(2.0) }
         view.findViewById<View>(R.id.js8_map_zoom_out).setOnClickListener { m.zoomBy(0.5) }

@@ -1,53 +1,73 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Inbox: "Message Inbox" dock (JS8_UI/MessagePanel.ui). -->
+<!-- Inbox: "Message Inbox" dock (JS8_UI/MessagePanel.ui). Android look (Rob, 2026-11-26): a row list, outlined
+     boxes, Send beside the reply box. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:orientation="vertical">
 
     <TextView
-        style="@style/Js8FrameText"
         android:layout_width="wrap_content"
-        android:layout_height="27dp"
+        android:layout_height="40dp"
         android:gravity="center_vertical"
-        android:text="Message Inbox" />
+        android:text="Message Inbox"
+        android:textColor="?attr/colorOnSurface"
+        android:textSize="18sp" />
 
-    <com.js8call.example.js8ui.Js8TableView
+    <com.js8call.example.js8ui.Js8InboxList
         android:id="@+id/js8_inbox_table"
         android:layout_width="match_parent"
         android:layout_height="160dp" />
 
     <TextView
         android:id="@+id/js8_inbox_message"
-        android:hint="TAP A MESSAGE IN THE LIST TO READ IT HERE."
-        android:textColorHint="@color/js8_typing_hint"
-        style="@style/Js8Text"
         android:layout_width="match_parent"
         android:layout_height="80dp"
         android:layout_marginTop="6dp"
-        android:background="@drawable/js8_panel_list"
+        android:background="@drawable/js8_inbox_box"
         android:gravity="top|start"
-        android:padding="5dp" />
+        android:hint="TAP A MESSAGE IN THE LIST TO READ IT HERE."
+        android:padding="10dp"
+        android:textColor="?attr/colorOnSurface"
+        android:textColorHint="?attr/colorOnSurfaceVariant"
+        android:textSize="14sp" />
 
-    <EditText
-        android:id="@+id/js8_inbox_reply_text"
-        android:hint="TYPE YOUR REPLY HERE."
-        android:textColorHint="@color/js8_typing_hint"
-        style="@style/Js8Text"
+    <!-- Reply box with Send beside it (Rob, 2026-11-26) -->
+    <LinearLayout
+        android:id="@+id/js8_inbox_reply_row"
         android:layout_width="match_parent"
         android:layout_height="60dp"
         android:layout_marginTop="6dp"
-        android:background="@drawable/js8_panel_list"
-        android:gravity="top|start"
-        android:importantForAutofill="no"
-        android:inputType="textMultiLine|textCapCharacters|textNoSuggestions"
-        android:padding="5dp" />
+        android:gravity="center_vertical"
+        android:orientation="horizontal">
 
-    <androidx.appcompat.widget.AppCompatButton
-        android:id="@+id/js8_inbox_reply"
-        style="@style/Js8Button"
-        android:layout_width="81dp"
-        android:layout_gravity="end"
-        android:layout_marginTop="6dp"
-        android:text="Reply" />
+        <EditText
+            android:id="@+id/js8_inbox_reply_text"
+            android:layout_width="0dp"
+            android:layout_height="match_parent"
+            android:layout_weight="1"
+            android:background="@drawable/js8_inbox_box"
+            android:gravity="top|start"
+            android:hint="TYPE YOUR REPLY HERE."
+            android:importantForAutofill="no"
+            android:inputType="textMultiLine|textCapCharacters|textNoSuggestions"
+            android:padding="10dp"
+            android:textColor="?attr/colorOnSurface"
+            android:textColorHint="?attr/colorOnSurfaceVariant"
+            android:textSize="14sp" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/js8_inbox_reply"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginStart="8dp"
+            android:text="Send" />
+    </LinearLayout>
+
+    <!-- Below the reply row: the other side of the line that sets the reply row's height -->
+    <View
+        android:id="@+id/js8_inbox_end"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_marginTop="6dp" />
 </LinearLayout>

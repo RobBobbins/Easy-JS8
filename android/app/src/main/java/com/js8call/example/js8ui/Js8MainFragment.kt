@@ -150,7 +150,7 @@ class Js8MainFragment : Fragment() {
     private lateinit var bandActivity: Js8TableView
     private lateinit var callActivity: Js8TableView
     /** Upright and Swipe only; PC mode opens the Message Inbox screen instead (Rob, 2026-10-20). */
-    private var inbox: Js8TableView? = null
+    private var inbox: Js8InboxList? = null
     private lateinit var messageWindow: TextView
     private lateinit var typingBox: EditText
     private var messageWindowPx = 0f
@@ -768,7 +768,7 @@ class Js8MainFragment : Fragment() {
         ))
         callActivity.menuOrder = listOf("callsign", "offset", "timestamp", "snr", "tdrift", "submode", "grid", "distance",
             "azimuth", "log", "logName", "logComment")
-        inbox?.let { Js8Inbox.setColumns(it) }
+        inbox?.emptyHintText = Js8Inbox.LIST_HINT
         // Call Activity click selects a callsign; Band Activity click selects the newest call at that offset
         // (UI_Constructor::callsignSelected). Only one table holds a selection at a time.
         callActivity.onRowClick = { row ->

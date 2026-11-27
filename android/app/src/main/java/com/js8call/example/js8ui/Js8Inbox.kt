@@ -7,27 +7,15 @@ import java.util.Locale
 import java.util.TimeZone
 import kotlin.math.roundToInt
 
-/** Message Inbox list (PC MessagePanel): columns and rows, shared by the main window and the Message Inbox screen. */
+/** Message Inbox list (PC MessagePanel): its rows, shared by the main window and the Message Inbox screen. */
 object Js8Inbox {
-    private val date = SimpleDateFormat("EEE MMM d HH:mm:ss yyyy", Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC") }
+    /** Date in the row's first line, UTC (the preview Rob passed, 2026-11-26) */
+    private val date = SimpleDateFormat("MMM d HH:mm", Locale.US).apply { timeZone = TimeZone.getTimeZone("UTC") }
 
     /** Grey hints while the Inbox boxes are empty, like the Typing Box (Rob, 2026-11-22, as the iOS app). */
     const val LIST_HINT = "YOUR STORED MESSAGES WILL BE LISTED HERE."
     const val MESSAGE_HINT = "TAP A MESSAGE IN THE LIST TO READ IT HERE."
     const val REPLY_HINT = "TYPE YOUR REPLY HERE."
-
-    fun setColumns(table: Js8TableView) {
-        table.setColumns("inbox", listOf(
-            Js8TableView.Column("flag", "⚑", 24),
-            Js8TableView.Column("id", "ID", 40, numeric = true),
-            Js8TableView.Column("date", "Date", 120),
-            Js8TableView.Column("freq", "Frequency", 80),
-            Js8TableView.Column("from", "From", 70),
-            Js8TableView.Column("to", "To", 70),
-            Js8TableView.Column("message", "Message", 200, stretch = true)
-        ))
-        table.emptyHintText = LIST_HINT
-    }
 
     /**
      * Received messages and the ones held for other stations, not yet collected (Inbox::fetchForCall:
@@ -44,20 +32,16 @@ object Js8Inbox {
     fun isFor(m: MessageEntity, call: String) =
         (if (isHeld(m)) m.conversationId else m.senderCallsign ?: m.conversationId).equals(call, ignoreCase = true)
 
+    /** Newest first; From with "via" for a relayed message; to: the group or held-for call, else my call. */
     fun rows(messages: List<MessageEntity>, myCall: String) = messages.sortedByDescending { it.timestamp }.map { m ->
-        Js8TableView.Row(
+        Js8InboxList.Item(
             id = m.id.toString(),
-            values = mapOf(
-                "flag" to if (m.isRead) "" else "⚑",
-                "id" to m.id.toString(),
-                "date" to date.format(Date(m.timestamp)),
-                "freq" to frequencyText(m),
-                "from" to from(m).split('>').reversed().joinToString(" via "),
-                "to" to if (isHeld(m) || m.conversationId.startsWith("@")) m.conversationId else myCall,
-                "message" to m.text
-            ),
-            sortValues = mapOf("id" to m.id, "date" to m.timestamp, "freq" to (m.dialHz ?: 0L)),
-            bold = !m.isRead, center = setOf("flag")
+            from = from(m).split('>').reversed().joinToString(" via "),
+            date = date.format(Date(m.timestamp)),
+            text = m.text,
+            freq = frequencyText(m),
+            to = if (isHeld(m) || m.conversationId.startsWith("@")) m.conversationId else myCall,
+            unread = !m.isRead
         )
     }
 
@@ -74,7 +58,7 @@ object Js8Inbox {
      * PC's Ctrl and Shift clicks), Select More (taps then add or take away rows, until the
      * delete) and Select All. [delete] gets the row ids to remove from the message store.
      */
-    fun showMessageMenu(table: Js8TableView, row: Js8TableView.Row, anchor: android.view.View, delete: (List<String>) -> Unit) {
+    fun showMessageMenu(table: Js8InboxList, row: Js8InboxList.Item, anchor: android.view.View, delete: (List<String>) -> Unit) {
         val menu = android.widget.PopupMenu(android.view.ContextThemeWrapper(anchor.context, com.js8call.example.R.style.ThemeOverlay_Js8PopupMenu), anchor)
         menu.menu.add(0, 1, 1, "Delete")
         menu.menu.add(0, 2, 2, "Select More")

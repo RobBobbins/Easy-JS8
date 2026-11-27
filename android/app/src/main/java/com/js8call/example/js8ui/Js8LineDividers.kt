@@ -52,6 +52,7 @@ class Js8LineHandle(context: Context, private val sideways: Boolean, private val
     }
 
     override fun onDraw(canvas: Canvas) {
+        if (!SHOW_BAR) return
         if (sideways) {
             val l = (width - barPx) / 2f
             canvas.drawRect(l, skipTopPx, l + barPx, height.toFloat(), bar)
@@ -64,6 +65,8 @@ class Js8LineHandle(context: Context, private val sideways: Boolean, private val
     companion object {
         const val STRIP_DP = 24f // Rob, 2026-10-31: 12 was hard to grab
         const val BAR_DP = 3f
+        /** Rob, 2026-11-26: the grey bars invisible everywhere, to try; the strips still drag. true = bars back. */
+        const val SHOW_BAR = false
     }
 }
 
@@ -145,23 +148,24 @@ object Js8LineDividers {
     }
 
     /**
-     * Upright Message Inbox (js8_inbox, Rob 2026-11-24): a line under the list, the message box and the reply box;
+     * Upright Message Inbox (js8_inbox, Rob 2026-11-24): a line under the list, the message box and the reply row;
      * each sets the height of the window above it, 40 dp at least, and the page below moves.
      */
     private fun setUpUprightInbox(root: View, prefs: SharedPreferences) {
         val list = root.findViewById<View?>(R.id.js8_inbox_table) ?: return
         val message = root.findViewById<View?>(R.id.js8_inbox_message) ?: return
-        val reply = root.findViewById<View?>(R.id.js8_inbox_reply_text) ?: return
-        val button = root.findViewById<View?>(R.id.js8_inbox_reply) ?: return
+        // The reply box and its Send button share one row (Rob, 2026-11-26): the row's height is the reply's
+        val reply = root.findViewById<View?>(R.id.js8_inbox_reply_row) ?: return
+        val end = root.findViewById<View?>(R.id.js8_inbox_end) ?: return  // below the reply row: its line's other side
         val col = list.parent as? LinearLayout ?: return
-        if (listOf(message, reply, button).any { it.parent !== col }) return
+        if (listOf(message, reply, end).any { it.parent !== col }) return
         val d = root.resources.displayMetrics.density
         fun px(dp: Float) = dp * d
         listOf(list to UP_INBOX_LIST, message to UP_INBOX_MESSAGE, reply to UP_INBOX_REPLY).forEach { (v, key) ->
             prefs.getFloat(key, -1f).takeIf { it > 0 }?.let { setHeight(v, px(it).roundToInt()) }
         }
         listOf(Triple(list, message, UP_INBOX_LIST), Triple(message, reply, UP_INBOX_MESSAGE),
-            Triple(reply, button, UP_INBOX_REPLY)).forEach { (above, below, key) ->
+            Triple(reply, end, UP_INBOX_REPLY)).forEach { (above, below, key) ->
             insertBetween(col, above, below, sideways = false) { dy ->
                 setHeight(above, (above.height + dy).coerceIn(px(40f), px(1200f)).roundToInt())
             }.onEnd = { prefs.edit().putFloat(key, above.height / d).apply() }
@@ -205,7 +209,7 @@ object Js8LineDividers {
     private fun setUpInbox(root: View, prefs: SharedPreferences, k: InboxKeys) {
         val list = root.findViewById<View?>(R.id.js8_inbox_table) ?: return
         val message = root.findViewById<View?>(R.id.js8_inbox_message) ?: return
-        val reply = root.findViewById<View?>(R.id.js8_inbox_reply_text) ?: return
+        val reply = root.findViewById<View?>(R.id.js8_inbox_reply_row) ?: return
         val row = list.parent as? LinearLayout ?: return
         val right = message.parent as? LinearLayout ?: return
         if (row.indexOfChild(right) < 0 || right.indexOfChild(reply) < 0) return

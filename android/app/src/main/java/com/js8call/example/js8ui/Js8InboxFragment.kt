@@ -37,13 +37,16 @@ class Js8InboxFragment : Fragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
-        val table = view.findViewById<Js8TableView>(R.id.js8_inbox_table)
+        val table = view.findViewById<Js8InboxList>(R.id.js8_inbox_table)
         val message = view.findViewById<TextView>(R.id.js8_inbox_message)
         val replyText = view.findViewById<EditText>(R.id.js8_inbox_reply_text)
-        Js8Inbox.setColumns(table)
+        table.emptyHintText = Js8Inbox.LIST_HINT
         // Lines between the windows can be dragged (Rob, 2026-11-24)
         Js8LineDividers.setUpInboxScreen(view, PreferenceManager.getDefaultSharedPreferences(requireContext()))
         val call = arguments?.getString(ARG_CALL)
+        // Top bar as Settings (Rob, 2026-11-26): 48 dp tall sideways, 56 dp upright
+        val sideways = resources.configuration.orientation == android.content.res.Configuration.ORIENTATION_LANDSCAPE
+        view.findViewById<View>(R.id.js8_inbox_top_bar).minimumHeight = ((if (sideways) 48 else 56) * resources.displayMetrics.density).toInt()
         view.findViewById<View>(R.id.js8_inbox_back).setOnClickListener { findNavController().popBackStack() }
         repository.getAllMessages().observe(viewLifecycleOwner) { all ->
             messages = Js8Inbox.incoming(all).filter { call == null || Js8Inbox.isFor(it, call) }

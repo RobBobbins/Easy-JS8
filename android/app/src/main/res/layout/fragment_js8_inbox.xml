@@ -1,42 +1,46 @@
 <?xml version="1.0" encoding="utf-8"?>
-<!-- Message Inbox screen (PC mode: View > Inbox). Same ids as the Swipe Inbox page. -->
+<!-- Message Inbox screen (PC mode: View > Inbox). Same ids as the Swipe Inbox page.
+     Android look (Rob, 2026-11-26): Settings' top bar, a row list, outlined boxes, Send beside the reply box. -->
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@color/js8_frame_bg"
-    android:orientation="vertical"
-    android:padding="6dp">
+    android:background="?attr/colorSurface"
+    android:orientation="vertical">
 
+    <!-- Top bar as Settings: arrow 24 dp in a 48 dp button, the title 22 sp; 48 dp tall sideways, 56 dp upright
+         (set in Js8InboxFragment) -->
     <LinearLayout
+        android:id="@+id/js8_inbox_top_bar"
         android:layout_width="match_parent"
-        android:layout_height="40dp"
+        android:layout_height="wrap_content"
         android:gravity="center_vertical"
-        android:orientation="horizontal">
+        android:minHeight="48dp"
+        android:orientation="horizontal"
+        android:paddingStart="4dp"
+        android:paddingEnd="4dp">
 
-        <TextView
+        <ImageView
             android:id="@+id/js8_inbox_back"
-            style="@style/Js8FrameText"
-            android:layout_width="72dp"
-            android:layout_height="match_parent"
-            android:gravity="center_vertical"
-            android:paddingStart="6dp"
-            android:text="← Back"
-            android:textStyle="bold" />
+            android:layout_width="48dp"
+            android:layout_height="48dp"
+            android:background="?attr/selectableItemBackgroundBorderless"
+            android:contentDescription="Back"
+            android:padding="12dp"
+            android:src="@drawable/js8_pref_back"
+            android:tint="?attr/colorOnSurface" />
 
         <TextView
-            style="@style/Js8FrameText"
+            android:id="@+id/js8_inbox_title"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
-            android:gravity="center"
-            android:id="@+id/js8_inbox_title"
+            android:ellipsize="end"
+            android:paddingStart="12dp"
+            android:paddingEnd="12dp"
+            android:singleLine="true"
             android:text="Message Inbox"
-            android:textStyle="bold" />
-
-        <!-- Same width as ← Back, so the title is centred -->
-        <View
-            android:layout_width="72dp"
-            android:layout_height="1dp" />
+            android:textColor="?attr/colorOnSurface"
+            android:textSize="22sp" />
     </LinearLayout>
 
     <LinearLayout
@@ -44,9 +48,12 @@
         android:layout_height="0dp"
         android:layout_weight="1"
         android:baselineAligned="false"
-        android:orientation="horizontal">
+        android:orientation="horizontal"
+        android:paddingStart="12dp"
+        android:paddingEnd="12dp"
+        android:paddingBottom="8dp">
 
-        <com.js8call.example.js8ui.Js8TableView
+        <com.js8call.example.js8ui.Js8InboxList
             android:id="@+id/js8_inbox_table"
             android:layout_width="0dp"
             android:layout_height="match_parent"
@@ -61,38 +68,49 @@
 
             <TextView
                 android:id="@+id/js8_inbox_message"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1"
+                android:background="@drawable/js8_inbox_box"
+                android:gravity="top|start"
                 android:hint="TAP A MESSAGE IN THE LIST TO READ IT HERE."
-                android:textColorHint="@color/js8_typing_hint"
-                style="@style/Js8Text"
-                android:layout_width="match_parent"
-                android:layout_height="0dp"
-                android:layout_weight="1"
-                android:background="@drawable/js8_panel_list"
-                android:gravity="top|start"
-                android:padding="5dp" />
+                android:padding="10dp"
+                android:textColor="?attr/colorOnSurface"
+                android:textColorHint="?attr/colorOnSurfaceVariant"
+                android:textSize="14sp" />
 
-            <EditText
-                android:id="@+id/js8_inbox_reply_text"
-                android:hint="TYPE YOUR REPLY HERE."
-                android:textColorHint="@color/js8_typing_hint"
-                style="@style/Js8Text"
+            <!-- Reply box with Send beside it (Rob, 2026-11-26) -->
+            <LinearLayout
+                android:id="@+id/js8_inbox_reply_row"
                 android:layout_width="match_parent"
                 android:layout_height="0dp"
                 android:layout_marginTop="6dp"
                 android:layout_weight="1"
-                android:background="@drawable/js8_panel_list"
-                android:gravity="top|start"
-                android:importantForAutofill="no"
-                android:inputType="textMultiLine|textCapCharacters|textNoSuggestions"
-                android:padding="5dp" />
+                android:gravity="center_vertical"
+                android:orientation="horizontal">
 
-            <androidx.appcompat.widget.AppCompatButton
-                android:id="@+id/js8_inbox_reply"
-                style="@style/Js8Button"
-                android:layout_width="81dp"
-                android:layout_gravity="end"
-                android:layout_marginTop="6dp"
-                android:text="Reply" />
+                <EditText
+                    android:id="@+id/js8_inbox_reply_text"
+                    android:layout_width="0dp"
+                    android:layout_height="match_parent"
+                    android:layout_weight="1"
+                    android:background="@drawable/js8_inbox_box"
+                    android:gravity="top|start"
+                    android:hint="TYPE YOUR REPLY HERE."
+                    android:importantForAutofill="no"
+                    android:inputType="textMultiLine|textCapCharacters|textNoSuggestions"
+                    android:padding="10dp"
+                    android:textColor="?attr/colorOnSurface"
+                    android:textColorHint="?attr/colorOnSurfaceVariant"
+                    android:textSize="14sp" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/js8_inbox_reply"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:layout_marginStart="8dp"
+                    android:text="Send" />
+            </LinearLayout>
         </LinearLayout>
     </LinearLayout>
 </LinearLayout>
